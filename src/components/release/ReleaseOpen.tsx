@@ -24,7 +24,6 @@ import { useMinute } from './clock';
 import { Mono, NowText, Pill, StateWords, TagPill, useNameFinal, type useRelease } from './ui';
 import { useIsPhone } from '@/components/shell/useIsPhone';
 import { PhoneReleaseList } from './PhoneRelease';
-import { useTellAlma } from './useAsk';
 import { NoTexts } from './AskAlma';
 
 type Rel = ReturnType<typeof useRelease>;
@@ -113,7 +112,7 @@ export function OpenRelease({ rel }: { rel: Rel }) {
           {waves(file, now).map((w) => (
             <section key={w.key} data-wave={w.key} className="flex flex-col gap-2">
               <h3 className="m-0 flex items-baseline gap-2 text-[12.5px] font-medium">{w.label}<span className="font-normal text-sub">{w.posted ? `${w.posted} posted` : w.next ? 'next' : ''}</span></h3>
-              {w.ids.map((id) => <Row key={id} file={file} p={file.platforms.find((x) => x.id === id)!} now={now} href={`${base}/release/${id}`} rel={rel} />)}
+              {w.ids.map((id) => <Row key={id} file={file} p={file.platforms.find((x) => x.id === id)!} now={now} href={`${base}/release/${id}`} />)}
             </section>
           ))}
           {!file.platforms.length && <NoTexts film={film} final={file.final} />}
@@ -136,18 +135,17 @@ function NextBar({ file, now, base }: { file: ReleaseFile; now: Date; base: stri
 }
 
 /** A platform's row: pressable to its page. */
-function Row({ file, p, now, href, rel }: { file: ReleaseFile; p: Platform; now: Date; href: string; rel: Rel }) {
+function Row({ file, p, now, href }: { file: ReleaseFile; p: Platform; now: Date; href: string }) {
   const st = platformStatus(file, p.id, now);
-  // what it posts, said only when it is more than one post (X with a reply, ASKS 58): "through Buffer, post and reply"
+  // what it posts, said only when it is more than one post (X with a reply, ASKS 58): "by hand, post and reply"
   const thread = threadWords(file, p.id);
-  const route = `${p.route === 'hand' ? 'by hand' : 'through Buffer'}${thread ? `, ${thread}` : ''}`;
+  const route = `by hand${thread ? `, ${thread}` : ''}`;
   const who = [p.account, p.also?.length ? `also to ${p.also.join(' and ')}` : ''].filter(Boolean).join(', ');
   const first = captionOf(file, p.id).split('\n')[0];
   const empty = p.fields.find(unfilled);
   const line = empty ? `${empty.candidates.length} ${empty.candidates.length === 1 ? 'candidate' : 'candidates'} to pick from` : first;
   const link = p.send.posted?.link;
-  // stage 3: a scheduled row can be unscheduled from here; a post without its link says where to add it
-  const unschedule = st.state === 'scheduled' && !p.send.requested?.unschedule;
+  // a post without its link says where to add it
   // the tags, the post's link or "Add the link": a line of their own, so a long one never pushes the row wider
   const extra = st.tags.length > 0 || !!link || (!!p.send.posted && !link);
   return (
@@ -163,34 +161,16 @@ function Row({ file, p, now, href, rel }: { file: ReleaseFile; p: Platform; now:
         <StateWords st={st} tags={false} className="min-w-0" />
       </span>
       <IconChevronRight size={14} className={cn('flex-none text-sub transition-transform duration-150 group-hover:translate-x-0.5', extra ? 'row-span-3' : 'row-span-2')} />
-      <span className={cn('col-span-2 col-start-2 truncate text-[12.5px]', empty ? 'text-sub' : 'text-ink-3', unschedule && !extra && 'pr-[100px]')}>{line}</span>
+      <span className={cn('col-span-2 col-start-2 truncate text-[12.5px]', empty ? 'text-sub' : 'text-ink-3')}>{line}</span>
       {extra && (
-        <span data-row-extra className={cn('col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1', unschedule && 'pr-[100px]')}>
+        <span data-row-extra className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           {st.tags.map((t) => <TagPill key={t.text} t={t} />)}
           {link && <span data-link className="min-w-0 max-w-full truncate text-[12px] text-ink-3" title={link}>{link.replace(/^https?:\/\/(www\.)?/, '')}</span>}
           {p.send.posted && !link && <span data-add-link className="text-[12px] text-ink underline decoration-edge-strong underline-offset-2">Add the link</span>}
         </span>
       )}
     </Link>
-    {unschedule && <RowUnschedule rel={rel} p={p} time={st.time} />}
     </div>
-  );
-}
-
-/** "Unschedule" on a scheduled row: recorded, and asked of Alma as the user's own words (she takes it out of Buffer). */
-function RowUnschedule({ rel, p, time }: { rel: Rel; p: Platform; time?: string }) {
-  const tell = useTellAlma(rel.view?.film ?? '');
-  const [err, setErr] = useState<string>();
-  const go = async () => {
-    const r = await rel.run({ op: 'request', platform: p.id, what: 'unschedule' });
-    if (!r.ok) { setErr(r.error); return; }
-    await tell(`Unschedule ${appName(p)}`, { id: `release:unschedule:${p.id}`, label: `Unschedule ${appName(p)} (${time ?? ''})`, ref: `The user asks you to unschedule ${p.name} (scheduled for ${time}, Buffer post ${p.send.scheduled?.bufferPostId ?? 'id not recorded'}). Take it out of Buffer, then remove send.scheduled, send.go, send.asked and send.requested in social/release.json; it is Ready again. Say if it had already gone out.` });
-  };
-  return (
-    <span className="absolute bottom-2 right-9 flex items-center gap-2">
-      {err && <span role="alert" className="text-[11.5px] text-warn">{err}</span>}
-      <Btn data-row-unschedule onClick={() => void go()} className="h-7 px-2 text-[12px]">Unschedule</Btn>
-    </span>
   );
 }
 

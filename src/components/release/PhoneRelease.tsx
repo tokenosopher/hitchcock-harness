@@ -55,7 +55,7 @@ export function PhoneReleaseList({ rel, file, now, state, base }: { rel: Rel; fi
 function PhoneRow({ file, p, now, href, next }: { file: ReleaseFile; p: Platform; now: Date; href: string; next: boolean }) {
   const st = platformStatus(file, p.id, now);
   const thread = threadWords(file, p.id);
-  const sub = [`${p.route === 'hand' ? 'by hand' : 'through Buffer'}${thread ? `, ${thread}` : ''}`, ...st.tags.map((t) => t.text)];
+  const sub = [`by hand${thread ? `, ${thread}` : ''}`, ...st.tags.map((t) => t.text)];
   const route = st.tags.find((t) => /^By hand, step/.test(t.text)) ? sub.slice(1) : sub;
   return (
     <Link href={href} data-phone-row={p.id} data-row-state={st.state}
@@ -75,14 +75,13 @@ export function PhonePlatform({ rel, file, p, now, state, base }: { rel: Rel; fi
   const final = useFinalInfo(rel, file, p.id);
   const [dock, setDock] = useState<HTMLDivElement | null>(null);
   const qs = typeof window === 'undefined' ? '' : window.location.search;
-  const hand = p.route === 'hand';
   return (
     <div data-phone-platform={p.id} className="touch-targets flex min-h-full flex-none flex-col">
       <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Release', href: `${base}/release${qs}` }, { label: p.name }]} meta="" phoneSub={`Release · ${p.name}`} />
       <div className="flex flex-col gap-1.5 px-4 pt-3">
         <Link href={`${base}/release${qs}`} data-phone-back className="-ml-1 inline-flex min-h-[44px] w-fit items-center gap-1 text-[13px] text-sub no-underline"><IconChevronLeft size={14} />Release</Link>
-        <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{p.name}{hand ? ' by hand' : ''}</h1>
-        <span className="text-[13px] text-sub">from {p.account}{hand ? '' : ', through Buffer'}</span>
+        <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{p.name} by hand</h1>
+        <span className="text-[13px] text-sub">from {p.account}</span>
         <div data-state-line className="pt-1"><StateWords st={st} big className="flex-wrap whitespace-normal" /></div>
       </div>
       <DockProvider value={dock}>

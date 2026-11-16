@@ -5,8 +5,10 @@
 // Who writes what (recipes/release.md says it to Alma):
 //   the page, for the user: a pick, the user's own text, a fact's value, a tick, the route, a link or unlink, the
 //     final, an ask and its cancel, a pasted link, "posted, link later", the answer to a note (operations in ops.ts);
-//   Alma: candidates, aims, notes, what Buffer sets and what is left for the user, the sending record (send.go,
-//     scheduled, sending, posted, failed), new facts and platforms.
+//   Alma: candidates, aims, notes, the steps by hand, the post and its link when the user tells her (send.posted),
+//     new facts and platforms.
+// Every post is made by hand by the user in this copy: every platform's route is "hand" (a file that says otherwise,
+// or says nothing, is read as "hand"), and `upload.bufferSets` stays empty.
 // States are never stored: derive.ts works them out from this file and the clock.
 import { isKind, type PlatformKind } from './platforms';
 
@@ -92,7 +94,7 @@ export interface Field {
 
 export interface Step { id: string; text: string; done?: string }
 export interface Upload {
-  /** What Buffer sets at upload, as Alma read it from Buffer ("AI-generated content: on"). */
+  /** Not used in this copy (every post is made by hand): always []. Kept so older files still check out. */
   bufferSets: { label: string; value: string }[];
   /** What the user does in the app right after it posts. */
   after: Step[];
@@ -104,18 +106,12 @@ export interface Send {
   /** The user asked for it ("Post TikTok now"): when, and the exact text of each field at that moment. */
   asked?: { at: string; when: 'now' | string; text: Record<string, string>; file?: string };   // file: the file that goes out, as the page named it at the ask (outfile.ts); absent on asks before 14 Nov (the final)
   go?: { at: string };
+  /** `scheduled`, `sending`, `failed` and `requested` belong to a posting service this copy does not have: a post by
+   *  hand never writes them. They are kept so an older file still checks out. */
   scheduled?: { for: string; bufferPostId?: string };
-  /** `steps`: Alma's words for each step, `at` once done (the first without `at` is the current one). `inBuffer`: when
-   *  Alma saw Buffer still holding it, not yet handed to the platform (only then can it be stopped). `platformHas`:
-   *  when the platform took it from Buffer; from then it cannot be stopped, only deleted once it is up. Neither: the
-   *  page does not guess. */
   sending?: { since: string; steps?: { label: string; at?: string }[]; inBuffer?: string; platformHas?: string };
   posted?: { at: string; link?: string };
-  /** `fix`: Alma's suggested fix in words; `fixAction`: the same as a button (a link to open, or words she is asked).
-   *  `cleared`: when Alma confirmed Buffer holds nothing of this send any more (only then can it go by hand). */
   failed?: { at: string; reason: string; checked?: { at: string; text: string }; fix?: string; fixAction?: { label: string; href?: string; ask?: string }; cleared?: string };
-  /** What the user asked Alma to do about a send under way, and when (stage 3): take a scheduled post out of Buffer,
-   *  stop one Buffer still holds, check on one that is late. Alma removes the line when she has done it. */
   requested?: { unschedule?: string; stop?: string; check?: string };
 }
 
@@ -131,8 +127,9 @@ export interface Platform {
   kind: PlatformKind;
   name: string;
   account: string;
-  route: 'buffer' | 'hand';
-  /** Who moved it to its route, and when (the "Through Buffer / By hand" switch). */
+  /** Always "hand": the user posts it (validateRelease reads any other route, or none, as "hand"). */
+  route: 'hand';
+  /** Who set its route, and when (older files). */
   routeBy?: { by: 'user' | 'alma'; at: string };
   also?: string[];
   wave: { day: 'today' | 'tomorrow'; about: string };
@@ -211,7 +208,8 @@ export function validateRelease(raw: unknown): { file?: ReleaseFile; problems: s
     if (!isKind(x.kind)) p.push(`${name}: "kind" must be one of reddit, youtube-shorts, tiktok, instagram-reels, facebook, threads, x, linkedin.`);
     if (!str(x.name) || !x.name) p.push(`Platform ${i + 1} needs a name.`);
     if (!str(x.account)) p.push(`${name} needs the account it posts from.`);
-    if (x.route !== 'buffer' && x.route !== 'hand') p.push(`${name}: "route" must be "buffer" or "hand".`);
+    // every post goes by hand in this copy: an older file's other route, or none, is read as "hand"
+    x.route = 'hand';
     if (x.also !== undefined && !(Array.isArray(x.also) && x.also.every(str))) p.push(`${name}: "also" must be a list of names.`);
     const w = x.wave;
     if (!obj(w) || (w.day !== 'today' && w.day !== 'tomorrow') || !str(w.about) || !/^\d{1,2}:\d{2}$/.test(w.about)) p.push(`${name} needs a wave: {"day": "today" or "tomorrow", "about": "19:00"}.`);

@@ -148,7 +148,7 @@ for (const [k, p] of Object.entries(RECIPES)) {
   if (k !== 'release' && text.includes('kit.md')) fail(`recipes/${path.basename(p)} still names kit.md`);
 }
 for (const w of OLD_WAY) if (ALMA_APPEND_PROMPT.includes(w)) fail(`ALMA_APPEND_PROMPT still says "${w}"`);
-const v32Step16 = '15. Write all copy to these rules:\n    - Bring the evidence.\n16. Before every upload, on each platform (what Buffer sets):\n    - Upload the smaller encode.\n    - Turn the AI label on.\n17. **TikTok**\n    - not this';
+const v32Step16 = '15. Write all copy to these rules:\n    - Bring the evidence.\n16. Before every upload, on each platform (its own settings at upload):\n    - Upload the smaller encode.\n    - Turn the AI label on.\n17. **TikTok**\n    - not this';
 const v31Step16 = '16. Write the **Before every upload** checklist:\n    - Upload the FINAL.\n17. **TikTok**';
 if (beforeEveryUploadIn(v32Step16).join('|') !== 'Upload the smaller encode.|Turn the AI label on.') fail(`"Before every upload" as v3.2 writes it reads as ${JSON.stringify(beforeEveryUploadIn(v32Step16))}`);
 if (beforeEveryUploadIn(v31Step16).join('|') !== 'Upload the FINAL.') fail('"Before every upload" as v3.1 wrote it no longer reads');

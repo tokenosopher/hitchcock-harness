@@ -2,9 +2,9 @@
 // release (14 Nov at 18:52). Server-only; nothing is written to disk.
 //   sample-release-closed  no final yet: three masters (v236 the newest, v234 dialogue only at −14 LUFS, v231 out of
 //                          date and without subtitles); the cut is v236
-//   sample-release-open    the release at the moment of board 15: Reddit and YouTube posted with links, TikTok ready,
-//                          Instagram scheduled for 19:10, X ready with a note from Alma, LinkedIn's text to pick with
-//                          the cost not confirmed. The final is the master of v236.
+//   sample-release-open    the release at the moment of board 15, every platform by hand: Reddit and YouTube posted
+//                          with links, TikTok and Instagram ready, X ready with a note from Alma, LinkedIn's text to
+//                          pick with the cost not confirmed. The final is the master of v236.
 //   sample-release-kit     an older film with only social/kit.md: today's Release page, read-only
 //   sample-release-checked the moment of board 17 (stage 2): TikTok and Instagram both Ready and sharing three fields,
 //                          TikTok's first line and tags the user's own, its credit line edited since Alma read it,
@@ -12,8 +12,8 @@
 //   sample-release-shorts  the moment of board 18 (18:10): YouTube Shorts not out yet, its description using the days
 //                          it took, not confirmed; title, tags and three thumbnails
 //   sample-release-cover   one cover frame for all (18:52): YouTube Shorts, TikTok and Instagram Reels each
-//                          with the same three frames, "her face" picked on all three; Instagram scheduled for 19:10;
-//                          X with a reply (ASKS 58), sent with the post as one thread
+//                          with the same three frames, "her face" picked on all three; X with a reply (ASKS 58),
+//                          posted by hand as a reply to the post
 //   sample-release-empty   a final named and no platforms yet: Alma has not written the texts
 // The clock: the pages take ?now=2026-11-14T18:52 outside production (src/components/release/clock.ts).
 import type { FilmRef, FilmState, PictureMade, Timeline } from '@/server/types';
@@ -170,7 +170,7 @@ export function boardRelease(): ReleaseFile {
         send: { posted: { at: at('18:04'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2/a_letter_in_a_bottle_reaches_a_lighthouse/' } },
       },
       {
-        id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'buffer', wave: { day: 'today', about: '18:00' },
+        id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'hand', wave: { day: 'today', about: '18:00' },
         fields: [
           { id: 'title', label: 'Title', part: 'title', text: 'A keeper finds a letter asking her to flash the lamp.', pick: 'a', aim: { min: 41, max: 70, words: 'aim 41 to 70' },
             candidates: [{ id: 'a', text: 'A keeper finds a letter asking her to flash the lamp.', does: 'the premise' }, { id: 'b', text: 'Someone across the water has been waiting for years.', does: 'who she is' }, { id: 'c', text: 'Who writes to a lighthouse?', does: 'a line from the film' }] },
@@ -179,31 +179,33 @@ export function boardRelease(): ReleaseFile {
             candidates: [{ id: 'a', text: 'A lighthouse keeper finds a letter in a bottle. It asks her to flash the lamp twice.\nMade alone in {days} days.\nAn original story.\nSeedance 2.5 and voices on Higgsfield.', does: 'premise first' }, { id: 'b', text: 'An original story. Made with Seedance.', does: 'source first' }] },
           { id: 'tags', label: 'Tags', part: 'tags', tags: true, text: 'lighthouse, letter, sea, drama, short film, ai film', own: true, candidates: [] },
         ],
-        upload: { bufferSets: [{ label: 'Altered or synthetic content', value: 'yes' }, { label: 'Who can see it', value: 'public' }], after: [step('captions', 'Turn off automatic captions', at('18:30')), step('thumb', 'Pick the thumbnail frame', at('18:31'))], hand: [] },
-        send: { asked: { at: at('18:10'), when: 'now', text: {} }, go: { at: at('18:11') }, sending: { since: at('18:12') }, posted: { at: at('18:21'), link: 'https://youtube.com/shorts/Qd7xY2kLmNo' } },
+        upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video', at('18:12')), step('open', 'Open YouTube Studio and upload it', at('18:13')), step('title', 'Copy the title', at('18:14')), step('description', 'Copy the description', at('18:15')),
+          step('tags', 'Copy the tags', at('18:16')), step('settings', 'I turned on altered or synthetic content, set it public, turned off automatic captions and picked the thumbnail frame', at('18:20')), step('link', 'Paste the post\'s link', at('18:21'))] },
+        send: { posted: { at: at('18:21'), link: 'https://youtube.com/shorts/Qd7xY2kLmNo' } },
       },
       {
-        id: 'tiktok', kind: 'tiktok', name: 'TikTok', account: 'sample_studio', route: 'buffer', wave: { day: 'today', about: '19:00' },
+        id: 'tiktok', kind: 'tiktok', name: 'TikTok', account: 'sample_studio', route: 'hand', wave: { day: 'today', about: '19:00' },
         fields: [
           { id: 'first', label: 'First line', ...shared(['instagram-reels'], firstLine, 'a'), aim: { max: 90, words: 'aim under 90, so the feed shows it whole' } },
           { id: 'credit', label: 'Credit line', ...shared(['instagram-reels'], credit, 'a') },
           { id: 'tags', label: 'Tags', tags: true, ...shared(['instagram-reels'], tags, 'a'), aim: { words: 'your usual tags' } },
         ],
-        upload: { bufferSets: [{ label: 'AI-generated content', value: 'on' }], after: [step('captions', 'Turn off auto-captions')], hand: [step('save', 'Save the video to this phone'), step('copy', 'Copy the caption'), step('open', 'Open the TikTok app'), step('before', 'In TikTok, before you post: turn on AI-generated content, turn off auto-captions'), step('link', 'Paste the post\'s link')] },
+        upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video to this phone'), step('copy', 'Copy the caption'), step('open', 'Open the TikTok app'), step('before', 'In TikTok, before you post: turn on AI-generated content, turn off auto-captions'), step('link', 'Paste the post\'s link')] },
         send: {},
       },
       {
-        id: 'instagram-reels', kind: 'instagram-reels', name: 'Instagram Reels', account: 'sample_studio', also: ['Facebook', 'Threads'], route: 'buffer', wave: { day: 'today', about: '19:00' },
+        id: 'instagram-reels', kind: 'instagram-reels', name: 'Instagram Reels', account: 'sample_studio', also: ['Facebook', 'Threads'], route: 'hand', wave: { day: 'today', about: '19:00' },
         fields: [
           { id: 'first', label: 'First line', ...shared(['tiktok'], firstLine, 'a') },
           { id: 'credit', label: 'Credit line', ...shared(['tiktok'], credit, 'a') },
           { id: 'tags', label: 'Tags', tags: true, ...shared(['tiktok'], tags, 'a') },
         ],
-        upload: { bufferSets: [{ label: 'Posted as', value: 'a reel, shared to the feed' }, { label: 'AI-generated', value: 'on' }], after: [step('cover', 'Check the cover frame')], hand: [] },
-        send: { asked: { at: at('18:40'), when: at('19:10'), text: { first: firstLine.candidates[0].text, credit: credit.candidates[0].text, tags: tags.candidates[0].text } }, go: { at: at('18:41') }, scheduled: { for: at('19:10'), bufferPostId: '6736f1c2a9e4b40012d3c4e5' } },
+        upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video to this phone'), step('copy', 'Copy the caption'), step('open', 'Open Instagram'),
+          step('before', 'In Instagram, before you share: post it as a reel shared to the feed, turn on AI info, share to Facebook and Threads, check the cover frame'), step('link', 'Paste the post\'s link')] },
+        send: {},
       },
       {
-        id: 'x', kind: 'x', name: 'X', account: 'sample_x', route: 'buffer', wave: { day: 'today', about: '21:00' },
+        id: 'x', kind: 'x', name: 'X', account: 'sample_x', route: 'hand', wave: { day: 'today', about: '21:00' },
         fields: [
           { id: 'text', label: 'Post', text: 'A lighthouse keeper finds a letter in a bottle.', pick: 'a', aim: { max: 120, words: 'aim under 120, room for the video card' },
             candidates: [{ id: 'a', text: 'A lighthouse keeper finds a letter in a bottle.', does: 'the premise' }, { id: 'b', text: '"Who writes to a lighthouse?" A short film.', does: 'a line from the film' }],
@@ -213,11 +215,11 @@ export function boardRelease(): ReleaseFile {
                 { id: 'keep', label: 'Keep yours', effect: [], small: 'nothing changes' },
               ] }] },
         ],
-        upload: { bufferSets: [{ label: 'AI-generated', value: 'on' }], after: [], hand: [] },
+        upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video to this Mac'), step('copy', 'Copy the post'), step('open', 'Open X'), step('link', 'Paste the post\'s link')] },
         send: {},
       },
       {
-        id: 'linkedin', kind: 'linkedin', name: 'LinkedIn', account: 'your account', route: 'buffer', wave: { day: 'tomorrow', about: '9:00' },
+        id: 'linkedin', kind: 'linkedin', name: 'LinkedIn', account: 'your account', route: 'hand', wave: { day: 'tomorrow', about: '9:00' },
         fields: [
           { id: 'text', label: 'Post', text: '', aim: { min: 400, max: 1200, words: 'aim 400 to 1,200' },
             candidates: [
@@ -227,7 +229,7 @@ export function boardRelease(): ReleaseFile {
             ] },
           { id: 'comment', label: 'First comment', part: 'comment', text: 'The film is on YouTube too.', own: true, candidates: [] },
         ],
-        upload: { bufferSets: [], after: [], hand: [] },
+        upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video to this Mac'), step('open', 'Open LinkedIn and start a post with the video'), step('text', 'Copy the post'), step('link', 'Paste the post\'s link'), step('comment', 'Copy the first comment and post it under the post')] },
         send: {},
       },
     ],
@@ -284,6 +286,7 @@ export function shortsRelease(): ReleaseFile {
   fld(f, 'reddit', 'comment').text = 'Made alone with Seedance 2.5 on Higgsfield. Happy to answer how.';
   const yt = plat(f, 'youtube-shorts');
   yt.send = {};
+  yt.upload.hand = yt.upload.hand.map(({ id, text }) => ({ id, text }));
   yt.thumbnail = {
     where: 'the frame to pick in YouTube', pick: 'face',
     options: [{ id: 'face', at: 12, does: 'her face, looking up' }, { id: 'bottle', at: 31, does: 'the bottle in the weed' }, { id: 'light', at: 64, does: 'the answering light' }],
@@ -293,8 +296,8 @@ export function shortsRelease(): ReleaseFile {
 }
 
 /** One cover frame for all, at the board's clock: the Shorts sample with the days confirmed, and TikTok and
- *  Instagram Reels given the same three frames as YouTube, "her face" picked on all three. Instagram is scheduled for
- *  19:10 (locked), so a pick on YouTube or TikTok reaches the other one and leaves Instagram as it is. */
+ *  Instagram Reels given the same three frames as YouTube, "her face" picked on all three, so a pick on one reaches
+ *  the others. */
 export function coverRelease(): ReleaseFile {
   const f = shortsRelease();
   const days = f.facts.find((x) => x.id === 'days')!;
@@ -303,12 +306,11 @@ export function coverRelease(): ReleaseFile {
   const yt = plat(f, 'youtube-shorts').thumbnail!;
   plat(f, 'tiktok').thumbnail = { where: 'the cover frame to pick in TikTok', pick: yt.pick, options: yt.options.map((o) => ({ ...o })) };
   plat(f, 'instagram-reels').thumbnail = { where: 'the cover to pick in Instagram', pick: yt.pick, options: yt.options.map((o) => ({ ...o })) };
-  plat(f, 'instagram-reels').send = boardRelease().platforms.find((p) => p.id === 'instagram-reels')!.send;
-  // X with a reply (ASKS 58): the second post of the thread, sent with the post through Buffer
+  // X with a reply (ASKS 58): posted by hand as a reply to the post
   plat(f, 'x').fields.push({ id: 'reply', label: 'Reply', part: 'reply', text: REPLY_TEXT, pick: 'a', aim: { max: 200, words: 'one line, who made it and with what' },
     candidates: [{ id: 'a', text: REPLY_TEXT, does: 'who made it' }, { id: 'b', text: 'Made alone, start to finish, in Hitchcock Harness.', does: 'shorter' }],
     readByAlma: { at: at('18:30'), text: REPLY_TEXT } });
-  // its steps by hand, in use only when it is moved to by hand (the reply's own step is the page's, after the post's)
+  // its steps by hand (the reply's own step is the page's, after the post's)
   plat(f, 'x').upload.hand = [step('save', 'Save the video to this Mac'), step('copy', 'Copy the post'), step('open', 'Open X'), step('link', 'Paste the post\'s link')];
   return f;
 }
@@ -367,47 +369,31 @@ export function sampleKitRelease(slug: string): ReleaseInfo {
   };
 }
 
-// ---- stage 3 (sending it): the moments of the boards Go, Sent, Posted, Failed and Phone, each a sample film of its
-// own, made from the board's release at 18:52 (boardRelease) moved on to that moment. The test hook
-// (POST …/release/alma, sample-data mode only) plays Alma's part from any of them.
-//   sample-release-go       TikTok asked at 19:01 ("Post TikTok now"), Alma's go card written: Waiting for your go
-//   sample-release-sending  TikTok went at 19:02, Buffer has the file, TikTok is processing (step 2 of 3)
-//   sample-release-posted   TikTok posted at 19:05 with its link, "Turn off auto-captions" still to do
-//   sample-release-failed   TikTok did not go out at 19:03; Alma checked at 19:04 and suggests reconnecting in Buffer
-//   sample-release-hand     TikTok moved to by hand at 18:40, at step 4 of 5; Reddit posted at 18:04, link to add
+// ---- stage 3 (sending it): the moments of the boards Posted and Phone, each a sample film of its own, made from
+// the board's release at 18:52 (boardRelease) moved on to that moment. Every post is made by hand: the test hook
+// (POST …/release/alma, sample-data mode only) plays Alma's part, recording the post and its link.
+//   sample-release-posted   TikTok posted by hand at 19:05 with its link, every step done
+//   sample-release-hand     TikTok at step 4 of 5; Reddit posted at 18:04, link to add
 Object.assign(RELEASE_SAMPLES, {
-  'sample-release-go': ref('sample-release-go', 'Sample release · waiting for the go', 12),
-  'sample-release-sending': ref('sample-release-sending', 'Sample release · sending', 12),
   'sample-release-posted': ref('sample-release-posted', 'Sample release · posted', 12),
-  'sample-release-failed': ref('sample-release-failed', 'Sample release · did not go out', 12),
   'sample-release-hand': ref('sample-release-hand', 'Sample release · by hand', 12),
 });
 /** The clock of each stage-3 sample's moment, as the tests pass it (?now=). */
 export const SEND_NOW: Record<string, string> = {
-  'sample-release-go': '2026-11-14T19:01', 'sample-release-sending': '2026-11-14T19:03:40', 'sample-release-posted': '2026-11-14T19:06',
-  'sample-release-failed': '2026-11-14T19:05', 'sample-release-hand': '2026-11-14T19:04',
+  'sample-release-posted': '2026-11-14T19:06', 'sample-release-hand': '2026-11-14T19:04',
 };
 export const TIKTOK_LINK = 'https://www.tiktok.com/@sample_studio/video/7439182650123456789';
 
 function moment(slug: string): ReleaseFile | undefined {
   const f = boardRelease();
   const tt = f.platforms.find((p) => p.id === 'tiktok')!;
-  const asked = { at: at('19:01'), when: 'now' as const, text: Object.fromEntries(tt.fields.map((k) => [k.id, k.text])) };
-  const going = { asked, go: { at: at('19:02') }, sending: { since: at('19:02'), steps: [{ label: 'Buffer has the file', at: at('19:02') }, { label: 'TikTok is processing' }, { label: 'Posted' }], platformHas: at('19:03') } };
   switch (slug) {
-    case 'sample-release-go': tt.send = { asked }; break;
-    case 'sample-release-sending': tt.send = going; break;
     case 'sample-release-posted':
-      tt.send = { ...going, sending: { ...going.sending, steps: [{ label: 'Buffer has the file', at: at('19:02') }, { label: 'TikTok is processing', at: at('19:03') }, { label: 'Posted', at: at('19:05') }] }, posted: { at: at('19:05'), link: TIKTOK_LINK } };
-      break;
-    case 'sample-release-failed':
-      tt.send = { ...going, sending: { since: at('19:02'), steps: [{ label: 'Buffer has the file', at: at('19:02') }, { label: 'TikTok is processing' }, { label: 'Posted' }] },
-        failed: { at: at('19:03'), reason: 'TikTok answered with an unknown error.', checked: { at: at('19:04'), text: 'Alma checked sample_studio on TikTok at 19:04. No new post. The text and file are unchanged.' },
-          fix: 'Last time this happened, reconnecting TikTok in Buffer fixed it.', fixAction: { label: 'Reconnect TikTok in Buffer', href: 'https://publish.buffer.com/channels' } } };
+      tt.upload.hand = [step('save', 'Save the video', at('19:01')), step('copy', 'Copy the caption', at('19:01')), step('open', 'Open TikTok', at('19:02')),
+        step('checks', 'I turned on AI-generated content and turned off auto-captions', at('19:04')), step('link', 'Paste the post\'s link', at('19:05'))];
+      tt.send = { posted: { at: at('19:05'), link: TIKTOK_LINK } };
       break;
     case 'sample-release-hand': {
-      tt.route = 'hand';
-      tt.routeBy = { by: 'user', at: at('18:40') };
       tt.upload.hand = [step('save', 'Save the video', at('18:58')), step('copy', 'Copy the caption', at('18:59')), step('open', 'Open TikTok', at('19:00')),
         step('checks', 'I turned on AI-generated content and turned off auto-captions'), step('link', 'Paste the post\'s link')];
       const rd = f.platforms.find((p) => p.id === 'reddit')!;
@@ -429,7 +415,7 @@ export const releaseSeed = (slug: string): ReleaseFile | undefined => RELEASE_SE
 //                         characters, LinkedIn's of nearly 800, the days it took not confirmed and used in three.
 //                         The words are invented; the lengths, counts and states are a real release's.
 //   sample-release-long   the same, stretched: a long caption picked, a long title, a long account name, a long link,
-//                         seven tags, six notes from Alma on one field, a long reason in Needs you
+//                         seven tags, six notes from Alma on one field
 export const TODAY_NOW = '2026-11-14T16:33';
 /** Invented words of about `n` characters, cut at a word. */
 const words = (n: number, seed = 0): string => {
@@ -466,7 +452,7 @@ export function todayRelease(): ReleaseFile {
         send: {},
       },
       {
-        id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'buffer', wave: { day: 'today', about: '18:00' },
+        id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'hand', wave: { day: 'today', about: '18:00' },
         fields: [
           { id: 'title', label: 'Title', part: 'title', text: '', candidates: cands([53, 53, 52], [35, 30, 20], 11), aim: { min: 41, max: 70, words: '41 to 70 characters, the premise in the first words' }, ...read('') },
           { id: 'line1', label: 'Description, first line', part: 'description', text: yLine1[0].text, pick: 'a', candidates: yLine1, ...read('') },
@@ -475,43 +461,45 @@ export function todayRelease(): ReleaseFile {
           { id: 'tags', label: 'Tags', part: 'tags', tags: true, text: '', candidates: [{ id: 'a', text: 'lighthouse, keeper, letter, bottle, sea, island, drama, short film, ai film', does: 'nine, the things first and the kind of film last' }], ...read('') },
         ],
         thumbnail: {
-          where: 'the frame to pick in YouTube Studio, since Buffer can only set a frame of the film as the cover',
+          where: 'the frame to pick in YouTube Studio',
           options: [12, 31, 64, 5, 44, 60, 26, 43, 63].map((t, i) => ({ id: `frame-${i + 1}`, at: t, does: words(65 + (i * 7) % 26, 300 + i * 11).replace(/\.$/, '') })),
         },
-        upload: upload([{ label: 'Altered or synthetic content', value: 'on' }, { label: 'Who can see it', value: 'public' }, { label: 'Made for kids', value: 'no' }, { label: 'Category', value: 'Film & Animation' }],
-          ['Add the tags in YouTube Studio (Buffer cannot set them)', 'Check automatic captions are off']),
+        upload: upload([], [], [['save', 'Save the video'], ['open', 'Open YouTube Studio and upload it'], ['title', 'Copy the title'], ['description', 'Copy the description'], ['tags', 'Copy the tags'],
+          ['settings', 'I turned on altered or synthetic content, set it public, not made for kids, in Film & Animation'], ['captions', 'I checked automatic captions are off'], ['link', 'Paste the post\'s link']]),
         send: {},
       },
       {
-        id: 'tiktok', kind: 'tiktok', name: 'TikTok', account: 'sample_studio', route: 'buffer', wave: { day: 'today', about: '19:00' },
+        id: 'tiktok', kind: 'tiktok', name: 'TikTok', account: 'sample_studio', route: 'hand', wave: { day: 'today', about: '19:00' },
         fields: [
           { id: 'first', label: 'First line', ...sh(['instagram-reels'], first), aim: { max: 90, words: 'under 90, so the feed shows it whole' } },
           { id: 'credit', label: 'Credit line', ...sh(['instagram-reels'], credit) },
           { id: 'tags', label: 'Tags', tags: true, ...sh(['instagram-reels'], tagsC) },
         ],
-        upload: upload([{ label: 'AI-generated content', value: 'on' }], ['Turn off auto-captions'], [['save', 'Save the video to this phone'], ['copy', 'Copy the caption'], ['ai', 'Turn on AI-generated content'], ['captions-off', 'Turn off auto-captions there'], ['link', 'Paste the post\'s link']]),
+        upload: upload([], [], [['save', 'Save the video to this phone'], ['copy', 'Copy the caption'], ['ai', 'Turn on AI-generated content'], ['captions-off', 'Turn off auto-captions there'], ['link', 'Paste the post\'s link']]),
         send: {},
       },
       {
-        id: 'instagram-reels', kind: 'instagram-reels', name: 'Instagram Reels', account: 'sample_studio', also: ['Facebook', 'Threads'], route: 'buffer', wave: { day: 'today', about: '19:00' },
+        id: 'instagram-reels', kind: 'instagram-reels', name: 'Instagram Reels', account: 'sample_studio', also: ['Facebook', 'Threads'], route: 'hand', wave: { day: 'today', about: '19:00' },
         fields: [
           { id: 'first', label: 'First line', ...sh(['tiktok'], first), aim: { max: 90, words: 'under 90, so the feed shows it whole' } },
           { id: 'credit', label: 'Credit line', ...sh(['tiktok'], credit) },
           { id: 'tags', label: 'Tags', tags: true, ...sh(['tiktok'], tagsC) },
         ],
-        upload: upload([{ label: 'Posted as', value: 'a reel, shared to the feed' }, { label: 'AI-generated', value: 'on' }], ['Check the cover frame', 'Share it to your story with the sticker that links to the reel, then pin it on the profile']),
+        upload: upload([], [], [['save', 'Save the video to this phone'], ['copy', 'Copy the caption'], ['before', 'In Instagram: post it as a reel shared to the feed, turn on AI info, check the cover frame'], ['link', 'Paste the post\'s link'],
+          ['story', 'Share it to your story with the sticker that links to the reel, then pin it on the profile']]),
         send: {},
       },
       {
-        id: 'x', kind: 'x', name: 'X', account: 'sample_x', route: 'buffer', wave: { day: 'today', about: '21:00' },
+        id: 'x', kind: 'x', name: 'X', account: 'sample_x', route: 'hand', wave: { day: 'today', about: '21:00' },
         fields: [{ id: 'text', label: 'Post', text: '', candidates: cands([181, 181], [36, 28], 60), aim: { max: 240, words: 'under 240, room for the video card' }, ...read('') }],
-        upload: upload([{ label: 'AI-generated', value: 'on' }], ['Reply with the handles of the tools you used', words(119, 70)]),
+        upload: upload([], [], [['save', 'Save the video to this Mac'], ['copy', 'Copy the post'], ['open', 'Open X'], ['ai', 'Turn on the AI-generated label'], ['link', 'Paste the post\'s link'],
+          ['handles', 'Reply with the handles of the tools you used'], ['more', words(119, 70)]]),
         send: {},
       },
       {
-        id: 'linkedin', kind: 'linkedin', name: 'LinkedIn', account: 'your own profile', route: 'buffer', wave: { day: 'tomorrow', about: '09:00' },
+        id: 'linkedin', kind: 'linkedin', name: 'LinkedIn', account: 'your own profile', route: 'hand', wave: { day: 'tomorrow', about: '09:00' },
         fields: [{ id: 'text', label: 'Post', text: '', candidates: [{ id: 'a', text: `I made a one-minute film alone in {days} days. ${words(720, 80)}`, does: 'the making, then the story, then a question at the end' }, { id: 'b', text: words(408, 90), does: 'the story first, shorter and plainer' }], aim: { words: 'one long post, a few short paragraphs, the question at the end, no hashtags' }, ...read('') }],
-        upload: upload([{ label: 'Video', value: 'uploaded natively, not as a link to YouTube' }], []),
+        upload: upload([], [], [['save', 'Save the video to this Mac'], ['open', 'Open LinkedIn and start a post with the video, uploaded natively, not as a link to YouTube'], ['copy', 'Copy the post'], ['link', 'Paste the post\'s link']]),
         send: {},
       },
     ],
@@ -547,13 +535,9 @@ export function longRelease(): ReleaseFile {
       { id: 'keep', label: 'Keep yours', effect: [], small: 'nothing changes' },
     ],
   }));
-  // a long reason in Needs you: LinkedIn did not go out
+  // LinkedIn's long post picked
   const li = p('linkedin');
   Object.assign(li.fields[0], { text: li.fields[0].candidates[1].text, pick: 'b' });
-  li.send = {
-    asked: { at: at('16:12'), when: 'now', text: { text: li.fields[0].candidates[1].text } }, go: { at: at('16:13') }, sending: { since: at('16:13') },
-    failed: { at: at('16:15'), reason: `LinkedIn answered that the video could not be processed. ${words(260, 33)}`, checked: { at: at('16:18'), text: words(200, 44) }, fix: words(160, 55), fixAction: { label: 'Reconnect LinkedIn in Buffer and look at the channel settings', href: 'https://publish.buffer.com/channels' }, cleared: at('16:19') },
-  };
   return f;
 }
 

@@ -1,10 +1,10 @@
 // The platforms' own facts (Release, 14 Nov 2026): mechanics only, per kind of platform. Hard limits (characters per
 // posted part, tags, video length and size), how many characters the feed shows before "more", which upload settings
-// exist, how a caption is assembled from the release file's fields, and what Buffer can set for it. No film rule lives
+// exist and how a caption is assembled from the release file's fields. No film rule lives
 // here: aims, advice and "no hashtags on X" are Alma's, in social/release.json.
 //
 // Every number carries where it was read and when. A number marked `unverified` could not be confirmed in the
-// platform's or Buffer's public documentation on that day; the page says "about" before it.
+// platform's own documentation, or in the public tables of platform limits cited below, on that day; the page says "about" before it.
 // Pure: the pages, the server and scripts/release-test.ts import it.
 
 export type PlatformKind = 'reddit' | 'youtube-shorts' | 'tiktok' | 'instagram-reels' | 'facebook' | 'threads' | 'x' | 'linkedin';
@@ -17,7 +17,7 @@ export interface Sourced { value: number; source: string; checked: string; unver
 export interface PartFacts {
   id: string;
   label: string;
-  /** The hard limit, in characters (UTF-16 code units, as Buffer counts on most networks). */
+  /** The hard limit, in characters (UTF-16 code units, as the cited limits count them on most networks). */
   limit?: Sourced;
   /** A tag list part: its limit counts tags, `chars` its characters (YouTube's 500). */
   tags?: { max?: Sourced; chars?: Sourced };
@@ -26,16 +26,6 @@ export interface PartFacts {
   /** Posted only when it has text (X's and Threads' reply, ASKS 58): a platform file with no field in it, or with its
    *  fields emptied, posts nothing for it and nothing waits on it. */
   optional?: true;
-}
-
-export interface BufferFacts {
-  /** Buffer has a channel for it. */
-  channel: boolean;
-  /** What Buffer can set at upload, in plain words, from the create_post tool's schema. */
-  sets: string[];
-  /** What the schema has no field for: left to the user in the app after it posts. */
-  cannot: string[];
-  checked: string;
 }
 
 export interface PlatformFacts {
@@ -51,28 +41,19 @@ export interface PlatformFacts {
   video: { min?: Sourced; max?: Sourced; bytes?: Sourced };
   /** The upload settings that exist on the platform (whoever sets them). */
   settings: string[];
-  buffer: BufferFacts;
 }
 
 // ---- sources (read on the day below)
 const CHECKED = '2026-11-13';
-const BUFFER_CHARS = 'Buffer, "Character limits for each social network" (support.buffer.com/articles/character-limits-for-each-social-network-mNDqsEV9Nf) and developers.buffer.com/guides/character-limits';
-const BUFFER_VIDEO = 'Buffer, "Sharing videos through Buffer" (support.buffer.com/articles/sharing-videos-through-buffer-LOe2p2rnAI)';
+const BUFFER_CHARS = 'Buffer\'s public table of platform limits, "Character limits for each social network" (support.buffer.com/articles/character-limits-for-each-social-network-mNDqsEV9Nf) and developers.buffer.com/guides/character-limits';
+const BUFFER_VIDEO = 'Buffer\'s public table of platform video limits, "Sharing videos through Buffer" (support.buffer.com/articles/sharing-videos-through-buffer-LOe2p2rnAI)';
 const YT_LIMITS = 'YouTube Help, "Add video details" (support.google.com/youtube/answer/57404)';
 const YT_SHORTS = 'YouTube Help, "Upload YouTube Shorts" (support.google.com/youtube/answer/15424877)';
-const BUFFER_SCHEMA = 'the Buffer create_post tool\'s input schema (metadata per service)';
 const NONE = 'no public page found that states it; commonly quoted value';
 const X_CHARS = `${BUFFER_CHARS} (free accounts; 25,000 on paid plans; X's weighted count: a link is 23, an emoji 2)`;
 
 const s = (value: number, source: string): Sourced => ({ value, source, checked: CHECKED });
 const about = (value: number, source = NONE): Sourced => ({ value, source, checked: CHECKED, unverified: true });
-
-/** What Buffer sets for every channel it has (schema, 13 Nov 2026). */
-export const BUFFER_ALL = [
-  'when it goes out: now, the next slot, the queue, or a set time',
-  'the video, which Buffer fetches from a public web address (not a file on this Mac)',
-  'the thumbnail as a frame of the video (an offset in milliseconds); no picture of its own',
-];
 
 export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
   reddit: {
@@ -80,7 +61,6 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     parts: [{ id: 'title', label: 'Title', limit: about(300), join: ' ' }, { id: 'comment', label: 'First comment', limit: about(10000), join: '\n\n' }],
     video: { max: about(900), bytes: about(1_000_000_000) },
     settings: ['subreddit', 'flair', 'NSFW and spoiler marks'],
-    buffer: { channel: false, sets: [], cannot: ['everything: Buffer has no Reddit channel; it is posted by hand'], checked: CHECKED },
   },
   'youtube-shorts': {
     kind: 'youtube-shorts', name: 'YouTube Shorts', short: 'YT',
@@ -91,12 +71,6 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     ],
     video: { max: s(180, YT_SHORTS), bytes: s(10_000_000_000, BUFFER_VIDEO) },
     settings: ['title', 'description', 'tags', 'thumbnail', 'altered or synthetic content', 'who can see it', 'made for kids', 'category', 'licence', 'notify subscribers'],
-    buffer: {
-      channel: true,
-      sets: ['title (required)', 'category (required)', 'altered or synthetic content (isAiGenerated)', 'who can see it: public, unlisted or private', 'made for kids', 'licence', 'embeddable', 'notify subscribers'],
-      cannot: ['tags', 'a thumbnail picture of its own (only a frame)', 'playlist', 'automatic captions'],
-      checked: CHECKED,
-    },
   },
   tiktok: {
     kind: 'tiktok', name: 'TikTok', short: 'TT',
@@ -104,12 +78,6 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     fold: about(55),
     video: { min: s(3, BUFFER_VIDEO), max: s(600, BUFFER_VIDEO), bytes: s(1_000_000_000, BUFFER_VIDEO) },
     settings: ['caption', 'AI-generated content', 'who can see it', 'comments, duet and stitch', 'cover frame', 'auto-captions'],
-    buffer: {
-      channel: true,
-      sets: ['AI-generated content (isAiGenerated, video posts only)', 'a title'],
-      cannot: ['who can see it', 'comments, duet and stitch', 'auto-captions', 'the sound'],
-      checked: CHECKED,
-    },
   },
   'instagram-reels': {
     kind: 'instagram-reels', name: 'Instagram Reels', short: 'IG',
@@ -118,38 +86,27 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     fold: about(125),
     video: { min: s(3, BUFFER_VIDEO), max: s(900, BUFFER_VIDEO), bytes: s(300_000_000, BUFFER_VIDEO) },
     settings: ['caption', 'AI info label', 'share to feed', 'cover', 'location', 'collaborators', 'first comment', 'also to Facebook'],
-    buffer: {
-      channel: true,
-      sets: ['posted as a reel (type reel)', 'share to the feed', 'AI-generated (isAiGenerated)', 'first comment', 'location'],
-      cannot: ['collaborators', 'a cover picture of its own (only a frame)', 'the sound', 'cross-posting to Facebook (a separate Facebook channel post)'],
-      checked: CHECKED,
-    },
   },
   facebook: {
     kind: 'facebook', name: 'Facebook', short: 'FB',
     parts: [{ id: 'caption', label: 'Caption', limit: s(5000, BUFFER_CHARS), join: '\n' }, { id: 'comment', label: 'First comment', limit: s(5000, BUFFER_CHARS), join: '\n' }],
     video: { min: s(3, BUFFER_VIDEO), max: s(90, BUFFER_VIDEO), bytes: s(1_000_000_000, BUFFER_VIDEO) },
     settings: ['caption', 'reel or post', 'first comment', 'AI info label'],
-    buffer: { channel: true, sets: ['reel, post or story (type)', 'first comment', 'a link card'], cannot: ['the AI info label'], checked: CHECKED },
   },
   threads: {
     kind: 'threads', name: 'Threads', short: 'TH',
-    // the reply (ASKS 58): the second post of a thread, which Buffer sends with the first (create_post's
-    // metadata.threads.thread); a field with part "reply"
+    // the reply (ASKS 58): a field with part "reply", posted by the user as a reply to their post
     parts: [{ id: 'text', label: 'Text', limit: s(500, BUFFER_CHARS), join: '\n' }, { id: 'reply', label: 'Reply', limit: s(500, BUFFER_CHARS), join: '\n', optional: true }],
     video: { max: s(300, BUFFER_VIDEO), bytes: s(1_000_000_000, BUFFER_VIDEO) },
     settings: ['text', 'topic', 'location', 'a thread of posts'],
-    buffer: { channel: true, sets: ['a thread of posts', 'topic (50 characters)', 'location', 'a link card'], cannot: ['reels (a video goes as a post)', 'an AI label'], checked: CHECKED },
   },
   x: {
     kind: 'x', name: 'X', short: 'X',
-    // the reply (ASKS 58): the second post of a thread, which Buffer sends with the first (create_post's
-    // metadata.twitter.thread); a field with part "reply". Buffer cannot reply to a post already up
+    // the reply (ASKS 58): a field with part "reply", posted by the user as a reply to their post
     parts: [{ id: 'text', label: 'Post', limit: s(280, X_CHARS), join: '\n' }, { id: 'reply', label: 'Reply', limit: s(280, X_CHARS), join: '\n', optional: true }],
     fold: about(280),
     video: { min: s(0.5, BUFFER_VIDEO), max: s(140, BUFFER_VIDEO), bytes: s(512_000_000, BUFFER_VIDEO) },
     settings: ['text', 'a thread of posts', 'AI-generated label', 'who can reply'],
-    buffer: { channel: true, sets: ['AI-generated (isAiGenerated, original posts only)', 'a thread of posts'], cannot: ['who can reply'], checked: CHECKED },
   },
   linkedin: {
     kind: 'linkedin', name: 'LinkedIn', short: 'LI',
@@ -157,11 +114,10 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     fold: about(210),
     video: { bytes: s(1_000_000_000, BUFFER_VIDEO) },
     settings: ['text', 'first comment', 'mentions'],
-    buffer: { channel: true, sets: ['first comment', 'mentions', 'a link card'], cannot: ['an AI label', 'the video at more than 720p (Buffer sends it at 1280×720 at most)'], checked: CHECKED },
   },
 };
 
-export const SOURCES = { BUFFER_CHARS, BUFFER_VIDEO, YT_LIMITS, YT_SHORTS, BUFFER_SCHEMA };
+export const SOURCES = { BUFFER_CHARS, BUFFER_VIDEO, YT_LIMITS, YT_SHORTS };
 
 export const isKind = (v: unknown): v is PlatformKind => typeof v === 'string' && (PLATFORM_KINDS as string[]).includes(v);
 export const factsOf = (kind: PlatformKind): PlatformFacts => PLATFORMS[kind];

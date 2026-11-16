@@ -1,8 +1,7 @@
 // The test hook that plays Alma's part of a release (Release, stage 3 of 3). Sample-data mode only (MOCK=boards),
 // never in production: 404 otherwise. POST {platform, step, link?, note?} (?now= the tests' clock) writes into the
-// sample film's release in memory what the recipe tells Alma to write: her go card, the go, the sending record and
-// its steps, the platform taking it, the post and its link, a failure with what she checked and a fix, Buffer having
-// dropped it, a schedule, an unschedule, a stop. Steps: src/server/release/mockAlma.ts (ALMA_STEPS).
+// sample film's release in memory what the recipe tells Alma to write: the post the user made by hand, with its
+// link. Steps: src/server/release/mockAlma.ts (ALMA_STEPS).
 import { connection } from 'next/server';
 import { NO_STORE } from '@/server/edit/http';
 import { clockOf } from '@/server/release/clock';

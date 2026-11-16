@@ -322,7 +322,7 @@ export function publishedIn(md: string, title: string): Published | undefined {
     // the note's own words: "add" in the link cell is a link still to come; "add if posted" is a post nobody has recorded
     const pending = !link && /^add\b(?!\s+if\b)/i.test(c[3]);
     const went = !!link || !!posted || pending;
-    // a row that did not go out says why in its title cell ("not posted (left out by the user)", "not in Buffer: …")
+    // a row that did not go out says why in its title cell ("not posted (left out by the user)")
     const why = pending ? (/by hand/i.test(c[3]) ? 'posted by hand · link still to come' : 'link still to come')
       : went ? '' : [c[2], c[3]].filter((x) => x && !/^https?:/.test(x) && /^not /i.test(x)).join(' · ') || 'no post on record';
     rows.push({ platform: c[0], account: c[1] || undefined, title: went && c[2] && !/^not /i.test(c[2]) ? c[2] : undefined, link, posted, pending: pending || undefined, note: why || undefined });

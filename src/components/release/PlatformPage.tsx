@@ -70,7 +70,7 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
   const posted = postedCount(file);
   const at = waveAt(file, p);
   const day = dayWords(at, now);
-  const where = p.route === 'hand' ? `by hand from ${p.account}` : `through Buffer from ${p.account}`;
+  const where = `by hand from ${p.account}`;
   const qs = typeof window === 'undefined' ? '' : window.location.search;
   const one = layout === 'one';
   return (

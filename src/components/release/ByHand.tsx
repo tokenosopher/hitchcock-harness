@@ -1,5 +1,5 @@
 'use client';
-// By hand (Release, stage 3 of 3; boards Phone and Platform): Reddit always, any platform the user moved off Buffer.
+// By hand (Release, stage 3 of 3; boards Phone and Platform): every platform, since every post is made by hand here.
 // Alma's steps (`upload.hand`) as a numbered column, each read as one of the mechanics the page knows (sendflow.ts
 // `handSteps`): save the final (the full-size file, a download, never the 480p preview), copy a posted part (the
 // exact text shown), open the app (a plain web link), a check worded as an action, paste the post's link (checked to
@@ -9,23 +9,20 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { useFilm } from '@/components/data/film';
-import { useUIActions } from '@/components/data/ui';
 import { mediaUrl } from '@/components/media/Media';
 import { repoPath } from '@/components/lib/format';
 import { IconCheck } from '@/components/shell/icons';
 import { Reveal } from '@/components/shell/Reveal';
 import { cn } from '@/lib/utils';
-import { appName, hm } from './derive';
-import { factsOf } from './platforms';
+import { hm } from './derive';
 import { outWords } from './outfile';
-import { appHome, copyWhat, currentHand, fileWords, handSteps, maybeAlive, type HandStep } from './sendflow';
-import { LinkField, routeChip, type SendProps } from './PlatformSend';
+import { appHome, copyWhat, currentHand, fileWords, handSteps, type HandStep } from './sendflow';
+import { LinkField, type SendProps } from './PlatformSend';
 import { phoneMain } from './PhoneBar';
 import { DockSlot } from './layout';
 
 export function ByHand({ rel, file, p, final, phone, base }: SendProps) {
   const { state } = useFilm();
-  const { addChip } = useUIActions();
   const steps = handSteps(file, p);
   const posted = !!p.send.posted;
   const cur = currentHand(steps, posted);
@@ -44,25 +41,12 @@ export function ByHand({ rel, file, p, final, phone, base }: SendProps) {
     if (!s.part?.text.trim()) { setErr(`Pick the ${s.part?.part.label.toLowerCase() ?? 'text'} first, in The text.`); return; }
     void navigator.clipboard?.writeText(s.part.text).then(() => tick(s), () => setErr('The browser did not allow copying. Select the text and copy it.'));
   };
-  const back = async () => {
-    const r = await rel.run({ op: 'setRoute', platform: p.id, route: 'buffer' });
-    if (!r.ok) { setErr(r.error); return; }
-    addChip(routeChip(p, 'buffer'));
-  };
-  const channel = factsOf(p.kind).buffer.channel;
-  const movedBy = p.routeBy?.by === 'user' ? 'You' : p.routeBy?.by === 'alma' ? 'Alma' : undefined;
   const qs = typeof window === 'undefined' ? '' : window.location.search;
   // the step to do now, in the dock at the foot of a one-column page or the phone's bar
   const bar = !cur ? <Link href={`${base}/release${qs}`} data-bar-back className={cn(phoneMain, 'border border-edge-strong bg-transparent text-ink')}>Back to Release</Link> : <StepBar s={cur} download={download} name={final.name} openHref={open.href} onCopy={copy} onTick={tick} toLink={() => linkRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })} />;
   return (
     <div data-by-hand className="flex flex-col gap-3">
-      {channel && !posted && (
-        <p data-moved className="m-0 rounded-[10px] border border-edge-strong px-3 py-2.5 text-[12.5px] leading-[1.5] text-ink-3">
-          {movedBy && p.routeBy ? `${movedBy} moved ${appName(p)} to by hand at ${hm(p.routeBy.at)}.` : `${appName(p)} goes by hand.`} Buffer will not post it.{' '}
-          {!maybeAlive(p) && <button type="button" data-move-back onClick={() => void back()} className="inline-flex min-h-7 cursor-pointer items-center border-0 bg-transparent p-0 text-[12.5px] text-ink underline underline-offset-2">Move it back</button>}
-        </p>
-      )}
-      {!channel && <p data-always-hand className="m-0 text-[12.5px] text-sub">Always by hand. Buffer has no {appName(p)} channel. From {p.account}.</p>}
+      <p data-always-hand className="m-0 text-[12.5px] text-sub">By hand, from {p.account}. You post it; Alma writes the text and records the link.</p>
       <span data-hand-progress className="text-[12px] text-sub">{posted ? 'By hand, done' : `By hand, step ${Math.min(done + 1, steps.length)} of ${steps.length}`}</span>
       <ol className="m-0 flex list-none flex-col gap-2 p-0">
         {steps.map((s) => {

@@ -5,8 +5,8 @@
 // a go while a fact is unconfirmed, changing the final after a post. Pure.
 import { emptyRelease, factIdsIn, type Field, type FieldSnapshot, type Platform, type ReleaseFile, type ReleaseFinal, type ThumbOption, type Thumbnail } from './file';
 import { appName, boxOf, type Box, boxShare, boxText, coverGroup, fillFacts, goCheck, heldWords, lockedVerb, nameList, platformOf, platformStatus, sharedTouch } from './derive';
-import { coverWord, factsOf } from './platforms';
-import { handSteps, linkProblem, maybeAlive, stoppable, WAIT_DROPPED } from './sendflow';
+import { coverWord } from './platforms';
+import { handSteps, linkProblem, stoppable, WAIT_DROPPED } from './sendflow';
 
 export type ReleaseOp =
   /** Use one of Alma's candidates for a field (on every platform sharing it). */
@@ -25,8 +25,8 @@ export type ReleaseOp =
   | { op: 'confirm'; fact: string; value: string }
   /** A step done or undone: an after-post step (`after`) or a by-hand step (`hand`). */
   | { op: 'tick'; platform: string; list: 'after' | 'hand'; step: string; done: boolean }
-  /** Through Buffer or by hand. */
-  | { op: 'setRoute'; platform: string; route: 'buffer' | 'hand' }
+  /** The route: only "hand" in this copy (every post is made by hand); anything else is refused. */
+  | { op: 'setRoute'; platform: string; route: string }
   /** This platform keeps the text; the others keep their own from now on. `fields`: more fields at once (a box of
    *  several, "Only here"), all or nothing. */
   | { op: 'unlink'; platform: string; field: string; fields?: string[] }
@@ -55,8 +55,8 @@ export type ReleaseOp =
   /** `own: true`: this platform keeps its own thumbnail (its picks stay here, the others' do not change it). `own:
    *  false`: it takes the frame the others share again. */
   | { op: 'thumbnailOwn'; platform: string; own: boolean }
-  /** Stage 3: the user asks Alma to unschedule a scheduled post, to stop one Buffer still holds, or to check on one
-   *  that is late. Recorded in send.requested (the page says "Unscheduling…"); the words go to Alma as the user's. */
+  /** Stage 3 (older files only: a post by hand is never scheduled or sent): the user asks Alma to unschedule a
+   *  scheduled post, to stop one still going out, or to check on one that is late. Recorded in send.requested (the page says "Unscheduling…"); the words go to Alma as the user's. */
   | { op: 'request'; platform: string; what: 'unschedule' | 'stop' | 'check' };
 
 export type OpName = ReleaseOp['op'];
@@ -214,27 +214,15 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       }
       const s = (op.list === 'hand' ? x.p.upload.hand : list).find((k) => k.id === op.step);
       if (!s) return no(`${x.p.name} has no step "${op.step}".`);
-      if (op.list === 'hand' && x.p.route !== 'hand') return no(`${appName(x.p)} goes through Buffer: its steps by hand are not in use.`);
       if (op.done) s.done = at; else delete s.done;
       return { ok: true, file: f, said: `${op.done ? 'Done' : 'Not done after all'}: ${s.text} (${x.p.name})` };
     }
     case 'setRoute': {
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
-      if (op.route !== 'buffer' && op.route !== 'hand') return no('The route is "buffer" or "hand".');
-      if (x.p.route === op.route) return { ok: true, file: f, said: `${x.p.name} already goes ${op.route === 'hand' ? 'by hand' : 'through Buffer'}` };
-      const st = platformStatus(f, x.p.id, now);
-      // stage 3: a send that could still be alive keeps its route, and the refusal names the way out
-      if (st.locked) {
-        const out = st.state === 'waiting' ? ' Cancel the ask first.' : st.state === 'scheduled' ? ' Unschedule it first.' : st.state === 'posted' ? '' : ' Wait until it is posted, or ask Alma to stop it.';
-        return no(`${appName(x.p)} is ${st.word.toLowerCase()}: its route cannot change now.${out}`);
-      }
-      // Buffer has no channel for it; or a failed send Buffer may still hold (posting it by hand too could post it twice)
-      if (op.route === 'buffer' && !factsOf(x.p.kind).buffer.channel) return no(`Buffer has no ${appName(x.p)} channel: it always goes by hand.`);
-      if (op.route === 'hand' && maybeAlive(x.p)) return no(`${WAIT_DROPPED} Then post it by hand.`);
-      x.p.route = op.route;
-      x.p.routeBy = { by: 'user', at };
-      return { ok: true, file: f, said: `Moved ${x.p.name} to ${op.route === 'hand' ? 'by hand: Buffer must not post it' : 'through Buffer'}` };
+      // every post is made by hand in this copy: there is no other route to move it to
+      if (op.route !== 'hand') return no(`Every post here is made by hand: ${appName(x.p)} stays by hand.`);
+      return { ok: true, file: f, said: `${x.p.name} already goes by hand` };
     }
     case 'unlink': {
       const x = find(f, op.platform, op.field);
@@ -288,7 +276,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
     case 'ask': {
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
-      // stage 3: a failed send Buffer may still hold is not asked again until Alma confirms it is gone
+      // stage 3 (older files): a failed send that may still go out is not asked again until Alma confirms it is gone
       if (x.p.send.failed && !x.p.send.failed.cleared && !x.p.send.posted) return no(WAIT_DROPPED);
       const g = goCheck(f, x.p.id, now);
       if (!g.ok) return no(g.why);
@@ -330,8 +318,6 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (!LINK.test(link)) return no('That does not look like a link to a post.');
       const bad = linkProblem(x.p.kind, link);
       if (bad) return no(bad);
-      const st = platformStatus(f, x.p.id, now);
-      if (x.p.route !== 'hand' && !['posted', 'sending', 'needs'].includes(st.state)) return no(`${appName(x.p)} has not gone out yet. Alma records the link when Buffer posts it.`);
       x.p.send.posted = { at: x.p.send.posted?.at ?? at, link };
       return { ok: true, file: f, said: `${x.p.name} is posted: ${link}` };
     }
@@ -339,7 +325,6 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
       if (x.p.send.posted) return no(`${appName(x.p)} is already marked posted.`);
-      if (x.p.route !== 'hand') return no(`${appName(x.p)} goes through Buffer: Alma records the post.`);
       x.p.send.posted = { at };
       return { ok: true, file: f, said: `${x.p.name} posted by hand, the link to add later` };
     }
@@ -470,12 +455,12 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
         if (s.posted) return no(`${appName(x.p)} is already posted. To remove it, delete it in ${appName(x.p)}.`);
         if (!(s.go || s.sending)) return no(`${appName(x.p)} is not sending.`);
         if (stoppable(x.p) === 'no') return no(`Too late to stop it. To remove it, delete it in ${appName(x.p)} once it is up.`);
-        if (stoppable(x.p) === 'unknown') return no('Alma has not said whether Buffer still holds it. Ask her whether it can still be stopped.');
+        if (stoppable(x.p) === 'unknown') return no('Alma has not said whether it can still be stopped. Ask her.');
       } else if (op.what === 'check') {
         if (s.posted || !(s.go || s.sending || s.scheduled || s.failed)) return no(`${appName(x.p)} has nothing going out to check.`);
       } else return no('"what" is unschedule, stop or check.');
       s.requested = { ...(s.requested ?? {}), [op.what]: at };
-      const words = { unschedule: `Asked Alma to unschedule ${x.p.name}`, stop: `Asked Alma to stop sending ${x.p.name}`, check: `Asked Alma to check Buffer for ${x.p.name}` };
+      const words = { unschedule: `Asked Alma to unschedule ${x.p.name}`, stop: `Asked Alma to stop sending ${x.p.name}`, check: `Asked Alma to check on ${x.p.name}` };
       return { ok: true, file: f, said: words[op.what] };
     }
   }

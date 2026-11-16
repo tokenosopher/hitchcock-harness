@@ -197,7 +197,7 @@ export function platformStatus(file: ReleaseFile, pid: string, now: Date): Statu
     tags.push(...noteTag);
     return mk('scheduled', { time: hm(s.scheduled.for), lockWhy: `Scheduled for ${hm(s.scheduled.for)}. To change the text, unschedule it first.` });
   }
-  // stage 3: a go for a time still ahead, before Alma has put it in Buffer, is not sending yet: it waits for its time
+  // stage 3 (older files): a go for a time still ahead, before Alma has scheduled it, is not sending yet: it waits for its time
   if (!s.scheduled && !sendingRec && s.go && after(s.go.at) && s.asked && s.asked.when !== 'now' && now.getTime() < Date.parse(s.asked.when)) {
     tags.push(...noteTag);
     return mk('scheduled', { time: hm(s.asked.when), lockWhy: `Scheduled for ${hm(s.asked.when)}. To change the text, unschedule it first.` });
@@ -626,11 +626,10 @@ export function boxCount(file: ReleaseFile, pid: string, key: string, text?: str
   return { words: `${[head, aim?.words].filter(Boolean).join(' · ')}${where ? `. ${where}` : ''}`, state: cap?.over || chars?.over ? 'over' : cap?.past ? 'past' : out ? 'outside' : 'ok', where };
 }
 
-/** The reply (X, Threads; ASKS 58): how it goes out. Through Buffer, with the post as one thread; by hand, the user
- *  posts it under their post. */
-export function replyFact(p: Pick<Platform, 'route'>, b: Box): string | undefined {
+/** The reply (X, Threads; ASKS 58): how it goes out. By hand, the user posts it under their post. */
+export function replyFact(_p: Pick<Platform, 'route'>, b: Box): string | undefined {
   if (b.part.id !== 'reply' || b.kind !== 'text') return undefined;
-  return p.route === 'hand' ? 'Post it as a reply to your post.' : 'It goes out with the post, as a thread.';
+  return 'Post it as a reply to your post.';
 }
 /** "post and reply": what a platform with a reply posts, for the Release overview's row; nothing without one. */
 export function threadWords(file: ReleaseFile, pid: string): string | undefined {
