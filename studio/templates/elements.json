@@ -1,0 +1,34 @@
+{
+ "_about": [
+  "Read by: no script; the agent looks up the element ids, media ids and job ids here for every prompt, every finalize and the film record.",
+  "Described in: Flow v3.2 - 1 Setup and story (step 12), Flow v3.2 - 2 Characters (step 47: the image element) and Flow v3.2 - 3 Voices and video elements (step 26: the video element's draft and 1080p jobs)."
+ ],
+ "elements": {
+  "<CID>": {
+   "name": "<CODE>-<CID>-<Name>-v<n>",
+   "id": "<Higgsfield element id>",
+   "media_id": "<Higgsfield media id of the uploaded sheet>",
+   "source": "cast/<CID>-<name>/pick.png",
+   "video_element": {
+    "prompt": "elements/<CID>/E-<CID>-v<N>-5s.prompt.txt",
+    "draft_job": "<job id>",
+    "draft_file": "elements/<CID>/takes/take<N>/E-<CID>-take<N>-480p.mp4",
+    "final_job": "<job id>",
+    "final_file": "elements/<CID>/takes/take<N>/E-<CID>-take<N>-1080p.mp4",
+    "muted_file": "<elements/<CID>/takes/take<N>/E-<CID>-take<N>-1080p-muted.mp4, only when the clip needed muting; else empty>"
+   },
+   "replaces": {
+    "name": "<CODE>-<CID>-<Name>-v<n-1>",
+    "id": "<Higgsfield element id>",
+    "note": "<why it was retired, and when; the higgsfield MCP server cannot delete elements, do not use>"
+   }
+  },
+  "<CID>-<CID>": {
+   "name": "<CODE>-<CID>-<CID>-<group name>",
+   "id": "<Higgsfield element id>",
+   "media_id": "<Higgsfield media id>",
+   "source": "cast/<CID>-<CID>-<name>/pick.png"
+  }
+ },
+ "note": "<What these are (image elements from the approved sheets; video elements as Seedance clips passed as video_references) and how prompts name an image element: <<<element-id>>>.>"
+}

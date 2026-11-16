@@ -1,0 +1,130 @@
+// MOCK=boards: the takes of the sample film cut into their shots, so the Edit page's takes grid can be used and
+// tested without a real film. `GET /api/films/<film>/shots` answers this in sample-data mode.
+//
+// Everything is derived from the hand-written cut (boards/cut-the-lighthouse.json), deterministically:
+//   - every take file the cut's picture track uses is one take of its clips' scene (`takeRef.scene`). Its cut
+//     points are where its clips start and end, so each clip is exactly one shot and the rings fall where the
+//     cut is. A gap of under 1.5 s between two clips (a trimmed head or tail) is folded into a shot instead of
+//     being a shot of its own, and a point that falls inside another clip of the same file (footage used twice)
+//     is not a cut. Its length is the larger of the cut's `sourceSeconds` and the end of its last clip.
+//   - per scene, two made-up takes ("sample take A" and "B") with the shots of the scene's main take (the file
+//     with the most clips there), each shot a little longer or shorter. Their files do not exist: the pictures
+//     simply do not load.
+//   - S2 also has a take whose file could not be read (state 'failed'), and a pick-up: one take of one 13.5 s
+//     shot that redoes the scene's shot 2, in its own generation folder whose shots file (`PICKUP_FILE`) lists one shot
+//     with id "2"; read as the server reads a real one (readShotIds, idsFor), it carries `ids: [2]`.
+//   - S3 has three variations: one of "sample take A" landed, a second of it being made (no video yet), and
+//     one of "sample take B" that could not be made. `landSample` lands the one being made, in this server's memory
+//     only (the browser tests ask for it through POST …/shots in sample mode); nothing is written to disk.
+// Later test work reuses this: keep it pure and free of randomness.
+import type { TakeShots } from '@/server/edit/shots';
+import { idsFor, readShotIds } from '@/components/edit/shots';
+import cutFilm from './boards/cut-the-lighthouse.json';
+
+interface FixtureClip { id: string; src: string; in: number; out: number; at: number; takeRef?: { scene: string; take: string } }
+interface FixtureCut { current: { tracks: { id: string; kind: string; clips: FixtureClip[] }[] }; sourceSeconds?: Record<string, number> }
+
+/** The sample pick-up's `generations/FIX-cork-S2/FIX-cork-S2-shots.json`, the shape of a real film's. */
+export const PICKUP_FILE = { duration: 13.5, shots: [{ id: '2', t0: 0, t1: 13.5, in_frame: ['MAREN', 'TOBIAS'] }] };
+
+const FOLD = 1.5;                       // seconds: a gap shorter than this between two clips is a trim, not a shot
+const r3 = (s: number) => Math.round(s * 1000) / 1000;
+
+function derive(film: string, cut: FixtureCut): TakeShots[] {
+  const v = cut.current.tracks.find((t) => t.id === 'V1') ?? cut.current.tracks.find((t) => t.kind === 'video');
+  const clips = (v?.clips ?? []).filter((c) => c.takeRef);
+  const files = new Map<string, { scene: string; take: string; spans: [number, number][] }>();
+  for (const c of clips) {
+    const f = files.get(c.src) ?? { scene: c.takeRef!.scene, take: c.takeRef!.take, spans: [] };
+    f.spans.push([c.in, c.out]);
+    files.set(c.src, f);
+  }
+  const out: TakeShots[] = [];
+  const main = new Map<string, { src: string; n: number }>();
+  for (const [src, f] of files) {
+    const spans = [...f.spans].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const seconds = r3(Math.max(cut.sourceSeconds?.[src] ?? 0, ...spans.map((s) => s[1])));
+    const inside = (t: number) => spans.some(([a, b]) => t > a + 0.1 && t < b - 0.1);
+    const points = new Set<number>();
+    for (let i = 0; i < spans.length; i++) {
+      const [a, b] = spans[i];
+      if (i > 0 || a >= FOLD) points.add(a);
+      const next = spans.slice(i + 1).find((s) => s[0] >= b - 0.01)?.[0] ?? seconds;
+      if (next - b >= FOLD) points.add(b);
+    }
+    const cuts = [...points].filter((t) => t > 0.2 && t < seconds - 0.2 && !inside(t)).map(r3).sort((a, b) => a - b);
+    out.push({ src, scene: f.scene, name: f.take, seconds, cuts, state: 'ready' });
+    const best = main.get(f.scene);
+    if (!best || spans.length > best.n) main.set(f.scene, { src, n: spans.length });
+  }
+  // two made-up takes per scene, shaped like the scene's main take, each shot a few percent longer or shorter
+  for (const [scene, m] of main) {
+    const base = out.find((t) => t.src === m.src)!;
+    const bounds = [0, ...(base.cuts ?? []), base.seconds ?? 0];
+    ['A', 'B'].forEach((k, j) => {
+      let at = 0;
+      const cuts: number[] = [];
+      for (let i = 0; i < bounds.length - 1; i++) {
+        at += (bounds[i + 1] - bounds[i]) * (1 + 0.06 * (((i + j) % 3) - 1));
+        cuts.push(r3(at));
+      }
+      const seconds = cuts.pop()!;
+      out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-take${k}-480p.mp4`, scene, name: `sample take ${k}`, seconds, cuts, state: 'ready' });
+    });
+    if (scene === 'S2') {
+      out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-takeC-480p.mp4`, scene, name: 'sample take C', state: 'failed' });
+      const ids = idsFor(readShotIds(PICKUP_FILE), []);
+      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(ids ? { ids } : {}), state: 'ready' });
+    }
+  }
+  out.sort((a, b) => a.scene.localeCompare(b.scene, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  return out;
+}
+
+/** The sample variations of S3 (see the head of this file). `landed`: the second one has its video too. */
+function variations(film: string, takes: TakeShots[], landed: boolean): TakeShots[] {
+  const a = takes.find((t) => t.scene === 'S3' && t.name === 'sample take A');
+  const b = takes.find((t) => t.scene === 'S3' && t.name === 'sample take B');
+  if (!a || !b) return [];
+  const dir = `assets/films/${film}/blocks/S3/takes`;
+  // shaped like their source, each shot a little longer or shorter again
+  const like = (t: TakeShots, k: number) => {
+    const bounds = [0, ...(t.cuts ?? []), t.seconds ?? 0];
+    let at = 0;
+    const cuts: number[] = [];
+    for (let i = 0; i < bounds.length - 1; i++) { at += (bounds[i + 1] - bounds[i]) * (1 + 0.05 * (((i + k) % 3) - 1)); cuts.push(r3(at)); }
+    const seconds = cuts.pop()!;
+    return { seconds, cuts };
+  };
+  const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const,
+    variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00' } };
+  const twoV = { from: a.src, note: 'Slower, and hold on her face a moment longer.', startedAt: '2026-11-14T10:58:00' };
+  const two: TakeShots = landed
+    ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', variation: twoV }
+    : { src: `${dir}/S3-sample-takeA-variation2`, scene: 'S3', name: 'sample take A variation 2', state: 'making', variation: twoV };
+  const three: TakeShots = { src: `${dir}/S3-sample-takeB-variation1`, scene: 'S3', name: 'sample take B variation 1', state: 'making',
+    variation: { from: b.src, note: 'Make the light warmer.', startedAt: '2026-11-14T10:20:00', failed: 'Seedance refused the picture of the lamp twice.' } };
+  return [one, two, three];
+}
+
+const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut };
+const memo = new Map<string, TakeShots[]>();
+// which sample films have their variation being made landed (this server's memory; survives a dev reload)
+const g = globalThis as unknown as { __sampleLanded?: Set<string> };
+const landedSet = (g.__sampleLanded ??= new Set());
+
+/** The sample film's takes with their shots ({takes, waiting: 0}); no takes for a film without a fixture cut. */
+export function mockShots(film: string): { takes: TakeShots[]; waiting: number } {
+  const cut = CUTS[film];
+  if (!cut) return { takes: [], waiting: 0 };
+  if (!memo.has(film)) memo.set(film, derive(film, cut));
+  const base = memo.get(film)!;
+  const takes = [...base, ...variations(film, base, landedSet.has(film))];
+  takes.sort((x, y) => x.scene.localeCompare(y.scene, undefined, { numeric: true }) || x.name.localeCompare(y.name, undefined, { numeric: true }));
+  return { takes, waiting: 0 };
+}
+
+/** Sample mode only: the variation being made lands (`true`) or goes back to being made (`false`). */
+export function landSample(film: string, on: boolean): void {
+  if (on) landedSet.add(film); else landedSet.delete(film);
+}

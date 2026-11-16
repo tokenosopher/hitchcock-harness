@@ -1,0 +1,94 @@
+{
+ "_about": [
+  "Read by: tools/prompts/check.py (shots[].id = the SHOT number in <G>-scene.md; shots[].in_frame = every [TAG] that shot names except location views, a note in brackets allowed; duration), tools/prompts/assemble.py (duration, when the previz take has none) and the generation's previz scene script (the camera fields, the states, the moves).",
+  "Described in: Flow v3.2 - 5 Previz and storyboards (steps 1-4 and 7) and Flow v3.2 - 6 Scene prompts (Checks: what a shot names must be in its in_frame list). The seconds here are the previz plan; they never reach a prompt."
+ ],
+ "block": "<G>",
+ "title": "<generation name>",
+ "location": "<LID> <location>",
+ "duration": 12,
+ "coords": "<Location> metres, origin at <where> on the floor; +X <compass>, +Y <compass>, Z up. <Furniture, doors and practicals with coordinates.>",
+ "characters": ["<TAG>", "<TAG>", "<CID>"],
+ "start_state": {
+  "<TAG>": "<where, facing, pose, what is in which hand>",
+  "<PROP TAG>": "<its state>"
+ },
+ "end_state": {
+  "<TAG>": "<where, facing, pose; matches the next generation's start_state>",
+  "<PROP TAG>": "<its state>"
+ },
+ "shots": [
+  {
+   "id": "1",
+   "name": "<SHOT NAME>",
+   "t0": 0.0,
+   "t1": 5.0,
+   "size": "wide",
+   "fov": 84,
+   "camera": "<the Builder line: m and compass from someone in frame, location x, y, height, facing, yaw, tilt>",
+   "facing": "N",
+   "mount": "locked",
+   "focus": "<TAG>",
+   "in_frame": ["<TAG>", "<TAG> (back to the lens)"],
+   "action": "<what happens in the shot, one line, no seconds>",
+   "panels": [0.1, 2.5, 4.9],
+   "cam_pos": [0.0, -4.0, 1.3],
+   "look_at": [0.0, 0.0, 1.0],
+   "yaw": 90.0,
+   "pitch": -4.0,
+   "space": "<LID> metres"
+  },
+  {
+   "id": "2",
+   "name": "<SHOT NAME>",
+   "t0": 5.0,
+   "t1": 12.0,
+   "size": "close-up",
+   "fov": 47,
+   "camera": "<the Builder line>",
+   "facing": "W",
+   "mount": "locked",
+   "focus": "<TAG>",
+   "in_frame": ["<TAG>", "<PROP TAG>"],
+   "action": "<what happens>",
+   "panels": [5.1, 8.0, 11.9],
+   "cam_pos": [0.0, 0.0, 1.5],
+   "look_at": [0.0, 1.0, 1.5],
+   "yaw": 90.0,
+   "pitch": 0.0,
+   "space": "<LID> metres"
+  }
+ ],
+ "moves": [
+  {
+   "who": "<TAG>",
+   "t": [0.5, 2.0],
+   "what": "<the move in camera terms>"
+  },
+  {
+   "who": "<PROP TAG>",
+   "t": [2.0, 2.2],
+   "what": "<what happens to it>"
+  }
+ ],
+ "lines": [
+  {
+   "who": "<NAME>",
+   "text": "<line, word for word>",
+   "t": [1.0, 2.6],
+   "delivery": "<how, to whom>"
+  },
+  {
+   "who": "<NAME>",
+   "text": "<line, word for word>",
+   "t": [6.0, 8.4],
+   "delivery": "<how, to whom>"
+  }
+ ],
+ "start_positions": {
+  "<TAG>": [0.0, 0.0, "<facing, pose>"]
+ },
+ "end_positions": {
+  "<TAG>": [0.0, 0.0]
+ }
+}

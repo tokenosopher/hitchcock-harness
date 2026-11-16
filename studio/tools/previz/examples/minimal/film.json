@@ -1,0 +1,21 @@
+{
+ "title": "Kitchen Test",
+ "prefix": "KT",
+ "ratio": "16:9",
+ "fps": 24,
+ "res": 540,
+ "cast": {"ANNA": {"height": 1.68}, "BEN": {"height": 1.84}},
+ "locations": {
+  "L01": {"name": "the kitchen", "room": {
+   "floor": [0, 0, 4, 3], "height": 2.6, "wall": 0.15,
+   "openings": [
+    {"name": "door", "wall": "S", "at": 0.8, "w": 0.9, "h": 2.05, "door": {"hinge": "W"}},
+    {"name": "window", "wall": "E", "at": 1.5, "w": 1.2, "h": 1.1, "sill": 0.95}],
+   "furniture": [
+    {"name": "table", "kind": "table", "at": [2.4, 1.6], "size": [1.2, 0.8, 0.75]},
+    {"name": "chair", "kind": "chair", "at": [2.4, 2.25], "size": [0.45, 0.45, 0.46], "facing": 270},
+    {"name": "fridge", "kind": "box", "at": [0.4, 2.6], "size": [0.6, 0.65, 1.8]}],
+   "lights": [
+    {"kind": "window", "opening": "window", "power": 600, "target": [2.4, 1.6, 0.75], "cone": 70},
+    {"kind": "point", "name": "lamp", "at": [2.0, 1.5, 2.4], "power": 40}]}}}
+}

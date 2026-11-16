@@ -1,0 +1,76 @@
+{
+ "_about": [
+  "Written by tools/prompts/assemble.py as generations/<G>/prompt/<G>-media-<v>.json beside <G>-prompt-<v>.txt; read by tools/prompts/check.py (media[]: kind, tag, n, file, desc, view, page, role; settings.duration; previz_take). Hand-write one only for a set assemble.py does not build, in exactly this shape; never a start_image or end_image role.",
+  "Described in: Flow v3.2 - 6 Scene prompts (steps 11 and 13: the reference list, numbered per kind in media order) and Flow v3.2 - 7 Takes (the media sent with the generation).",
+  "A character with a video element has only its VIDEO entry, never its sheet beside it; an IMAGE is for what has no element (the extras' group picture cropped to this scene, a prop), or one of the exceptions of Flow v3.2 - 6 Scene prompts, step 11 (a faceless sheet variant tagged <NAME> SHEET, a second look's sheet, the picture of a character beyond the three with a video element). At most three VIDEO entries (check.py STOP 4)."
+ ],
+ "block": "<G>",
+ "version": "v1",
+ "settings": {
+  "model": "seedance_2_5",
+  "mode": "omni_reference",
+  "duration": 12,
+  "aspect_ratio": "9:16",
+  "resolution": "480p",
+  "draft": true,
+  "generate_audio": true
+ },
+ "previz_take": "previz/<G>/<G>-previz-take-<N>.json",
+ "storyboard": "previz/<G>/storyboard/v<N>",
+ "media": [
+  {
+   "kind": "VIDEO",
+   "tag": "<NAME>",
+   "file": "elements/<CID>/takes/take<N>/E-<CID>-take<N>-1080p.mp4",
+   "desc": "<prompt-common's <NAME> text, then what differs in this generation>",
+   "view": false,
+   "n": 1,
+   "role": "video_references"
+  },
+  {
+   "kind": "IMAGE",
+   "tag": "<GROUP TAG>",
+   "file": "cast/<CID>-<CID>-<name>/pick.png",
+   "desc": "<prompt-common's <GROUP TAG> text: a sheet only for what has no video element>",
+   "view": false,
+   "n": 1,
+   "role": "image_references"
+  },
+  {
+   "kind": "IMAGE",
+   "tag": "<PROP TAG>",
+   "file": "props/<PID>-<name>/<PID>-<name>-v<n>.png",
+   "desc": "<the prop and its state here>",
+   "view": false,
+   "n": 2,
+   "role": "image_references"
+  },
+  {
+   "kind": "IMAGE",
+   "tag": "<LOC> BACK",
+   "file": "locations/<LID>-<name>/<LID>-<name>-back-v<n>.png",
+   "desc": "<the view: which way it looks, what it is the background of>",
+   "view": true,
+   "n": 3,
+   "role": "image_references"
+  },
+  {
+   "kind": "IMAGE",
+   "tag": "PAGE 1",
+   "file": "previz/<G>/storyboard/v<N>/page-1.png",
+   "desc": "storyboard page",
+   "page": 1,
+   "n": 4,
+   "role": "image_references"
+  },
+  {
+   "kind": "AUDIO",
+   "tag": "<VOICE TAG>",
+   "file": "cast/<CID>-<name>/voice/element-line-5s.mp3",
+   "desc": "<prompt-common's <VOICE TAG> text>",
+   "view": false,
+   "n": 1,
+   "role": "audio_references"
+  }
+ ]
+}

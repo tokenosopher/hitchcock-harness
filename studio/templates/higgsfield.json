@@ -1,0 +1,17 @@
+{
+ "_about": [
+  "Read by: no script; the agent passes the folder_id from here with every Higgsfield job of the film (generate_image, generate_video, create_voice), so every generation lands in the film's project.",
+  "Described in: Flow v3.2 - 1 Setup and story (step 11: the project once, a folder per scene, subfolders for characters, locations and prompts) and Flow v3.2 - 3 Voices and video elements (step 22: element clips go to the cast folder)."
+ ],
+ "project_id": "<Higgsfield project id (create_project)>",
+ "workspace_id": "<Higgsfield workspace id>",
+ "folders": {
+  "cast": "<folder id: faces, sheets, element clips>",
+  "locations": "<folder id: location designs and views>",
+  "prompts": "<folder id>",
+  "generations": {
+   "<G>": "<folder id: every take of this generation>",
+   "FIX-<what>": "<folder id: a pick-up>"
+  }
+ }
+}

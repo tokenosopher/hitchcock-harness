@@ -1,0 +1,226 @@
+[
+ {
+  "kind": "assistant_text",
+  "id": "a-027",
+  "at": "2026-10-29T09:00:00Z",
+  "text": "All three prompts pass the check: lines word for word at their previz seconds, no other block named, no working notes. 47 s in all, 141 credits at 480p draft. S3 already has take 4, so: go for the other two at 99 credits?"
+ },
+ {
+  "kind": "user",
+  "id": "u-028",
+  "at": "2026-10-29T09:02:00Z",
+  "text": "go"
+ },
+ {
+  "kind": "task",
+  "id": "k-029",
+  "at": "2026-10-29T10:10:00Z",
+  "task": {
+   "id": "toolu_drafts_two",
+   "title": "Alma › drafts · two blocks",
+   "state": "done",
+   "liveLine": "29 Oct · 480p · 2 of 2 landed · 99 cr",
+   "startedAt": "2026-10-29T09:03:00Z",
+   "steps": [
+    {
+     "at": "2026-10-29T09:03:00Z",
+     "text": "generate_video · 2 jobs"
+    },
+    {
+     "at": "2026-10-29T09:03:00Z",
+     "text": "jobs_wait · 2/2"
+    },
+    {
+     "at": "2026-10-29T09:03:00Z",
+     "text": "review cards · 2 written"
+    }
+   ],
+   "endedAt": "2026-10-29T10:10:00Z",
+   "cost": {
+    "credits": 99
+   },
+   "result": {
+    "text": "Two review cards written",
+    "opens": {
+     "page": "scenes"
+    }
+   }
+  }
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-030",
+  "at": "2026-11-01T08:00:00Z",
+  "text": "All three scenes are drafted, 14 shots. The take in the cut is on each row. S3’s take check has two misses on FIX-lamp-S3 take 2: the framing is full length and the tail after the last word is 0.14 s. No scene has been through QC yet."
+ },
+ {
+  "kind": "system",
+  "id": "s-031",
+  "at": "2026-11-01T08:00:05Z",
+  "text": "QC · scenes · not run"
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-032",
+  "at": "2026-11-01T09:30:00Z",
+  "text": "FIX-lamp-S3 take 3 landed: hips-up at the window, the lamp switch in her hand for the last 0.7 s. One miss: the answering light is too bright."
+ },
+ {
+  "kind": "user",
+  "id": "u-033",
+  "at": "2026-11-01T09:40:00Z",
+  "text": "Do shots 4 and 5 together so the cut is inside the take. No face still: her face is in the video element.",
+  "context": {
+   "film": "the-lighthouse",
+   "page": "/films/the-lighthouse/scenes/S3",
+   "pinned": "S3 · Twice",
+   "selected": [
+    {
+     "id": "take:FIX-lamp-S3 · take 3",
+     "label": "FIX-lamp-S3 take 3"
+    },
+    {
+     "id": "ref:I2",
+     "label": "I2 · wardrobe, faceless"
+    }
+   ]
+  }
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-034",
+  "at": "2026-11-01T09:42:00Z",
+  "text": "Set-up v6: take 3’s own text for both shots, boards v9 (panels 10–19), the light across the cut, the answering light kept small. 9 s, 27 credits. Go?"
+ },
+ {
+  "kind": "user",
+  "id": "u-035",
+  "at": "2026-11-01T09:45:00Z",
+  "text": "Go"
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-036",
+  "at": "2026-11-01T09:45:30Z",
+  "text": "Shots 4 and 5 of S3 as one 9-second stretch, one line, hips-up framing: submitted."
+ },
+ {
+  "kind": "task",
+  "id": "k-037",
+  "at": "2026-11-01T10:05:00Z",
+  "task": {
+   "id": "toolu_fix_s3_t4",
+   "title": "Alma › pick-up · FIX-lamp-S3 take 4",
+   "state": "done",
+   "liveLine": "9 s at 480p · 27 credits · 2 misses",
+   "startedAt": "2026-11-01T09:46:00Z",
+   "steps": [
+    {
+     "at": "2026-11-01T09:46:00Z",
+     "text": "generate_video · 1 job · 08e92625"
+    },
+    {
+     "at": "2026-11-01T09:46:00Z",
+     "text": "jobs_wait · 1/1"
+    },
+    {
+     "at": "2026-11-01T09:46:00Z",
+     "text": "check · lines once, framing, tail"
+    }
+   ],
+   "endedAt": "2026-11-01T10:05:00Z",
+   "cost": {
+    "credits": 27
+   },
+   "result": {
+    "text": "In the cut over shots 4–5",
+    "opens": {
+     "page": "scenes/S3",
+     "target": "FIX-lamp-S3 · take 4"
+    }
+   }
+  }
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-038",
+  "at": "2026-11-01T10:06:00Z",
+  "text": "Take 4 landed. The lamp goes off and on twice, one cut at 4.75 s with the head pose matched either side, the answering light small and far. Two misses: a second figure at the window, and a 0.18 s hold after “there”."
+ },
+ {
+  "kind": "user",
+  "id": "u-039",
+  "at": "2026-11-01T10:20:00Z",
+  "text": "fine, fix the figure in the edit",
+  "context": {
+   "film": "the-lighthouse",
+   "page": "/films/the-lighthouse/scenes/S3",
+   "pinned": "S3 · FIX-lamp-S3 take 4 open",
+   "selected": [
+    {
+     "id": "take:FIX-lamp-S3 · take 4",
+     "label": "FIX-lamp-S3 take 4"
+    },
+    {
+     "id": "miss:blocking",
+     "label": "miss · blocking · a second figure"
+    }
+   ]
+  }
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-040",
+  "at": "2026-11-01T10:21:00Z",
+  "text": "Noted: both misses are edit fixes, no new take. The cut has take 4 spliced in; everything after it moves +61 frames."
+ },
+ {
+  "kind": "assistant_text",
+  "id": "a-041",
+  "at": "2026-11-01T10:40:00Z",
+  "text": "In case you want the figure out of the picture instead: prompt v7 names exactly two people and asks 0.45 s after “there”. Its QC passed at 8.9. 9 s at 480p, 27 credits. It waits for your go."
+ },
+ {
+  "kind": "task",
+  "id": "k-042",
+  "at": "2026-11-01T10:39:00Z",
+  "task": {
+   "id": "toolu_qc_v7",
+   "title": "Alma › QC · prompt v7",
+   "state": "done",
+   "liveLine": "8.9 · round 1 of 3 · passed",
+   "startedAt": "2026-11-01T10:30:00Z",
+   "steps": [
+    {
+     "at": "2026-11-01T10:30:00Z",
+     "text": "read prompt v7 · 9 references"
+    },
+    {
+     "at": "2026-11-01T10:30:00Z",
+     "text": "check.py · lines word for word · pass"
+    },
+    {
+     "at": "2026-11-01T10:30:00Z",
+     "text": "critic · 1 finding · ok"
+    }
+   ],
+   "endedAt": "2026-11-01T10:39:00Z",
+   "result": {
+    "text": "Quote · 27 credits · waits for your go",
+    "opens": {
+     "page": "scenes/S3",
+     "target": "v7"
+    }
+   }
+  }
+ },
+ {
+  "kind": "result",
+  "id": "r-043",
+  "at": "2026-11-01T10:40:05Z",
+  "ok": true,
+  "costUsd": 0.29,
+  "durationMs": 38000,
+  "sessionId": "3b7d9a10-sample-fixture"
+ }
+]

@@ -1,0 +1,20 @@
+[
+ {
+  "slug": "the-lighthouse",
+  "title": "The Lighthouse",
+  "workingTitle": "A Letter in a Bottle",
+  "folder": "/path/to/hitchcock-harness/studio/assets/films/the-lighthouse",
+  "repo": "/path/to/hitchcock-harness/studio",
+  "flow": "video-driven",
+  "started": "2026-10-24",
+  "status": "delivered",
+  "stage": 9,
+  "aspect": "9:16",
+  "delivered": [
+   {
+    "date": "2026-11-01",
+    "folder": "assets/final-cuts/2026-11-01 The Lighthouse"
+   }
+  ]
+ }
+]

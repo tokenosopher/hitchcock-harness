@@ -1,0 +1,222 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The harness is dark only: true black, zinc borders (ARCHITECTURE.md, "Look"). */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  /* Board tokens, by name */
+  --color-bg: #09090b;
+  --color-hdr: #0a0a0b;
+  --color-panel: #111113;
+  --color-well: #0c0c0e;
+  --color-raised: #18181b;
+  --color-bubble: #1c1c1f;
+  --color-tile: #141416;
+  --color-line: #1f1f23;
+  --color-edge: #27272a;
+  --color-edge-strong: #3f3f46;
+  --color-ink: #fafafa;
+  --color-ink-2: #e4e4e7;
+  --color-ink-3: #d4d4d8;
+  --color-sub: #a1a1aa;
+  --color-mute: #71717a;
+  --color-faint: #52525b;
+  --color-ok: #22c55e;
+  --color-warn: #f59e0b;
+  --color-bad: #f87171;
+}
+
+:root {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #111113;
+  --card-foreground: #fafafa;
+  --popover: #111113;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #09090b;
+  --secondary: #18181b;
+  --secondary-foreground: #fafafa;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #18181b;
+  --accent-foreground: #fafafa;
+  --destructive: #f87171;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #a1a1aa;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    background: #09090b;
+    color: #fafafa;
+  }
+  html {
+    @apply font-sans;
+  }
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #a1a1aa;
+    outline-offset: 2px;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  /* Small uppercase section label used on every board */
+  .lbl {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #a1a1aa;
+  }
+  .scroll::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  .scroll::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 3px;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Fades the right edge of a horizontal strip so a cut-off row reads as scrollable */
+  .strip {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  }
+  .dot-run {
+    animation: hh-pulse 1.6s ease-in-out infinite;
+  }
+  /* A flow-board node with a live sub-agent: a light sweeps across it (the chains look alive while agents run) */
+  .node-live {
+    position: relative;
+    overflow: hidden;
+  }
+  .node-live::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 25%, rgba(250, 250, 250, 0.07) 50%, transparent 75%);
+    transform: translateX(-100%);
+    animation: hh-shimmer 2.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* A take being made (the Edit page's Takes view, ASKS 51): the same light, calmer */
+  .node-live.sheen-calm::after {
+    animation-duration: 3.6s;
+  }
+  /* The agent's name taking its turn on a node's status line */
+  .line-in {
+    animation: hh-line-in 0.35s ease-out;
+  }
+  .hatch {
+    background-image: repeating-linear-gradient(135deg, #3f3f46 0 1px, transparent 1px 7px);
+  }
+}
+
+@keyframes hh-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes hh-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes hh-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-live::after,
+  .line-in,
+  .dot-run {
+    animation: none;
+  }
+}
+
+/* The timeline while a zoom changes (Tracks.tsx sets data-zooming for that time): the pinch or the eased key zoom
+   is itself the motion, so the clips' slide transition stays out of it and nothing trails behind. Outside any layer
+   so it wins over the clips' own transition utilities. */
+[data-zooming] * {
+  transition-duration: 0s !important;
+}
+
+/* Before React has hydrated, the columns' remembered folds come from <html> (set by shell/prepaint.ts before the
+   first paint), so a folded column is folded from the first frame. Unlayered, so it wins over the utilities. */
+html[data-nav-hidden] .hh-pre-nav-list,
+html[data-thread-hidden] .hh-pre-thread-col {
+  opacity: 0;
+}
+html[data-nav-hidden] .hh-pre-nav-rail,
+html[data-thread-hidden] .hh-pre-thread-rail {
+  opacity: 1;
+}
+
+/* The Release pages on the phone (14 Nov 2026, the Release QC): every pressable thing at least 44 px tall. Inline
+   fact tokens in a sentence keep the line's height (each fact also has its own field). */
+.touch-targets :is(button, a[href], input:not([type='checkbox']):not([type='radio']), select, [role='radio'], [role='checkbox'], [role='button']):not([data-token]) {
+  min-height: 44px;
+}
+.touch-targets [role='button'] {
+  min-width: 44px;
+}

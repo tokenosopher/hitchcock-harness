@@ -1,0 +1,35 @@
+{
+ "_about": [
+  "Written by the generation's previz scene script (previz/scenes/<G>_<name>.py, the kit's run() with no mode flag) as previz/<G>/<G>-previz-take-<N>.json; read by tools/prompts/assemble.py (duration), tools/prompts/check.py (shot_plan, or shots: label, t0, t1; lines: who, text, word for word; duration) and tools/previz/assemble_film.py. Change the scene script and render the next take; never edit a take by hand.",
+  "Described in: Flow v3.2 - 5 Previz and storyboards (steps 7-8 and 12: every move keyed and passed to run(moves=...)) and Flow v3.2 - 6 Scene prompts (step 2: the generation length comes from here, rounded up)."
+ ],
+ "block": "<G>",
+ "take": 1,
+ "fps": 24,
+ "frames": 288,
+ "duration": 12.0,
+ "res": [540, 960],
+ "shots": [
+  {"label": "1", "name": "1 <SHOT NAME>: <the camera in a phrase>", "camera": "cam1", "t0": 0.0, "t1": 5.0, "diag_fov": 84, "lens_mm_24h": 15.3, "cam": [0.0, -4.0, 1.3], "yaw": 90.0, "pitch": -4.0, "handheld": 0.0},
+  {"label": "2", "name": "2 <SHOT NAME>: <the camera in a phrase>", "camera": "cam2", "t0": 5.0, "t1": 12.0, "diag_fov": 47, "lens_mm_24h": 31.7, "cam": [0.0, 0.0, 1.5], "yaw": 0.0, "pitch": 0.0, "handheld": 0.0}
+ ],
+ "moves": [
+  {"who": "<TAG>", "what": "<the move in camera terms>", "t": [0.5, 2.0]},
+  {"who": "<PROP TAG>", "what": "<what happens to it>", "t": [2.0, 2.2]}
+ ],
+ "lines": [
+  {"who": "<NAME>", "text": "<line, word for word>", "t": [1.0, 2.6]},
+  {"who": "<NAME>", "text": "<line, word for word>", "t": [6.0, 8.4]}
+ ],
+ "shot_plan": [
+  {"label": "1", "cam": "cam1", "t0": 0.0, "t1": 5.0},
+  {"label": "2", "cam": "cam2", "t0": 5.0, "t1": 12.0}
+ ],
+ "positions": {
+  "<TAG>": [0.0, 0.0],
+  "<TAG>_end": [0.0, 0.0]
+ },
+ "deviations": [
+  "<where the previz departs from the scene file, and why>"
+ ]
+}

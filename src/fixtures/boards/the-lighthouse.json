@@ -1,0 +1,864 @@
+{
+ "film": {
+  "slug": "the-lighthouse",
+  "title": "The Lighthouse",
+  "workingTitle": "A Letter in a Bottle",
+  "folder": "/path/to/hitchcock-harness/studio/assets/films/the-lighthouse",
+  "repo": "/path/to/hitchcock-harness/studio",
+  "flow": "video-driven",
+  "started": "2026-10-24",
+  "delivered": [
+   {
+    "date": "2026-11-01",
+    "folder": "assets/final-cuts/2026-11-01 The Lighthouse"
+   }
+  ],
+  "status": "delivered",
+  "stage": 9,
+  "aspect": "9:16"
+ },
+ "brief": {
+  "path": "assets/films/the-lighthouse/brief.md",
+  "markdown": "# The Lighthouse (named by the user on 26 Oct 2026; the working title was A Letter in a Bottle)\n\nStarted 24 Oct 2026.\n\n- Code: TL\n- Aspect ratio: 9:16 (default)\n- Budget: about 5000 credits\n\n**Premise:** A lighthouse keeper finds a letter in a bottle asking her to flash the lamp twice, and that night she does.\n"
+ },
+ "script": {
+  "versions": [
+   {
+    "version": "v2.1",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.2",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.3",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.4",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.5",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.6",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.7",
+    "date": "2026-10-26",
+    "locked": false,
+    "path": "assets/films/the-lighthouse/script.md"
+   },
+   {
+    "version": "v2.8",
+    "date": "2026-10-26",
+    "locked": true,
+    "path": "assets/films/the-lighthouse/script.md"
+   }
+  ],
+  "current": "v2.8",
+  "lines": [],
+  "markdown": "# The Lighthouse: script\n\n## Script\n\n*v2.8, LOCKED by the user on 2026-10-26.*\n\n### S1 · The bottle · L01 the shore\n### S2 · The letter · L02 the lamp room\n### S3 · Twice · L02 the lamp room · L03 the boat in the window\n"
+ },
+ "characters": [
+  {
+   "id": "C01",
+   "name": "Maren",
+   "role": "the lighthouse keeper",
+   "folder": "cast/C01-maren",
+   "face": {
+    "rounds": [
+     {
+      "id": "r1",
+      "date": "2026-10-25",
+      "candidates": [
+       {
+        "id": "r1-1",
+        "path": "cast/C01-maren/r1/r1-1.png"
+       },
+       {
+        "id": "r1-2",
+        "path": "cast/C01-maren/r1/r1-2.png"
+       },
+       {
+        "id": "r1-3",
+        "path": "cast/C01-maren/r1/r1-3.png"
+       },
+       {
+        "id": "r1-4",
+        "path": "cast/C01-maren/r1/r1-4.png"
+       },
+       {
+        "id": "r1-5",
+        "path": "cast/C01-maren/r1/r1-5.png"
+       },
+       {
+        "id": "r1-6",
+        "path": "cast/C01-maren/r1/r1-6.png"
+       },
+       {
+        "id": "r1-7",
+        "path": "cast/C01-maren/r1/r1-7.png"
+       },
+       {
+        "id": "r1-8",
+        "path": "cast/C01-maren/r1/r1-8.png"
+       },
+       {
+        "id": "r1-9",
+        "path": "cast/C01-maren/r1/r1-9.png"
+       },
+       {
+        "id": "r1-10",
+        "path": "cast/C01-maren/r1/r1-10.png"
+       },
+       {
+        "id": "r1-11",
+        "path": "cast/C01-maren/r1/r1-11.png"
+       },
+       {
+        "id": "r1-12",
+        "path": "cast/C01-maren/r1/r1-12.png"
+       },
+       {
+        "id": "r1-13",
+        "path": "cast/C01-maren/r1/r1-13.png"
+       },
+       {
+        "id": "r1-14",
+        "path": "cast/C01-maren/r1/r1-14.png"
+       },
+       {
+        "id": "r1-15",
+        "path": "cast/C01-maren/r1/r1-15.png"
+       },
+       {
+        "id": "r1-16",
+        "path": "cast/C01-maren/r1/r1-16.png"
+       },
+       {
+        "id": "r1-17",
+        "path": "cast/C01-maren/r1/r1-17.png"
+       },
+       {
+        "id": "r1-18",
+        "path": "cast/C01-maren/r1/r1-18.png"
+       },
+       {
+        "id": "r1-19",
+        "path": "cast/C01-maren/r1/r1-19.png"
+       },
+       {
+        "id": "r1-20",
+        "path": "cast/C01-maren/r1/r1-20.png"
+       }
+      ]
+     }
+    ],
+    "pick": {
+     "candidateId": "r1-4",
+     "date": "2026-10-25"
+    }
+   },
+   "sheet": {
+    "path": "cast/C01-maren/pick.png",
+    "approved": true
+   },
+   "voice": {
+    "rounds": [],
+    "pick": {
+     "candidateId": "option-1",
+     "date": "2026-10-26"
+    },
+    "elementLine": {
+     "path": "cast/C01-maren/voice/element-line-5s.mp3",
+     "seconds": 3.6,
+     "hz": 201.3
+    }
+   },
+   "element": {
+    "path": "elements/E-C01.mp4",
+    "state": "final"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "Tobias",
+   "role": "the boy who rows the post",
+   "folder": "cast/C02-tobias",
+   "face": {
+    "rounds": [
+     {
+      "id": "r1",
+      "date": "2026-10-25",
+      "candidates": [
+       {
+        "id": "r1-1",
+        "path": "cast/C02-tobias/r1/r1-1.png"
+       },
+       {
+        "id": "r1-2",
+        "path": "cast/C02-tobias/r1/r1-2.png"
+       },
+       {
+        "id": "r1-3",
+        "path": "cast/C02-tobias/r1/r1-3.png"
+       },
+       {
+        "id": "r1-4",
+        "path": "cast/C02-tobias/r1/r1-4.png"
+       },
+       {
+        "id": "r1-5",
+        "path": "cast/C02-tobias/r1/r1-5.png"
+       },
+       {
+        "id": "r1-6",
+        "path": "cast/C02-tobias/r1/r1-6.png"
+       },
+       {
+        "id": "r1-7",
+        "path": "cast/C02-tobias/r1/r1-7.png"
+       },
+       {
+        "id": "r1-8",
+        "path": "cast/C02-tobias/r1/r1-8.png"
+       },
+       {
+        "id": "r1-9",
+        "path": "cast/C02-tobias/r1/r1-9.png"
+       },
+       {
+        "id": "r1-10",
+        "path": "cast/C02-tobias/r1/r1-10.png"
+       },
+       {
+        "id": "r1-11",
+        "path": "cast/C02-tobias/r1/r1-11.png"
+       },
+       {
+        "id": "r1-12",
+        "path": "cast/C02-tobias/r1/r1-12.png"
+       },
+       {
+        "id": "r1-13",
+        "path": "cast/C02-tobias/r1/r1-13.png"
+       },
+       {
+        "id": "r1-14",
+        "path": "cast/C02-tobias/r1/r1-14.png"
+       },
+       {
+        "id": "r1-15",
+        "path": "cast/C02-tobias/r1/r1-15.png"
+       },
+       {
+        "id": "r1-16",
+        "path": "cast/C02-tobias/r1/r1-16.png"
+       },
+       {
+        "id": "r1-17",
+        "path": "cast/C02-tobias/r1/r1-17.png"
+       },
+       {
+        "id": "r1-18",
+        "path": "cast/C02-tobias/r1/r1-18.png"
+       },
+       {
+        "id": "r1-19",
+        "path": "cast/C02-tobias/r1/r1-19.png"
+       },
+       {
+        "id": "r1-20",
+        "path": "cast/C02-tobias/r1/r1-20.png"
+       }
+      ]
+     }
+    ],
+    "pick": {
+     "candidateId": "r1-11",
+     "date": "2026-10-25"
+    }
+   },
+   "sheet": {
+    "path": "cast/C02-tobias/pick.png",
+    "approved": true
+   },
+   "voice": {
+    "rounds": [],
+    "pick": {
+     "candidateId": "option-1",
+     "date": "2026-10-26"
+    },
+    "elementLine": {
+     "path": "cast/C02-tobias/voice/element-line-5s.mp3",
+     "seconds": 3.6,
+     "hz": 201.3
+    }
+   },
+   "element": {
+    "path": "elements/E-C02.mp4",
+    "state": "final"
+   }
+  },
+  {
+   "id": "C03",
+   "name": "Edda",
+   "role": "who wrote the letter",
+   "folder": "cast/C03-edda",
+   "face": {
+    "rounds": [
+     {
+      "id": "r1",
+      "date": "2026-10-25",
+      "candidates": [
+       {
+        "id": "r1-1",
+        "path": "cast/C03-edda/r1/r1-1.png"
+       },
+       {
+        "id": "r1-2",
+        "path": "cast/C03-edda/r1/r1-2.png"
+       },
+       {
+        "id": "r1-3",
+        "path": "cast/C03-edda/r1/r1-3.png"
+       },
+       {
+        "id": "r1-4",
+        "path": "cast/C03-edda/r1/r1-4.png"
+       },
+       {
+        "id": "r1-5",
+        "path": "cast/C03-edda/r1/r1-5.png"
+       },
+       {
+        "id": "r1-6",
+        "path": "cast/C03-edda/r1/r1-6.png"
+       },
+       {
+        "id": "r1-7",
+        "path": "cast/C03-edda/r1/r1-7.png"
+       },
+       {
+        "id": "r1-8",
+        "path": "cast/C03-edda/r1/r1-8.png"
+       },
+       {
+        "id": "r1-9",
+        "path": "cast/C03-edda/r1/r1-9.png"
+       },
+       {
+        "id": "r1-10",
+        "path": "cast/C03-edda/r1/r1-10.png"
+       },
+       {
+        "id": "r1-11",
+        "path": "cast/C03-edda/r1/r1-11.png"
+       },
+       {
+        "id": "r1-12",
+        "path": "cast/C03-edda/r1/r1-12.png"
+       },
+       {
+        "id": "r1-13",
+        "path": "cast/C03-edda/r1/r1-13.png"
+       },
+       {
+        "id": "r1-14",
+        "path": "cast/C03-edda/r1/r1-14.png"
+       },
+       {
+        "id": "r1-15",
+        "path": "cast/C03-edda/r1/r1-15.png"
+       },
+       {
+        "id": "r1-16",
+        "path": "cast/C03-edda/r1/r1-16.png"
+       },
+       {
+        "id": "r1-17",
+        "path": "cast/C03-edda/r1/r1-17.png"
+       },
+       {
+        "id": "r1-18",
+        "path": "cast/C03-edda/r1/r1-18.png"
+       },
+       {
+        "id": "r1-19",
+        "path": "cast/C03-edda/r1/r1-19.png"
+       },
+       {
+        "id": "r1-20",
+        "path": "cast/C03-edda/r1/r1-20.png"
+       }
+      ]
+     }
+    ],
+    "pick": {
+     "candidateId": "r1-3",
+     "date": "2026-10-25"
+    }
+   },
+   "sheet": {
+    "path": "cast/C03-edda/pick.png",
+    "approved": true
+   },
+   "voice": {
+    "rounds": [],
+    "pick": {
+     "candidateId": "option-1",
+     "date": "2026-10-26"
+    },
+    "elementLine": {
+     "path": "cast/C03-edda/voice/element-line-5s.mp3",
+     "seconds": 3.6,
+     "hz": 201.3
+    }
+   },
+   "element": {
+    "path": "elements/E-C03.mp4",
+    "state": "final"
+   }
+  }
+ ],
+ "locations": [
+  {
+   "id": "L01",
+   "name": "the shore",
+   "folder": "locations/L01-shore",
+   "master": {
+    "path": "locations/L01-shore/master.png",
+    "picked": true
+   },
+   "views": [
+    {
+     "camera": "looking out to sea",
+     "path": "locations/L01-shore/views/sea.png"
+    }
+   ]
+  },
+  {
+   "id": "L02",
+   "name": "the lamp room",
+   "folder": "locations/L02-lamp-room",
+   "master": {
+    "path": "locations/L02-lamp-room/master.png",
+    "picked": true
+   }
+  },
+  {
+   "id": "L03",
+   "name": "the post boat",
+   "folder": "locations/L03-boat",
+   "master": {
+    "path": "locations/L03-boat/master.png",
+    "picked": true
+   }
+  }
+ ],
+ "scenes": [
+  {
+   "id": "S1",
+   "title": "The bottle",
+   "folder": "blocks/S1",
+   "seconds": 24,
+   "shots": 4,
+   "promptVersions": [
+    {
+     "version": "v1",
+     "path": "blocks/S1/prompt/v1.md"
+    },
+    {
+     "version": "v2",
+     "path": "blocks/S1/prompt/v2.md"
+    },
+    {
+     "version": "v3",
+     "path": "blocks/S1/prompt/v3.md",
+     "checkPath": "blocks/S1/prompt/v3-check-1.md"
+    }
+   ],
+   "takes": [
+    {
+     "id": "take1",
+     "path": "blocks/S1/takes/take1.mp4",
+     "seconds": 24,
+     "date": "2026-10-26",
+     "cost": {
+      "credits": 72
+     },
+     "kind": "take"
+    },
+    {
+     "id": "take2",
+     "path": "blocks/S1/takes/take2.mp4",
+     "seconds": 24,
+     "date": "2026-10-26",
+     "cost": {
+      "credits": 72
+     },
+     "kind": "take"
+    },
+    {
+     "id": "grey1",
+     "path": "blocks/S1/takes/grey1.mp4",
+     "seconds": 24,
+     "date": "2026-10-29",
+     "cost": {
+      "credits": 72
+     },
+     "kind": "take"
+    },
+    {
+     "id": "bottle-take2",
+     "path": "blocks/S1/takes/bottle-take2.mp4",
+     "seconds": 6,
+     "date": "2026-10-30",
+     "cost": {
+      "credits": 18
+     },
+     "kind": "pickup"
+    }
+   ],
+   "inCut": "grey1 + bottle-take2"
+  },
+  {
+   "id": "S2",
+   "title": "The letter",
+   "folder": "blocks/S2",
+   "seconds": 20.5,
+   "shots": 5,
+   "promptVersions": [
+    {
+     "version": "v1",
+     "path": "blocks/S2/prompt/v1.md"
+    },
+    {
+     "version": "v2",
+     "path": "blocks/S2/prompt/v2.md"
+    },
+    {
+     "version": "v3",
+     "path": "blocks/S2/prompt/v3.md",
+     "checkPath": "blocks/S2/prompt/v3-check-1.md"
+    }
+   ],
+   "takes": [
+    {
+     "id": "grey1",
+     "path": "blocks/S2/takes/grey1.mp4",
+     "seconds": 21,
+     "date": "2026-10-29",
+     "cost": {
+      "credits": 63
+     },
+     "kind": "take"
+    }
+   ],
+   "inCut": "grey1"
+  },
+  {
+   "id": "S3",
+   "title": "Twice",
+   "folder": "blocks/S3",
+   "seconds": 23,
+   "shots": 6,
+   "promptVersions": [
+    {
+     "version": "v1",
+     "path": "blocks/S3/prompt/v1.md",
+     "checkPath": "blocks/S3/prompt/v1-check-1.md"
+    },
+    {
+     "version": "v2",
+     "path": "blocks/S3/prompt/v2.md",
+     "checkPath": "blocks/S3/prompt/v2-check-1.md"
+    },
+    {
+     "version": "v3",
+     "path": "blocks/S3/prompt/v3.md",
+     "checkPath": "blocks/S3/prompt/v3-check-1.md"
+    },
+    {
+     "version": "v4",
+     "path": "blocks/S3/prompt/v4.md",
+     "checkPath": "blocks/S3/prompt/v4-check-1.md"
+    },
+    {
+     "version": "v5",
+     "path": "blocks/S3/prompt/v5.md",
+     "checkPath": "blocks/S3/prompt/v5-check-1.md"
+    },
+    {
+     "version": "v6",
+     "path": "blocks/S3/prompt/v6.md",
+     "checkPath": "blocks/S3/prompt/v6-check-1.md"
+    },
+    {
+     "version": "v7",
+     "path": "blocks/S3/prompt/v7.md",
+     "checkPath": "blocks/S3/prompt/v7-check-1.md"
+    }
+   ],
+   "takes": [
+    {
+     "id": "take1",
+     "path": "blocks/S3/takes/take1.mp4",
+     "seconds": 23,
+     "date": "2026-10-28",
+     "cost": {
+      "credits": 69
+     },
+     "kind": "take"
+    },
+    {
+     "id": "take2",
+     "path": "blocks/S3/takes/take2.mp4",
+     "seconds": 23,
+     "date": "2026-10-28",
+     "cost": {
+      "credits": 69
+     },
+     "kind": "take"
+    },
+    {
+     "id": "take3",
+     "path": "blocks/S3/takes/take3.mp4",
+     "seconds": 23,
+     "date": "2026-10-28",
+     "cost": {
+      "credits": 69
+     },
+     "kind": "take"
+    },
+    {
+     "id": "take4",
+     "path": "blocks/S3/takes/take4.mp4",
+     "seconds": 23,
+     "date": "2026-10-28",
+     "cost": {
+      "credits": 69
+     },
+     "kind": "take"
+    },
+    {
+     "id": "FIX-lamp-S3 · take 1",
+     "path": "blocks/S3/takes/FIX-lamp-S3-take-1.mp4",
+     "seconds": 9,
+     "date": "2026-10-31",
+     "cost": {
+      "credits": 27
+     },
+     "kind": "pickup"
+    },
+    {
+     "id": "FIX-lamp-S3 · take 2",
+     "path": "blocks/S3/takes/FIX-lamp-S3-take-2.mp4",
+     "seconds": 9,
+     "date": "2026-10-31",
+     "cost": {
+      "credits": 27
+     },
+     "kind": "pickup",
+     "misses": [
+      "framing: Full length; the shot asks for hips-up.",
+      "lines: The tail after the last word is 0.14 s."
+     ]
+    },
+    {
+     "id": "FIX-lamp-S3 · take 3",
+     "path": "blocks/S3/takes/FIX-lamp-S3-take-3.mp4",
+     "seconds": 9,
+     "date": "2026-11-01",
+     "cost": {
+      "credits": 27
+     },
+     "kind": "pickup"
+    },
+    {
+     "id": "FIX-lamp-S3 · take 4",
+     "path": "blocks/S3/takes/FIX-lamp-S3-take-4.mp4",
+     "seconds": 9,
+     "date": "2026-11-01",
+     "cost": {
+      "credits": 27
+     },
+     "kind": "pickup",
+     "jobId": "08e92625",
+     "misses": [
+      "blocking: A second figure at the window in the medium shot, despite “exactly two people”.",
+      "lines: 0.18 s hold after “there”."
+     ]
+    }
+   ],
+   "inCut": "take4 + FIX-lamp-S3 · take 4",
+   "planSeconds": 10,
+   "planShots": 4
+  }
+ ],
+ "spend": {
+  "lines": [
+   {
+    "date": "2026-10-26",
+    "what": "S1 · take1",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 72
+    }
+   },
+   {
+    "date": "2026-10-26",
+    "what": "S1 · take2",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 72
+    }
+   },
+   {
+    "date": "2026-10-29",
+    "what": "S1 · grey1",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 72
+    }
+   },
+   {
+    "date": "2026-10-30",
+    "what": "S1 · bottle-take2",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 18
+    }
+   },
+   {
+    "date": "2026-10-29",
+    "what": "S2 · grey1",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 63
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "what": "S3 · take1",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 69
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "what": "S3 · take2",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 69
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "what": "S3 · take3",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 69
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "what": "S3 · take4",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 69
+    }
+   },
+   {
+    "date": "2026-10-31",
+    "what": "S3 · FIX-lamp-S3 · take 1",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 27
+    }
+   },
+   {
+    "date": "2026-10-31",
+    "what": "S3 · FIX-lamp-S3 · take 2",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 27
+    }
+   },
+   {
+    "date": "2026-11-01",
+    "what": "S3 · FIX-lamp-S3 · take 3",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 27
+    }
+   },
+   {
+    "date": "2026-11-01",
+    "what": "S3 · FIX-lamp-S3 · take 4",
+    "service": "higgsfield",
+    "cost": {
+     "credits": 27
+    }
+   },
+   {
+    "date": "2026-11-01",
+    "what": "1080p · Seedance 2.5, the delivered cut",
+    "service": "Higgsfield",
+    "cost": {
+     "usd": [
+      {
+       "amount": 2.4,
+       "service": "Higgsfield"
+      }
+     ]
+    }
+   }
+  ],
+  "total": {
+   "credits": 681,
+   "usd": [
+    {
+     "amount": 2.4,
+     "service": "Higgsfield"
+    }
+   ]
+  }
+ },
+ "taste": [
+  {
+   "date": "2026-10-25",
+   "what": "Maren face",
+   "prediction": "r1-4",
+   "pick": "r1-4",
+   "right": true
+  },
+  {
+   "date": "2026-10-25",
+   "what": "Edda face",
+   "prediction": "r1-9",
+   "pick": "r1-3",
+   "right": false
+  }
+ ],
+ "reviewCardsPath": "assets/films/the-lighthouse/review/cards.json",
+ "updatedAt": "2026-11-01T17:40:00Z"
+}

@@ -1,0 +1,7 @@
+// Read by: tools/release/make_srt.py (shot, who, line, in film order). Delete these two // lines when you copy it in: the script reads plain JSON.
+// Described in: Flow v3.2 - 12 Release (step 3: the caption script, written from the locked lines in script.md; names as the script spells them; performance marks out).
+[
+ {"shot": "L01", "who": "<Name>", "line": "<exact words>"},
+ {"shot": "L02", "who": "<Name>", "line": "<exact words>"},
+ {"shot": "L03", "who": "<Name>", "line": "<exact words>"}
+]

@@ -1,0 +1,431 @@
+{
+ "note": "The sample film’s cut for the Edit page in sample-data mode (MOCK=boards): three scenes, written by hand. Nothing here is a real film.",
+ "current": {
+  "version": "v1",
+  "fps": 24,
+  "width": 1080,
+  "height": 1920,
+  "note": "The sample film’s first assembly, written by hand for the sample data (MOCK=boards)",
+  "by": "migration",
+  "at": "2026-11-01T18:40:00.000Z",
+  "tracks": [
+   {
+    "id": "V2",
+    "kind": "video",
+    "name": "Inserts",
+    "clips": [
+     {
+      "id": "c10",
+      "src": "assets/films/the-lighthouse/blocks/S3/takes/S3-take1-480p.mp4",
+      "in": 1.125,
+      "out": 5.5,
+      "at": 45.875,
+      "label": "S3 · take 1",
+      "takeRef": {
+       "scene": "S3",
+       "take": "take1"
+      }
+     }
+    ]
+   },
+   {
+    "id": "V1",
+    "kind": "video",
+    "name": "Picture",
+    "clips": [
+     {
+      "id": "c1",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 0,
+      "out": 15.667,
+      "at": 0,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c2",
+      "src": "assets/films/the-lighthouse/blocks/FIX-bottle/takes/FIX-bottle-seedance-take2-480p.mp4",
+      "in": 0,
+      "out": 5.042,
+      "at": 15.667,
+      "label": "S1 · FIX-bottle · seedance take 2",
+      "takeRef": {
+       "scene": "S1",
+       "take": "FIX-bottle · seedance take 2"
+      }
+     },
+     {
+      "id": "c3",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 19.708,
+      "out": 21.542,
+      "at": 20.708,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c4",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 21.917,
+      "out": 24,
+      "at": 22.542,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c5",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 0,
+      "out": 13.042,
+      "at": 25.625,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c6",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 13.833,
+      "out": 14.167,
+      "at": 38.667,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c7",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 14.167,
+      "out": 15.208,
+      "at": 39,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c8",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 20.292,
+      "out": 26.125,
+      "at": 40.042,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c9",
+      "src": "assets/films/the-lighthouse/blocks/S3/takes/S3-take4-480p.mp4",
+      "in": 0,
+      "out": 4.375,
+      "at": 45.875,
+      "label": "S3 · take 4",
+      "takeRef": {
+       "scene": "S3",
+       "take": "take4"
+      }
+     },
+     {
+      "id": "c11",
+      "src": "assets/films/the-lighthouse/blocks/S3/takes/S3-take4-480p.mp4",
+      "in": 5.25,
+      "out": 14.917,
+      "at": 50.25,
+      "label": "S3 · take 4",
+      "takeRef": {
+       "scene": "S3",
+       "take": "take4"
+      }
+     },
+     {
+      "id": "c12",
+      "src": "assets/films/the-lighthouse/blocks/FIX-window/takes/FIX-window-take2-480p.mp4",
+      "in": 0,
+      "out": 9.042,
+      "at": 59.917,
+      "label": "S3 · FIX-window · take 2",
+      "takeRef": {
+       "scene": "S3",
+       "take": "FIX-window · take 2"
+      }
+     }
+    ]
+   },
+   {
+    "id": "A1",
+    "kind": "audio",
+    "name": "Dialogue",
+    "clips": [
+     {
+      "id": "c1a",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 0,
+      "out": 15.667,
+      "at": 0,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c2a",
+      "src": "assets/films/the-lighthouse/blocks/FIX-bottle/takes/FIX-bottle-seedance-take2-480p.mp4",
+      "in": 0,
+      "out": 5.042,
+      "at": 15.667,
+      "label": "S1 · FIX-bottle · seedance take 2",
+      "takeRef": {
+       "scene": "S1",
+       "take": "FIX-bottle · seedance take 2"
+      }
+     },
+     {
+      "id": "c3a",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 19.708,
+      "out": 21.542,
+      "at": 20.708,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c4a",
+      "src": "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4",
+      "in": 21.917,
+      "out": 24,
+      "at": 22.542,
+      "label": "S1 · grey 1",
+      "takeRef": {
+       "scene": "S1",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c5a",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 0,
+      "out": 13.042,
+      "at": 25.625,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c6a",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 13.833,
+      "out": 14.167,
+      "at": 38.667,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c7a",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 14.167,
+      "out": 15.208,
+      "at": 39,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c8a",
+      "src": "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4",
+      "in": 20.292,
+      "out": 26.125,
+      "at": 40.042,
+      "label": "S2 · grey 1",
+      "takeRef": {
+       "scene": "S2",
+       "take": "grey-take1"
+      }
+     },
+     {
+      "id": "c9a",
+      "src": "assets/films/the-lighthouse/blocks/S3/takes/S3-take4-480p.mp4",
+      "in": 0,
+      "out": 4.375,
+      "at": 45.875,
+      "label": "S3 · take 4",
+      "takeRef": {
+       "scene": "S3",
+       "take": "take4"
+      }
+     },
+     {
+      "id": "c11a",
+      "src": "assets/films/the-lighthouse/blocks/S3/takes/S3-take4-480p.mp4",
+      "in": 5.25,
+      "out": 14.917,
+      "at": 50.25,
+      "label": "S3 · take 4",
+      "takeRef": {
+       "scene": "S3",
+       "take": "take4"
+      }
+     },
+     {
+      "id": "c12a",
+      "src": "assets/films/the-lighthouse/blocks/FIX-window/takes/FIX-window-take2-480p.mp4",
+      "in": 0,
+      "out": 9.042,
+      "at": 59.917,
+      "label": "S3 · FIX-window · take 2",
+      "takeRef": {
+       "scene": "S3",
+       "take": "FIX-window · take 2"
+      }
+     }
+    ]
+   },
+   {
+    "id": "A2",
+    "kind": "audio",
+    "name": "Music",
+    "clips": [
+     {
+      "id": "m1",
+      "src": "assets/films/the-lighthouse/audio/sfx/title-boom-9.wav",
+      "in": 0,
+      "out": 1.375,
+      "at": 0,
+      "label": "title boom 9",
+      "gain": -12,
+      "fadeOut": 0.5
+     }
+    ]
+   },
+   {
+    "id": "C1",
+    "kind": "captions",
+    "name": "Subtitles",
+    "clips": [
+     {
+      "id": "s1",
+      "text": "Post, Miss Holt!\nNothing but bills again.",
+      "in": 0,
+      "out": 3.0,
+      "at": 8.0
+     },
+     {
+      "id": "s2",
+      "text": "Keep them. I found my own.",
+      "in": 0,
+      "out": 2.5,
+      "at": 12.0
+     },
+     {
+      "id": "s3",
+      "text": "Who writes to a lighthouse?",
+      "in": 0,
+      "out": 2.5,
+      "at": 19.0
+     },
+     {
+      "id": "s4",
+      "text": "To whoever keeps the light\non the point.",
+      "in": 0,
+      "out": 4.0,
+      "at": 30.0
+     },
+     {
+      "id": "s5",
+      "text": "If someone is there,\nflash it twice.",
+      "in": 0,
+      "out": 3.5,
+      "at": 34.5
+     },
+     {
+      "id": "s6",
+      "text": "It could be years old.",
+      "in": 0,
+      "out": 2.0,
+      "at": 40.0
+     },
+     {
+      "id": "s7",
+      "text": "Then she has been waiting years.",
+      "in": 0,
+      "out": 2.5,
+      "at": 42.5
+     },
+     {
+      "id": "s8",
+      "text": "Someone’s there.",
+      "in": 0,
+      "out": 2.0,
+      "at": 63.0
+     }
+    ]
+   }
+  ],
+  "markers": [
+   {
+    "at": 52.5,
+    "text": "hold on the dark a second longer",
+    "by": "user"
+   }
+  ],
+  "renders": {
+   "proxy": {
+    "path": "assets/films/the-lighthouse/cut/The Lighthouse - first assembly (480p).mp4",
+    "at": "2026-11-01T18:42:00.000Z",
+    "hash": "fixture-first-assembly",
+    "seconds": 68.959
+   }
+  }
+ },
+ "versions": [
+  {
+   "version": "v1",
+   "at": "2026-11-01T18:40:00.000Z",
+   "note": "The sample film’s first assembly, written by hand for the sample data (MOCK=boards)",
+   "by": "migration"
+  }
+ ],
+ "sourceSeconds": {
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-grey-take1-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-take2-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-take3A-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-take4-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-take6-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/S1/takes/S1-take7-480p.mp4": 24,
+  "assets/films/the-lighthouse/blocks/FIX-bottle/takes/FIX-bottle-genjutsu-take1-480p.mp4": 19.71,
+  "assets/films/the-lighthouse/blocks/FIX-bottle/takes/FIX-bottle-seedance-take1-480p.mp4": 5,
+  "assets/films/the-lighthouse/blocks/FIX-bottle/takes/FIX-bottle-seedance-take2-480p.mp4": 5,
+  "assets/films/the-lighthouse/blocks/S2/takes/S2-grey-take1-480p.mp4": 26.125,
+  "assets/films/the-lighthouse/blocks/S3/takes/S3-take1-480p.mp4": 23,
+  "assets/films/the-lighthouse/blocks/FIX-window/takes/FIX-window-take1-480p.mp4": 4,
+  "assets/films/the-lighthouse/blocks/FIX-window/takes/FIX-window-take2-480p.mp4": 9,
+  "assets/films/the-lighthouse/audio/sfx/title-boom-9.wav": 1.375,
+  "assets/films/the-lighthouse/blocks/S3/takes/S3-take4-480p.mp4": 16
+ }
+}
