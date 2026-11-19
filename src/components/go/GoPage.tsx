@@ -16,6 +16,7 @@ import { useFilmPage, filmMeta } from '@/components/pages/common';
 import { GoSceneCard } from './GoScene';
 import { fmtCr, goList, goMessage, threadBalance, totalCredits, totalSeconds, useGo } from './lib';
 import { cn } from '@/lib/utils';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 /** On the phone the thread is a panel fixed at the bottom of the screen: the footer sits right above it. The page's
  *  scroll box (main) already keeps a bottom padding for the panel, and a sticky footer stops at that padding, so the
@@ -78,6 +79,7 @@ export function GoPage() {
           sub={<>Every scene the go starts: its shots, the newest prompt in full, every reference at the number the prompt cites it by, the check and the credits. Nothing runs until you send the go to Alma.{review.rate ? <> Credits at <span title={review.rate.basis} className="cursor-help underline decoration-faint decoration-dotted underline-offset-2">{review.rate.crPerSec} cr/s ({review.rate.resolution})</span>, from spend.md.</> : ' spend.md has no seedance_2_5 rate yet, so there is no quote.'}</>}
           right={shown.length ? <QCChip spec={qcSpec('prompt')} chipLabel="prompts"
             targets={shown.map((s) => ({ target: s.id, label: `${s.id} prompt${s.prompt ? ` ${s.prompt.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!s.prompt, waitsFor: s.prompt ? `${s.id} prompt ${s.prompt.version}` : `${s.id}'s first prompt` }))} /> : undefined} />
+        <StepIntro step="go" />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="inline-flex cursor-pointer items-center gap-2.5 text-[13px] text-ink-3">

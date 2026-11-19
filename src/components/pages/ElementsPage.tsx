@@ -12,6 +12,7 @@ import { IconChevronRight, IconInfo } from '@/components/shell/icons';
 import { Media } from '@/components/media/Media';
 import { useFilmPage, filmMeta, filmPath } from './common';
 import { Feed } from '@/components/feed/Feed';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 const CUTS: [string, string][] = [['0–1', 'full body, front'], ['1–2', 'full body, back'], ['2–3', 'full body, side'], ['3–4', 'eye macro'], ['4–5', 'hands + feet']];
 
@@ -43,6 +44,7 @@ export function ElementsPage() {
               {!out && <span className="text-[11.5px] text-mute">from now on the elements QC runs before the 1080p finish</span>}
             </div>
           } />
+        <StepIntro step="elements" />
 
         <Card>
           <details open={!out} className="group">

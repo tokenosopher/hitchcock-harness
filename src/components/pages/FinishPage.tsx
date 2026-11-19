@@ -18,6 +18,7 @@ import { filmMeta, filmPath, useFilmPage } from './common';
 import { baseName, Flag, fmtBytes, From, KV, PanelHead, smpteFrames, StateDot, SubLabel, ToConfirm, useJson } from './postCommon';
 import { Feed, ShownLink } from '@/components/feed/Feed';
 import { FullCutLink } from '@/components/media/MasterPlayer';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 
 export function FinishPage() {
@@ -57,6 +58,7 @@ export function FinishPage() {
         <StageTitle kicker="Stage 10 · Finish and 1080p" title="Finish"
           sub={`The 1080p master and the captions of ${f.cut?.render ?? cutV}, with the music that is in it.${settled ? '' : ' 1080p runs only on your word, per action.'}`}
           right={<QCChip spec={qcSpec('captions')} targets={{ target: FILM_TARGET, label: 'captions', entry: qcEntry(state, 'captions', FILM_TARGET), ready: f.captions.srts.length > 0, waitsFor: f.captions.srts.length ? 'the caption file against the spoken lines' : 'the captions' }} />} />
+        <StepIntro step="finish" />
 
         {/* ---- the 1080p cut, first: what exists, and the way into the timeline's 1080p view (ASKS 37) */}
         {state.master && <Card className="p-4"><FullCutLink s={state} base={base} /></Card>}

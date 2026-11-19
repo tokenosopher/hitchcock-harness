@@ -18,6 +18,7 @@ import { Who } from '@/components/feed/Who';
 import { voiceDone } from '@/components/lib/derive';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 /** A voice option's name: "3" and "option-3" both read "option 3". */
 const opt = (id: string) => (/^\d+$/.test(id) ? `option ${id}` : id.replace('option-', 'option '));
@@ -63,6 +64,7 @@ export function VoicesPage() {
         <StageTitle kicker="Stage 3 · Voices" title={<>Voices <span className="text-[15px] font-normal text-sub">· {picked} of {total} picked</span></>}
           sub="One designed voice per character. The element line, “This is how I look and this is how I sound.”, is cut from the picked preview. The video elements have their own page."
           right={<QCChip spec={qcSpec('voice')} targets={{ target: FILM_TARGET, label: 'voices', entry: qcEntry(state, 'voice', FILM_TARGET), ready: total > 0 && picked === total, waitsFor: !total ? 'the voice picks' : picked === total ? `the ${word(total)} picked voices` : `the ${word(total)} picks (${picked} made)` }} />} />
+        <StepIntro step="voices" />
 
         <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
           {speaking.map((x) => {

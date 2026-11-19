@@ -23,6 +23,7 @@ import { shotsLine } from '@/components/flow/CutSteps';
 import { WhatsNextReader, type WhatsNext } from '@/components/flow/useWhatsNext';
 import { castBoxLines, castLine, type CastPart } from '@/components/characters/Cards';
 import { useFilmPage, filmMeta, filmMetaText } from './common';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 /** The flow board's node for each stage number. */
 const STAGE_NODE: Record<Stage, FlowKey> = {
@@ -98,6 +99,7 @@ export function MainPage() {
       )}
       {!place && <div className="duration-200 animate-in fade-in-0"><FlowBoard flow={flow} open={open} onOpen={onOpen} lines={lines} /></div>}
       <PageBody>
+        <StepIntro key={open} step={open} className="duration-200 animate-in fade-in-0 motion-reduce:animate-none" />
         <StepBar waiting={flow.waiting} step={open === 'gate' ? undefined : n.name} line={place ? undefined : stepLine(state, flow, open, wn)} deep={!!place}
           right={place || open === 'gate' ? undefined : <NodeRight s={state} n={n} base={base} />}
           back={place ? `Back to ${n.name}` : undefined} backPhoneOnly onBack={() => onOpen(open)} onWaiting={() => onOpen('gate')} />

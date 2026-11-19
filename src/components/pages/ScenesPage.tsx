@@ -19,6 +19,7 @@ import { Media } from '@/components/media/Media';
 import { sceneNow, TONE_BAR, TONE_CHIP, TONE_DOT, type SceneNow } from '@/components/lib/scenes';
 import { cn } from '@/lib/utils';
 import { Feed, ShownLink } from '@/components/feed/Feed';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 interface FeedData { cards: FeedCard[] }
 // a test take: a clip kept under tests/, or a card that calls itself a test
@@ -278,6 +279,7 @@ export function ScenesPage() {
           sub={<ScenesSummary state={state} tasks={tasks} />}
           right={<QCChip spec={qcSpec('prompt')} chipLabel="prompts"
             targets={scenes.map((s) => { const p = s.promptVersions[s.promptVersions.length - 1]; return { target: s.id, label: `${s.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!p, waitsFor: p ? `${s.id} prompt ${p.version}` : `${s.id}'s first prompt` }; })} />} />
+        <StepIntro step="scenes" />
 
         <ScenesOverview state={state} base={base} tasks={tasks} />
         <Feed query="place=scenes&shared=1" title="Shown to you · across scenes" note="tests, probes and pick-ups that belong to no single scene" from="the Scenes page" />

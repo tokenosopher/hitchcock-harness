@@ -20,6 +20,7 @@ import { StoryEditor } from './StoryEditor';
 import { ScriptPanel } from './ScriptPanel';
 import { storyVersionOf } from '@/lib/script-edit';
 import { useUI } from '@/components/data/ui';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 type Tab = 'story' | 'script' | 'brief';
 const TABS: Tab[] = ['story', 'script', 'brief'];
@@ -81,6 +82,7 @@ export function StoryPage() {
         <StageTitle kicker="Stage 1 · Setup and story" title="Story"
           sub={script ? `The brief, the story and the script.${lockedV ? ` Everything after the lock reads script ${lockedV}.` : ''}` : 'The brief and the story. The script is written from the story once you settle it.'}
           right={<QCChip spec={qcSpec('script')} targets={{ target: FILM_TARGET, label: 'script', entry: qcEntry(state, 'script', FILM_TARGET), ready: !!script, waitsFor: script ? `script ${current ?? ''}`.trim() : 'the script' }} />} />
+        <StepIntro step="story" />
 
         <div className="-mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
           <div role="tablist" aria-label="Story, script or brief" data-story-tabs className="inline-flex max-w-full gap-0.5 rounded-[10px] border border-line bg-raised p-[3px]">

@@ -64,6 +64,7 @@ import { usePlan } from './usePlan';
 import { PlannedView } from './PlannedView';
 import { BoardsBack, EmptyCard, PlannedTakes } from './PlannedTakes';
 import { useSendAsUser } from '@/components/release/AskAlma';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -1825,6 +1826,7 @@ export function EditPage() {
           )}
         </span>
       </div>
+      <StepIntro step="edit" lines={1} className="px-6 pt-3 max-[760px]:px-4" />
       {/* the film's files say more than the timeline's planned parts (a shot list, a scene's boards): said quietly, and
           brought in only on a press (never by itself while the page is open) */}
       {!empty && !viewing && plan.data?.pending && (
@@ -2254,6 +2256,7 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, viewer, trans
   return (
     <div ref={root} data-phone-edit className="flex flex-none flex-col">
       <Header crumbs={[...crumbs.slice(0, 2)]} meta="" phoneSub={name ? `Edit ${name} · ${file === 'master' ? 'master file' : file ? '480p file' : 'played live'} · ${smpte(total / fps, fps)} · view only` : 'Edit · no cut yet · view only'} />
+      <StepIntro step="edit" lines={1} className="px-4 pt-3" />
       <div className="flex flex-col items-center gap-3 px-4 pt-3">
         {ahead && <p className="m-0 flex w-full items-center text-[12px] text-sub"><span className="min-w-0 truncate font-mono text-[11px]">{ahead}</span><ToConfirm title="The record has a newer cut than the timeline; ask Alma on the desktop to bring the timeline up to it" /></p>}
         <div ref={box} data-phone-picture className={cn('relative overflow-hidden rounded-[14px] border border-edge bg-black', !fit && 'h-[min(42dvh,340px)]', eased && 'transition-[width,height] duration-300 ease-out motion-reduce:transition-none')}

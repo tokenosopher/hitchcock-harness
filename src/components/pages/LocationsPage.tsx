@@ -17,6 +17,7 @@ import { useFilmPage, filmCost, filmPath } from './common';
 import { Media } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 export function LocationsPage() {
   const { state, error, ui, base } = useFilmPage();
@@ -78,6 +79,7 @@ export function LocationsPage() {
                   ? `Round ${rn(r)} of ${rounds.length}, the style image: ${word(r.candidates.length)} 16:9 candidates of the place. You picked ${r.pick}; it is the master, and the views below are made from it.`
                   : `Round ${rn(r)}, the style image: ${word(r.candidates.length)} 16:9 candidates of the place. Your pick becomes the master, then the plan from above.`}
                 right={<QCChip spec={qcSpec('views')} targets={{ target: l.id, label: `${l.id} views`, entry: qcEntry(state, 'views', l.id), ready: !!l.master?.picked && !!l.views?.length, waitsFor: !l.master?.picked ? `the ${l.id} master pick` : l.views?.length ? `${l.id}'s ${word(l.views.length)} views` : `${l.id}'s views` }} />} />
+              <StepIntro step="loc" />
               {rounds.length > 1 && (
                 <div role="tablist" aria-label="Style-image rounds" className="flex flex-wrap gap-4 border-b border-line">
                   {rounds.map((x) => (

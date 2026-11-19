@@ -8,7 +8,7 @@ New here? After installing, read GUIDE.md: your first film, step by step.
 
 - **A Mac.** (Linux may work; it is not tested.)
 - **A Claude account with Claude Code.** The Max plan is recommended: Alma and her helper agents run for a long time on a film.
-- **A Higgsfield account with credits.** Every picture, voice and video is made there and paid in Higgsfield credits.
+- **A Higgsfield account with credits.** Every picture, voice and video is made there and paid in Higgsfield credits. If you don't have one yet, here is an affiliate link: [higgsfield.ai](https://higgsfield.ai?fpr=zero-brainy). It helps support Hitchcock Harness if you use it to subscribe.
 - These free programs on your Mac (the install below gets them all):
   - **Homebrew**, which installs the others. If you do not have it, get it from [brew.sh](https://brew.sh).
   - **Node**, which runs the app itself.
@@ -59,6 +59,8 @@ Then open **http://localhost:8800** in your browser. Leave the Terminal window o
 2. Give it a title and paste your idea in your own words. The rest of the form (9:16, a budget of 5,000 credits, Higgsfield voices, 1080p by Seedance 2.5) is already filled in; change only what you want different.
 3. Press **Start the film**. Alma makes the film's folder and writes a first story. Read it on the Story page, change it yourself or ask her to, and tell her when it is settled. Then she writes the script.
 4. From then on, Alma puts every choice in front of you as a card under **Waiting for you**: pick a face, a voice, a place, say yes to a script. Answer with the buttons, or just write to her.
+
+Every step of a film opens with a few words from Alma: what you do there and why it comes at that point. Hide one with **Hide** (the small **A** left in its place brings it back) or all of them with **Hide all intros**; the **Step intros** switch in Settings turns them all back on.
 
 ## How spending works
 

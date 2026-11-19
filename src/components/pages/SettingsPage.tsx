@@ -13,6 +13,7 @@ import { Btn, Card } from '@/components/shell/atoms';
 import { IconArrowUpRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { useJson } from './postCommon';
+import { IntroSettings } from '@/components/intro/IntroSettings';
 
 const PLAN: Record<string, string> = { max: 'Max plan', pro: 'Pro plan', team: 'Team plan', enterprise: 'Enterprise plan' };
 
@@ -91,6 +92,8 @@ export function SettingsPage() {
             Re-check the plan terms before relying on it: the support article “Use the Claude Agent SDK with your Claude plan” and “Legal and compliance” in the Claude Code docs.
           </p>
         </Section>
+
+        <IntroSettings />
 
         <Section label="Folders" sub="Nothing is copied: the harness reads the folders where they are. The films live in the studio folder.">
           <Row k="Studio folder">
