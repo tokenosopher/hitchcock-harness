@@ -80,7 +80,7 @@ export interface AlmaOptions {
 type Listener = (ev: ThreadEvent) => void;
 type InfoListener = (info: ThreadInfo) => void;
 
-interface Queued { id: string; text: string; context?: HarnessContext }
+interface Queued { id: string; text: string; context?: HarnessContext; startedAt?: string }
 
 const MAX_BUFFER = 3000;
 
@@ -165,7 +165,8 @@ export class AlmaSession {
     const hasKey = hasReserveKey();
     // with no process running, the next start follows the setting, so nothing is pending
     const onKey = this.child && !this.closing ? !!this.onKey : r.on && hasKey;
-    return { film: this.film, sessionId: this.sessionId, messageCount: this.messageCount, since: this.since, running: this.tasks.running(), model: this.model ?? '', defaultModel: this.defaultModel, servedModel: this.servedModel, reserve: { on: r.on, hasKey, onKey } };
+    return { film: this.film, sessionId: this.sessionId, messageCount: this.messageCount, since: this.since, running: this.tasks.running(), model: this.model ?? '', defaultModel: this.defaultModel, servedModel: this.servedModel, reserve: { on: r.on, hasKey, onKey },
+      turn: { working: this.busy, ...(this.inFlight?.startedAt ? { since: this.inFlight.startedAt } : {}), queued: this.queue.length } };
   }
   /** The transcript shows some jobs ended that the live stream never reported: take that over. */
   learnEnded(from: TaskTracker): void {
@@ -254,6 +255,7 @@ export class AlmaSession {
     if (!this.child) return void this.startChecked();
     const child = this.child;
     const next = this.queue.shift()!;
+    next.startedAt = new Date().toISOString();
     this.inFlight = next;
     this.clearIdle();
     const note = this.earlierNote;
@@ -272,6 +274,7 @@ export class AlmaSession {
    *  and the turn ends at once with a system line and a result, so nothing spends and the queue drains. */
   private dryRun(): void {
     const next = this.queue.shift()!;
+    next.startedAt = new Date().toISOString();
     this.inFlight = next;
     const file = dryRunFile();
     const rec = { at: new Date().toISOString(), film: this.film, id: next.id, text: next.text, sent: prefixContext(next.text, next.context) };

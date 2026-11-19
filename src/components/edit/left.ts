@@ -107,15 +107,17 @@ export function newestMasterFileOf<F extends { kind: string; tag?: string; earli
 // ---- what the record says
 
 /** The record's yes for a cut: the newest answered yes card placed (by itself) at the edit or finish stage that names a
- *  cut version this film has ("cut v230" in its title or its id), not answered no. Undefined when the record says
- *  nothing of the kind: the step is then the user's own tick. */
+ *  cut version this film has ("cut v230" in its title or its id), not answered no; or, placed anywhere, a yes card
+ *  whose own id is the cut's ("ASK-cut-v11", put at the Sound step by a film that approved its cut with its sound on).
+ *  Undefined when the record says nothing of the kind: the step is then the user's own tick. */
 export function approvalOf(cards: FeedCard[], versions: string[]): { version: string; card: string } | undefined {
   const have = new Set(versions);
   let best: { version: string; card: string } | undefined;
   for (const c of cards) {
     const a = c.ask;
     if (!a || a.kind !== 'yes' || !a.answer || a.answer.option === 'no') continue;
-    if (c.placed !== 'card' || (c.place !== 'edit' && c.place !== 'finish')) continue;
+    const cutCard = /^(?:ASK-)?cut-v\d+$/i.test(c.id ?? '');
+    if (!cutCard && (c.placed !== 'card' || (c.place !== 'edit' && c.place !== 'finish'))) continue;
     const v = /\bcut (v\d+)\b/i.exec(c.title)?.[1]?.toLowerCase() ?? /\b(v\d+)\b/i.exec(c.id ?? '')?.[1]?.toLowerCase();
     if (!v || !have.has(v)) continue;
     if (!best || vnum(v) > vnum(best.version)) best = { version: v, card: c.id ?? c.key };

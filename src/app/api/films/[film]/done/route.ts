@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
-  const answers = rows(body.answers).map((x) => ({ card: s(x.card) ?? '', option: s(x.option), from: 'Done picking, in Hitchcock Harness' }));
+  const answers = rows(body.answers).map((x) => ({ card: s(x.card) ?? '', option: s(x.option), from: 'the Done picking button' }));
   if (answers.some((a) => !a.card)) return Response.json({ error: 'every answer needs its card' }, { status: 400 });
   const picks: PickInput[] = [];
   for (const x of rows(body.picks)) {

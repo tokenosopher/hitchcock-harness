@@ -10,7 +10,7 @@ import { Warnings } from '../films/util';
 import { saveAnswer } from './answers';
 import { filmTarget } from './film';
 import { makePick, PickError, type PickInput, type PickResult } from './pick';
-import { appendTasteRow, type TasteRow } from './taste';
+import { appendTasteRow, pickedWhere, type TasteRow } from './taste';
 import { Writer, type WriteRecord } from './writes';
 
 export interface AnswerInput {
@@ -62,7 +62,7 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
       candidates: `${card.ask.options.map((o) => o.id).join(', ')} (${card.ask.options.length})`,
       pick: opt.id,
       pickNote: opt.label !== opt.id ? opt.label : undefined,
-      words: input.note ? `"${input.note}"` : `– (picked on ${where} of Hitchcock Harness)`,
+      words: input.note ? `"${input.note}"` : `– (picked ${pickedWhere(where)})`,
       predicted,
       right: predicted !== undefined ? predicted === opt.id || predicted === opt.label : undefined,
     };
@@ -163,7 +163,7 @@ export async function answerCards(inputs: AnswerInput[], film: string, opts: { d
   });
   const picks = done.filter((r) => r.kind === 'pick').length;
   const message = [
-    `<harness-action kind="answers" count="${done.length}"/> The user answered ${done.length} cards with one button, on ${where}. Each line is one answer, by the card's ID, exactly as a single answer would say it. Apply them all, then continue the flow once.`,
+    `<harness-action kind="answers" count="${done.length}"/> The user answered ${done.length} cards at once, ${pickedWhere(where)}. Each line is one answer, by the card's ID, exactly as a single answer would say it. Apply them all, then continue the flow once.`,
     '',
     ...lines,
     '',

@@ -64,7 +64,9 @@ export async function readReview(ctx: FilmCtx, pickupFolders: string[]): Promise
       const hits = keys.filter((k) => k.key && n.includes(k.key));
       const fix = (scene ? hits.find((k) => k.folder.endsWith(`-S${scene}`)) : undefined)?.folder ?? hits.find((k) => !/-S\d+$/.test(k.folder))?.folder ?? hits[0]?.folder;
       if (take && (fix || scene)) out.push({ scene: scene ? `S${scene}` : undefined, pickup: fix, take: take.startsWith('grey-') ? `grey-take${take.slice(5)}` : `take${take}`, misses, heading: where });
-      else ctx.warn.add(rel, `misses under "${where.slice(0, 60)}" name no take`);
+      // misses about a scene or a pick-up whose take cannot be told; misses on anything else (a face, a look, a
+      // sheet, a view: every card says its misses plainly) are not a take's, and nothing is wrong with them
+      else if (scene || fix) ctx.warn.add(rel, `misses under "${where.slice(0, 60)}" name no take`);
     }
     for (const k of ['cards', 'items', 'blocks']) if (Array.isArray(o[k])) visit(o[k], ctxHeading);
   };

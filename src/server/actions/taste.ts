@@ -20,6 +20,15 @@ export interface TasteRow {
 
 const cell = (s: string): string => s.replace(/\|/g, '/').replace(/\s*\n\s*/g, ' ').trim() || '–';
 
+/** Where a choice was made, in words for the taste row and Alma's message: "on the Voices page in Hitchcock Harness",
+ *  "with the Done picking button in Hitchcock Harness", or "in Hitchcock Harness" when nothing more is known. A place
+ *  that already names the app is not named twice (it read "Done picking, in Hitchcock Harness of Hitchcock Harness"). */
+export function pickedWhere(where?: string): string {
+  const w = (where ?? '').replace(/,?\s+(?:in|of|on)\s+Hitchcock Harness$/i, '').trim();
+  if (!w || /^Hitchcock Harness$/i.test(w)) return 'in Hitchcock Harness';
+  return `${/\bbutton$/i.test(w) ? 'with' : 'on'} ${w} in Hitchcock Harness`;
+}
+
 export function formatRow(r: TasteRow): string {
   const cells = [
     r.date, r.film, r.choice, r.candidates,

@@ -53,9 +53,20 @@ export function readScriptText(markdown: string, warn: { add: (file: string, wha
       const c = cells(row);
       const film = c[c.length - 1] ?? '';
       if (!/^(character|location|prop)/i.test(c[0] ?? '')) continue;
-      for (const part of film.split(/,\s*(?=[CLP]\d)/)) {
+      // "C01 Maren, C02 Ana" or, when a name has a comma of its own, "C01 Maren, the keeper; C02 the Narrator"
+      for (const part of film.split(/[,;]\s*(?=[CLP]\d)/)) {
         const m = /^([CLP]\d+[a-z]?)\s+(.+)$/.exec(part.trim());
-        if (m) names.set(m[1], m[2].trim());
+        if (!m) continue;
+        // "Maren, the lighthouse keeper": the name, then who she is (a role; the script note's own role wins below)
+        const text = m[2].trim();
+        let depth = 0, cut = -1;
+        for (let i = 0; i < text.length && cut < 0; i++) {
+          if (text[i] === '(') depth++;
+          else if (text[i] === ')') depth = Math.max(0, depth - 1);
+          else if (text[i] === ',' && !depth) cut = i;
+        }
+        names.set(m[1], (cut < 0 ? text : text.slice(0, cut)).trim());
+        if (cut >= 0 && /^C/.test(m[1])) roles.set(m[1], text.slice(cut + 1).trim());
       }
     }
   }

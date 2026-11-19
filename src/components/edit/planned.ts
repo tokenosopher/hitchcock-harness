@@ -14,8 +14,9 @@ import type { PlanKind, Timeline, TimelineClip, TimelineMarker, TimelineTrack } 
 export const READING_PACE = { wps: 2.9, gap: 0.5 } as const;
 export type Pace = { wps: number; gap: number };
 
-/** A spoken line (`who`) or an action as written (`secs`, its seconds). */
-export interface PlanItem { who?: string; text: string; secs?: number }
+/** A spoken line (`who`) or an action as written (`secs`, its seconds). `vo`: a line heard over the picture (the
+ *  script's direction says so: "over the picture", "V.O."), laid in the edit and spoken in no previz take. */
+export interface PlanItem { who?: string; text: string; secs?: number; vo?: boolean }
 /** One planned shot: its number in the scene, its id in the shot file ("5A"), its time in the scene, what it shows
  *  and, once the previz is made, its board (a still, relative to the film repo). */
 export interface PlanShot { n: number; id: string; t0: number; t1: number; text?: string; inFrame?: string; board?: string; panels?: PlanPanel[] }
@@ -210,7 +211,10 @@ export function buildScene(s: PlanScene, pace: Pace, fps: number): SceneBuild {
   const shots = [...(s.shots ?? [])].filter((x) => x.t1 > x.t0).sort((a, b) => a.t0 - b.t0);
   const pv = s.previz ? previzParts(s.items, s.previz) : undefined;
   if (pv && 'parts' in pv) return timedScene(s, shots, pv.parts, s.previz!.take, fps);
-  const timing: SceneBuild['timing'] = pv && 'why' in pv ? { by: 'reading', take: s.previz!.take, why: `the script's lines do not match previz take ${s.previz!.take}: ${pv.why}` } : { by: 'reading' };
+  // a voice-over is in no previz take: when the voice-overs are all that differ, the lines stay at reading pace as
+  // before, and there is nothing to report (S1 of a test film, 19 Nov: "previz take 3: no one" for a narrator's line)
+  const voOnly = !!pv && 'why' in pv && s.items.some((x) => x.vo) && 'parts' in previzParts(s.items.filter((x) => !x.vo), s.previz!);
+  const timing: SceneBuild['timing'] = pv && 'why' in pv && !voOnly ? { by: 'reading', take: s.previz!.take, why: `the script's lines do not match previz take ${s.previz!.take}: ${pv.why}` } : { by: 'reading' };
   const raw: { d: number; it?: PlanItem }[] = [];
   let prevLine = false;
   for (const it of s.items) {

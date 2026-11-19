@@ -444,6 +444,10 @@ export interface ThreadInfo {
   /** The reserve switch: `on` is the setting, `hasKey` whether a key is saved (never the key), `onKey`
    *  whether this Alma's current process was started on it (it differs from `on` while a flip waits for her to be idle). */
   reserve?: { on: boolean; hasKey: boolean; onKey: boolean };
+  /** Alma is mid-turn on a message of this server's, or a message waits for her (`running` lists only helper agents).
+   *  `since`: when the turn now running was handed to her; `queued`: messages waiting behind it. A turn the CLI starts
+   *  by itself (a background job's report) is not counted: the pages see it in the thread. */
+  turn?: { working: boolean; since?: string; queued: number };
 }
 
 // ---- The edit (build step 4). The timeline is a file in the film folder: cut/<version>.json.
