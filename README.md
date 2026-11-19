@@ -117,7 +117,7 @@ Every paid job goes to Higgsfield, through Claude. Alma checks the model list an
 
 Four things run on your Mac and cost nothing: laying out each scene's rough preview (Blender), removing music from a take (Demucs), timing each spoken word for checks and subtitles (Whisper), and cutting and rendering the film (ffmpeg).
 
-**What is new and not yet proven.** This version was made from a working setup that used other services for voices, music, sound effects and 1080p. Those now run on Higgsfield as described above, and they have not yet been through a whole film here. Expect the voice round, the music and the sound effects to need a second try now and then, and tell Alma what you hear: she writes what she learns into the rules. Posting to social platforms is by hand.
+**What is proven and what is not.** This version was made from a working setup that used other services for voices, music, sound effects and 1080p; those now run on Higgsfield as described above. One short test film (15 seconds, two scenes, about 110 credits) has been through all of it up to a finished 480p cut: the voice round, a narrator's line, the music and a sound effect all worked, some on a second try. Not yet proven here: finishing at 1080p, and the release step that follows it. Known gaps in v0.2.0: a character who is only heard (a narrator) does not appear on the Voices page, and picks answered on cards are not yet added to the library. Tell Alma what you see and hear: she writes what she learns into the rules. Posting to social platforms is by hand.
 
 ## If something goes wrong
 
