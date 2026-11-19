@@ -1,7 +1,7 @@
 # Hitchcock Harness
 
-<!-- The walkthrough video. For a player right here: open this file in the editor on github.com, drag the video file into it, and put the https://github.com/user-attachments/assets/… link that GitHub writes alone on its own line, in place of the poster line below. -->
-[![Watch the three-minute walkthrough of Hitchcock Harness](docs/launch-poster.jpg)](https://github.com/tokenosopher/hitchcock-harness/releases/download/v0.2.0/hitchcock-harness-walkthrough.mp4)
+<!-- The walkthrough video: the poster below links to it on YouTube (the link goes in the round brackets at the end of the next line). -->
+![The three-minute walkthrough of Hitchcock Harness](docs/launch-poster.jpg)
 
 > "Once the screenplay is finished, I'd just as soon not make the film at all. … When you finish the script, the film is perfect. But in shooting it you lose perhaps 40 per cent of your original conception."
 >
