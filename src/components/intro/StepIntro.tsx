@@ -3,8 +3,9 @@
 // intros.ts). It reads as one of her messages in the thread: her "A" mark, her name, plain words, no box. Under the
 // words two quiet controls: "Hide" (this step) and "Hide all intros". A hidden intro leaves a small "Alma on <step>"
 // mark in its place that brings it back; right after "Hide all intros" that mark offers an undo for a few seconds. Settings
-// has the switch for all of them. A long text folds to a few lines on the phone (`lines` folds it on any screen, for
-// a page whose work surface sits right under it), with "More" to open it. Every change slides and fades.
+// has the switch for all of them. On the phone every intro folds to the same three lines (the last one fades), with
+// "More" to open it; on the desktop `lines` folds it (Edit: one line ending in an ellipsis). The controls always sit
+// on their own row under the words. Every change slides and fades.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconChevronDown } from '@/components/shell/icons';
@@ -36,9 +37,11 @@ function Mark({ small }: { small?: boolean }) {
 }
 
 const LINE = 21; // the body's line height in px (13px at 1.6)
+const PHONE_LINES = 3; // every intro on the phone shows this many lines until "More"
 const quiet = 'inline-flex h-7 cursor-pointer items-center rounded-md px-1.5 text-[12px] text-sub transition-colors duration-150 hover:bg-raised hover:text-ink focus-visible:text-ink max-[760px]:h-10 max-[760px]:px-2.5';
 
-export function StepIntro({ step, className, lines }: { step: IntroKey; className?: string; /** fold the text to this many lines on every screen; 0 never folds it (the New film page: the Higgsfield line must be read) */ lines?: number }) {
+export function StepIntro({ step, className, lines }: { step: IntroKey; className?: string; /** on the desktop, fold the text to this many lines (1: one line ending in an ellipsis, for the Edit page's work
+ *  surface); 0 or none never folds it there. On the phone every intro folds to the same three lines. */ lines?: number }) {
   const shows = useIntroShows(step);
   const prefs = useIntroPrefs();
   const phone = useIsPhone();
@@ -53,7 +56,7 @@ export function StepIntro({ step, className, lines }: { step: IntroKey; classNam
   const [undoAll, setUndoAll] = useState(false);
   useEffect(() => { if (!undoAll) return; const t = setTimeout(() => setUndoAll(false), 8000); return () => clearTimeout(t); }, [undoAll]);
   // the fold: how many lines show while it is closed, and whether the text is longer than that
-  const fold = lines === 0 ? undefined : lines ?? (phone ? 3 : undefined);
+  const fold = phone ? PHONE_LINES : lines || undefined;
   const [open, setOpen] = useState(false);
   const body = useRef<HTMLParagraphElement>(null);
   const [full, setFull] = useState(0);
@@ -70,24 +73,21 @@ export function StepIntro({ step, className, lines }: { step: IntroKey; classNam
   const cap = fold ? fold * LINE : undefined;
   const folds = !!cap && full > cap + 2;
   const off = !!prefs?.off;
-  // one line, the controls beside it (the Edit page, whose work surface sits right under it)
-  const inline = fold === 1;
-  // the text and its controls on one row; on the phone only while folded (open, the text takes the width)
-  const row = inline && !(phone && open);
+  // one folded line on the desktop ends in an ellipsis at a word; more lines end on a whole line that fades
+  const clamp1 = folds && !open && fold === 1;
   const focusSoon = (r: React.RefObject<HTMLButtonElement | null>) => requestAnimationFrame(() => r.current?.focus({ preventScroll: true }));
   const dot = <span aria-hidden="true" className="text-[12px] text-faint">·</span>;
   const controls = (
-    <div className={cn('-ml-1.5 flex flex-wrap items-center gap-x-0.5 max-[760px]:-ml-2.5', row && 'ml-0 flex-none flex-nowrap')}>
+    <div className="-ml-1.5 flex flex-wrap items-center gap-x-0.5 max-[760px]:-ml-2.5">
       {folds && (
         <>
           <button type="button" className={quiet} aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
             {open ? 'Less' : 'More'}
             <IconChevronDown size={12} className={cn('ml-0.5 transition-transform duration-200', open && 'rotate-180')} />
           </button>
-          {!(inline && phone && !open) && dot}
+          {dot}
         </>
       )}
-      {!(inline && phone && folds && !open) && (<>
       <button ref={hideBtn} type="button" className={quiet} aria-controls={id} title="Hide Alma’s word on this step; the small A left in its place brings it back"
         onClick={() => { void introActions.hide(step); focusSoon(back); }}>
         Hide
@@ -97,19 +97,18 @@ export function StepIntro({ step, className, lines }: { step: IntroKey; classNam
         onClick={() => { void introActions.setAll(false); setUndoAll(true); focusSoon(back); }}>
         Hide all intros
       </button>
-      </>)}
     </div>
   );
   return (
     <div data-step-intro={step} className={cn('flex flex-col', className)}>
       <Reveal open={ready && shows}>
-        <section id={id} aria-label={`Alma on ${intro.name}`} className={cn('flex max-w-[620px] gap-2.5 max-[760px]:gap-2', inline && 'max-w-[1040px] items-start')}>
+        <section id={id} aria-label={`Alma on ${intro.name}`} className={cn('flex max-w-[620px] gap-2.5 max-[760px]:gap-2', fold === 1 && 'max-w-[1040px]')}>
           <span className="pt-px max-[760px]:hidden"><Mark /></span>
-          <span className={cn('flex h-[21px] flex-none items-center min-[761px]:hidden', row && 'mt-[9px]')}><Mark small /></span>
-          <div className={cn('flex min-w-0 flex-1 flex-col gap-0.5 max-[760px]:-mb-1.5', row && 'flex-row items-start gap-4 max-[760px]:items-center max-[760px]:gap-1')}>
+          <span className="flex h-[21px] flex-none items-center min-[761px]:hidden"><Mark small /></span>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 max-[760px]:-mb-1.5">
             <p ref={body} className={cn('m-0 min-w-0 flex-1 overflow-hidden text-[13px] leading-[1.6] text-ink-3 transition-[max-height] duration-200 ease-out [text-wrap:pretty] motion-reduce:transition-none',
-              row && 'pt-[3px] max-[760px]:pt-0',
-              folds && !open && (fold === 1 ? '[mask-image:linear-gradient(to_right,black_80%,transparent)]' : '[mask-image:linear-gradient(to_bottom,black_calc(100%-21px),transparent)]'))}
+              clamp1 && 'line-clamp-1 [text-wrap:wrap]',
+              folds && !open && !clamp1 && '[mask-image:linear-gradient(to_bottom,black_calc(100%-21px),transparent)]')}
               style={folds || cap ? { maxHeight: open || !folds ? full || undefined : cap } : undefined}>
               <Words text={intro.text} />
             </p>

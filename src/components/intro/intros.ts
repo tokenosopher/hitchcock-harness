@@ -21,7 +21,7 @@ export interface Intro {
 export const INTROS: Record<IntroKey, Intro> = {
   idea: {
     name: 'the idea and Higgsfield',
-    text: 'Tell me the film the way you’d tell a friend: a few lines, a whole story or a finished script all work. Every picture, voice and video I make is made on Higgsfield and paid in its credits, so you’ll need a Higgsfield subscription. If you don’t have one yet, here’s [an affiliate link](https://higgsfield.ai?fpr=zero-brainy); it helps support Hitchcock Harness if you use it to subscribe. Then press Start the film, and I’ll make the film’s folder and write you a first story.',
+    text: 'Tell me the film the way you’d tell a friend: a few lines or a finished script both work. Everything I make is made on Higgsfield and paid in its credits, so you’ll need a Higgsfield subscription. If you don’t have one yet, here’s [an affiliate link](https://higgsfield.ai?fpr=zero-brainy); it helps support Hitchcock Harness if you use it to subscribe.',
   },
   story: {
     name: 'the story',
@@ -45,7 +45,7 @@ export const INTROS: Record<IntroKey, Intro> = {
   },
   faces: {
     name: 'faces',
-    text: 'I make twenty calm portraits of each character (the acting comes later, in the scenes): pick the one who walks into your film, or tell me “older” or “kinder” for another round. Faces come first because the clothes and the character sheet are made on that face, and one of the voice options is made to fit it.',
+    text: 'Faces first. You’ll see twenty calm portraits of each character, and you pick the one who walks into your film; say “older” or “kinder” and I’ll make another round. The clothes, the character sheet and one of the voice options are all built on that face, so this is the pick to take your time on.',
   },
   clothing: {
     name: 'clothing',
@@ -57,7 +57,7 @@ export const INTROS: Record<IntroKey, Intro> = {
   },
   voices: {
     name: 'voices',
-    text: 'Voices wait for the face, because one of the options is a voice made to fit it. For each character you get a few to listen to: some of Higgsfield’s ready-made voices, one made from the face, and variations on the ready-made voice that fits best. Pick one and it’s saved to your Higgsfield account, so the character sounds the same in every scene.',
+    text: 'Voices wait for the face, because one of the options is a voice made to fit it. For each character you get a few to listen to: some of Higgsfield’s ready-made voices, one made from the face, and variations on the ready-made voice that fits best. Pick one, and that is how the character sounds in every scene.',
   },
   gate: {
     name: 'your picks',
@@ -85,7 +85,7 @@ export const INTROS: Record<IntroKey, Intro> = {
   },
   edit: {
     name: 'the edit',
-    text: 'This is where the takes become a film. I lay out the first cut; you can move, trim, split and mute on the tracks yourself, or just tell me (“cut the pause before the last line”). Every change is a version you can go back to, so go ahead and try things.',
+    text: 'This is where the takes, the versions of each scene you kept, become a film. I lay out the first cut; you can move, trim, split and mute on the tracks yourself, or just tell me (“cut the pause before the last line”). Every change is a version you can go back to, so go ahead and try things.',
   },
   finish: {
     name: 'finishing',

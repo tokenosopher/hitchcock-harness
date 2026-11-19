@@ -9,8 +9,9 @@ export function IntroSettings() {
   const p = useIntroPrefs();
   const on = p ? !p.off : true;
   const some = p ? (p.off ? p.shown.length : p.hidden.length) : 0;
-  const note = !p ? '' : !p.off ? (some ? `On. ${some} hidden one by one; switching off and on again brings them back.` : 'On, on every step')
-    : some ? `Off. ${some} brought back one by one; on every other step, press the small Alma mark to read its intro.` : 'Off. Each step keeps a small Alma mark; press it to read that step’s intro.';
+  const note = !p ? '' : !p.off
+    ? (some ? `On: shown at the top of every step but ${some === 1 ? 'one you hid' : `${some} you hid`}. Switching off and on again brings those back.` : 'On: shown at the top of every step.')
+    : (some ? `Off: shown only on the ${some === 1 ? 'step' : `${some} steps`} you brought back. Bring one back with the small A on its page.` : 'Off: bring one back with the small A on its page.');
   return (
     <Card data-intro-settings>
       <div className="flex flex-col gap-1 px-4 py-3">

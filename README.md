@@ -121,4 +121,4 @@ Four things run on your Mac and cost nothing: laying out each scene's rough prev
 
 ---
 
-v0.1.0, made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026).
+v0.2.0 (19 Nov 2026). v0.1.0 was made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026); v0.2.0 adds the changes of Hitchcock Harness up to 66f9435 and a word from Alma at the top of every step.
