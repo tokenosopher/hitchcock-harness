@@ -23,6 +23,8 @@ import { ScenePromptPanel } from '@/components/go/ScenePromptPanel';
 import { useJson } from './postCommon';
 import { cn } from '@/lib/utils';
 import { Feed, OtherClips } from '@/components/feed/Feed';
+import { refData } from '@/components/lib/refPick';
+import { shotRefOf, takeRefOf } from '@/components/shell/refItems';
 
 const FPS = 24;
 
@@ -245,7 +247,7 @@ export function ScenePage() {
                   {shotN > 0 && (
                     <div className="flex gap-1">
                       {Array.from({ length: shotN }, (_, i) => (
-                        <button key={i} type="button" onClick={() => ui.addChip({ id: `shot:${sc.id}-${i + 1}`, label: `${sc.id} · shot ${i + 1}` })}
+                        <button key={i} type="button" onClick={() => ui.addChip({ id: `shot:${sc.id}-${i + 1}`, label: `${sc.id} · shot ${i + 1}` })} {...refData(shotRefOf(sc, i + 1))}
                           className={cn('flex h-11 flex-1 cursor-pointer items-start rounded-[6px] border px-2 pt-1.5 font-mono text-[11.5px]', ui.hasChip(`shot:${sc.id}-${i + 1}`) ? 'border-sub bg-raised text-ink' : 'border-edge bg-panel text-ink-3 hover:border-sub')}>
                           {i + 1}
                         </button>
@@ -296,7 +298,7 @@ export function ScenePage() {
                   {inCut.map((id) => {
                     const t = sc.takes.find((x) => x.id === id);
                     return (
-                      <button key={id} type="button" onClick={() => t && select(t)}
+                      <button key={id} type="button" onClick={() => t && select(t)} {...(t ? refData(takeRefOf(state, sc, t)) : {})}
                         className={cn('flex h-8 flex-1 cursor-pointer items-center truncate rounded-[6px] border border-t-2 bg-panel px-2.5 text-[12px] font-medium', t?.kind === 'pickup' ? 'border-edge border-t-warn' : 'border-edge border-t-sub')}>
                         {takeLabel(id)}
                       </button>
@@ -306,7 +308,7 @@ export function ScenePage() {
               ) : <span className="text-[12.5px] text-mute">{outside.length ? `${state.cut?.name ?? 'The cut'} uses ${outside.length === 1 ? 'a test take' : 'test takes'}, not one of these` : sc.takes.length ? (state.cut ? `None of these is in ${state.cut.name}` : 'No cut yet') : 'No take yet'}</span>}
             </div>
             {takes.map((t) => (
-              <div key={t.id} className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
+              <div key={t.id} className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3" {...refData(takeRefOf(state, sc, t))}>
                 <span className="flex items-center gap-2 text-[12.5px] text-ink-3"><span className="size-1 rounded-full bg-sub" />{takeLabel(t.id)}</span>
                 <TakeBar t={t} seconds={total} selected={take?.id === t.id} inCut={inCut.includes(t.id)} onClick={() => select(t)} />
               </div>

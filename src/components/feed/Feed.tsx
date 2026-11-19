@@ -19,6 +19,8 @@ import { Who } from './Who';
 import { choose, unchoose, useChoice } from '@/components/data/choices';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconFile } from '@/components/shell/icons';
+import { refData } from '@/components/lib/refPick';
+import { cardRefOf } from '@/components/shell/refItems';
 
 interface FeedData { cards: FeedCard[]; total: number; warnings: string[] }
 type ToRepo = (rel: string) => string;
@@ -246,7 +248,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
   if (locked) {
     const p = card.ask!.progress!;
     return (
-      <article aria-label={`${card.title}, in progress`} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-dashed border-edge bg-panel px-4 py-3.5">
+      <article aria-label={`${card.title}, in progress`} {...refData(cardRefOf(card))} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-dashed border-edge bg-panel px-4 py-3.5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span aria-hidden="true" className="size-[7px] flex-none animate-pulse rounded-full bg-sub" />
           {card.id && <span className="font-mono text-[12px] text-mute">{card.id}</span>}
@@ -268,7 +270,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
     );
   }
   return (
-    <article className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
+    <article {...refData(cardRefOf(card))} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span aria-hidden="true" className="box-border size-[7px] flex-none rounded-full border-[1.5px] border-ink bg-bg" />
         {card.id && <span className="font-mono text-[12px] text-sub">{card.id}</span>}

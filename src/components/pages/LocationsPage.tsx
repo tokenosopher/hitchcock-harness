@@ -17,6 +17,8 @@ import { useFilmPage, filmCost, filmPath } from './common';
 import { Media } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
+import { refData } from '@/components/lib/refPick';
+import { viewRefOf } from '@/components/shell/refItems';
 
 export function LocationsPage() {
   const { state, error, ui, base } = useFilmPage();
@@ -134,7 +136,7 @@ export function LocationsPage() {
                   <span className="lbl">Views</span>
                   <div className="grid grid-cols-3 gap-3">
                     {l.views!.map((v) => (
-                      <button key={v.path} type="button" onClick={() => ui.addChip({ id: `view:${l.id}:${v.camera}`, label: `${l.id} · ${v.camera}`, ref: v.path })} className="flex cursor-pointer flex-col gap-1.5 text-left">
+                      <button key={v.path} type="button" {...refData(viewRefOf(state, l, v))} onClick={() => ui.addChip({ id: `view:${l.id}:${v.camera}`, label: `${l.id} · ${v.camera}`, ref: v.path })} className="flex cursor-pointer flex-col gap-1.5 text-left">
                         <Media path={filmPath(state, v.path)} w={640} className="aspect-[16/9] rounded-[7px] border border-edge" /><span className="text-[12.5px] text-ink-3">{v.camera}</span>
                       </button>
                     ))}

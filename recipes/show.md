@@ -150,9 +150,30 @@ Each item is one answer or one pick, exactly as its own message would be: an ans
 
 When the user answers in words instead, do all of it yourself: the `answer` on the card, the whole `taste.md` row, the work.
 
+## References in the user's words
+
+The user can put a thing into a sentence as they write it: they Option-click it on the page, pick it with the button by the message box, press Ctrl-M for the playhead, or choose it from the list that "@" opens. In their message each one reaches you in its place in the words as a tag:
+
+```
+Now <harness-ref kind="clip" label="S6 · take 1 · shot 4" scene="S6" shot="4" take="take 1" track="V1" clip="s6-take~4" cut="v33" rev="412" at="00:01:56:10" sec="116.417" frame="2794" length="5" from="12.6" to="17.6" file="assets/films/the-lighthouse/generations/S6/takes/take1/S6-take1-480p.mp4"/> after <harness-ref kind="moment" label="00:01:52:10 · v33" cut="v33" edited="yes" rev="412" at="00:01:52:10" frame="2698" track="V1" clip="s6-take~3" file="…/S6-take1-480p.mp4" from="9.917" title="S6 · take 1 · shot 3"/>, and hold it to the wave
+```
+
+- `kind`: `clip` (a clip on the timeline), `panel` (a storyboard panel on the timeline), `moment` (the playhead), `take`, `shot` (a scene's shot, or with `take` and `file` a shot of that take), `scene`, `card`, `character`, `view` (a painted view), `location`.
+- `label`: the words the user saw on the chip.
+- The ids: `scene`, `shot`, `take`, `track` and `clip` (the clip's id in the cut file), `card` and its `place`, `character`, `location`, `view`.
+- For things on the timeline and a moment: `cut` is the version the page showed, `edited="yes"` when the working cut had edits since that version, `rev` the working cut's step (the `rev` of `cut/working.json` then). `at` is the place on the cut as a timecode, `sec` and `frame` the same in seconds and frames, `length` in seconds.
+- `file` is relative to the film repo: the take, the clip's source, the panel's picture, the view, the face. `from` and `to` are seconds in that file (a moment's `from` is the frame under the playhead).
+- `title`: a longer name (the card's question, the character's name, the clip under a moment).
+
+Each was frozen when it was put in: a clip names that clip of that version and step, not what sits at that place now. If the cut has changed since, find the clip by its `clip` id in the newest version, and say so when it has moved or gone. Read "this one" or "that one" as the tag beside the words. The chips above the box ("Alma sees", the `selected` list of `<harness-context>`) are everything the user had selected; a tag in the words is the one thing that sentence is about. Answer in words: name a thing by its label, never write the tag back.
+
 ## Before you say "it is up"
 
 - The checks the stage note gives before something counts as presented are done (looked at by you, the checks run). This file adds to them and replaces none.
 - The card is in `review/cards.json` with its `at` and its `updated`, and the page shows it with no warning about the file.
 - Every file the card names exists under the film folder, with a path relative to it. A `/Volumes/…` path or a path outside the film folder does not show.
 - Say in the thread what is up and where ("three takes of the laugh, on S3"), with the card's ID if it asks.
+
+## The reserve switch
+
+Settings has a reserve switch that runs every film's Alma on the user's monthly API credits instead of their Claude plan; you never turn it on yourself. When a usage limit of the plan stops you, the user can turn it on (the thread offers a "Use API credits" button under the limit message, and Settings has the switch) and then send their next message, which you take up in the same session.

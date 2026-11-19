@@ -3,6 +3,7 @@
 // the composer draft and the open task card. Persisted per film in localStorage (step 1).
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Chip } from '@/server/types';
+import { TOKEN_OPEN, type InlineRef } from '@/lib/refs';
 import { useFilm } from './film';
 
 interface UIValue {
@@ -16,6 +17,8 @@ interface UIValue {
   hasChip: (id: string) => boolean;
   clearChips: () => void;
   setDraft: (s: string) => void;
+  /** The chips put into the message's words, by their key in the draft ("\uE000<key>\uE001"). */
+  setDraftRefs: (f: (refs: Record<string, InlineRef>) => Record<string, InlineRef>) => void;
   /** Put a message in the composer instead of acting (buttons that would spend credits do this). */
   prefill: (text: string, chip?: Chip) => void;
   /** Brings Alma's column out and puts the cursor in her box, leaving its words as they are. */
@@ -41,7 +44,15 @@ export interface ComposerHint { placeholder?: string; quick?: string[] }
 const Ctx = createContext<UIValue | null>(null);
 const key = (film: string) => `hh:ui:${film}`;
 
-interface Saved { chips: Chip[]; draft: string }
+interface Saved { chips: Chip[]; draft: string; refs: Record<string, InlineRef> }
+
+/** The chips of the words that the draft still names (the rest went with an edit). */
+function namedRefs(draft: string, refs: Record<string, InlineRef>): Record<string, InlineRef> {
+  if (!draft.includes(TOKEN_OPEN)) return {};
+  const out: Record<string, InlineRef> = {};
+  for (const [k, r] of Object.entries(refs)) if (draft.includes(`${TOKEN_OPEN}${k}`)) out[k] = r;
+  return out;
+}
 
 function load(film: string): Saved {
   try {
@@ -49,16 +60,20 @@ function load(film: string): Saved {
     if (raw) {
       const v = JSON.parse(raw) as Partial<Saved>;
       // a chip a page keeps ("keep:…") is that page's to add again once it has read what it shows
-      return { chips: Array.isArray(v.chips) ? v.chips.filter((c) => !c.id.startsWith('keep:')) : [], draft: typeof v.draft === 'string' ? v.draft : '' };
+      const draft = typeof v.draft === 'string' ? v.draft : '';
+      const refs = v.refs && typeof v.refs === 'object' ? namedRefs(draft, v.refs) : {};
+      return { chips: Array.isArray(v.chips) ? v.chips.filter((c) => !c.id.startsWith('keep:')) : [], draft, refs };
     }
   } catch { /* storage blocked */ }
-  return { chips: [], draft: '' };
+  return { chips: [], draft: '', refs: {} };
 }
 
 export function UIProvider({ film, children }: { film: string; children: React.ReactNode }) {
   const [pinned, setPinned] = useState('');
   const [chips, setChips] = useState<Chip[]>([]);
   const [draft, setDraft] = useState('');
+  const [refs, setRefs] = useState<Record<string, InlineRef>>({});
+  const setDraftRefs = useCallback((f: (refs: Record<string, InlineRef>) => Record<string, InlineRef>) => setRefs(f), []);
   const [openTask, setOpenTask] = useState<string>();
   const [playhead, setPlayhead] = useState<string>();
   const [threadOpen, setThreadOpen] = useState(false);
@@ -97,13 +112,14 @@ export function UIProvider({ film, children }: { film: string; children: React.R
     // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring per-film UI state from storage after mount
     setChips(s.chips);
     setDraft(s.draft);
+    setRefs(s.refs);
     setLoadedFor(film);
   }, [film]);
 
   useEffect(() => {
     if (loadedFor !== film) return;
-    try { localStorage.setItem(key(film), JSON.stringify({ chips, draft })); } catch { /* storage blocked */ }
-  }, [film, loadedFor, chips, draft]);
+    try { localStorage.setItem(key(film), JSON.stringify({ chips, draft, refs: namedRefs(draft, refs) })); } catch { /* storage blocked */ }
+  }, [film, loadedFor, chips, draft, refs]);
 
   // the same thing clicked twice is one chip; a node chip (one id, new label) takes the new label in place
   const addChip = useCallback((c: Chip) => setChips((l) => {
@@ -139,13 +155,13 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   // The draft is not in this value: it changes on every key press, and everything that reads the UI state
   // (the whole thread, every page) would re-render with it. It has its own context, read by the message box only.
   const value = useMemo<UIValue>(() => ({
-    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, prefill, focusBox, undoDraft, redoDraft,
+    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, setDraftRefs, prefill, focusBox, undoDraft, redoDraft,
     openTask, setOpenTask, playhead, setPlayhead, composerRef, threadOpen, setThreadOpen, hint, setHint,
-  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, prefill, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
+  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraftRefs, prefill, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
   // The setters and actions alone, which never change: a page that only writes (the pinned chip, the playhead, a
   // prefill) reads these, so it does not draw itself again each time the pinned chip or the playhead it set changes.
   const actions = useMemo<UIActions>(() => ({ setPinned, setHint, setPlayhead, addChip, removeChip, prefill, focusBox }), [addChip, removeChip, prefill, focusBox]);
-  return <Ctx.Provider value={value}><ActionsCtx.Provider value={actions}><DraftCtx.Provider value={draft}>{children}</DraftCtx.Provider></ActionsCtx.Provider></Ctx.Provider>;
+  return <Ctx.Provider value={value}><ActionsCtx.Provider value={actions}><DraftCtx.Provider value={draft}><RefsCtx.Provider value={refs}>{children}</RefsCtx.Provider></DraftCtx.Provider></ActionsCtx.Provider></Ctx.Provider>;
 }
 
 /** The parts of the UI state a page writes and never reads: stable for the film. */
@@ -160,6 +176,9 @@ export function useUIActions(): UIActions {
 const DraftCtx = createContext('');
 /** The words in the message box. Only the box itself should read this. */
 export const useDraft = (): string => useContext(DraftCtx);
+const RefsCtx = createContext<Record<string, InlineRef>>({});
+/** The chips in the message box's words, by key. Only the box itself should read this. */
+export const useDraftRefs = (): Record<string, InlineRef> => useContext(RefsCtx);
 
 export function useUI(): UIValue {
   const v = useContext(Ctx);

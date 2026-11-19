@@ -15,6 +15,8 @@ import { Media, mediaUrl } from '@/components/media/Media';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
 import { IconCheck } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
+import { refData } from '@/components/lib/refPick';
+import type { InlineRef } from '@/lib/refs';
 
 export type CastPart = 'faces' | 'clothing' | 'sheet' | 'voices' | 'elements';
 export const CAST_PARTS: CastPart[] = ['faces', 'clothing', 'sheet', 'voices', 'elements'];
@@ -45,6 +47,13 @@ export function castLines(c: CharacterRef): CastLine[] {
     { key: 'voices', label: 'Voice', mark: !talks ? 'none' : voiceDone(c) ? 'done' : 'todo' },
     { key: 'elements', label: 'Video element', mark: !talks ? 'none' : c.element?.state === 'final' ? 'done' : c.element?.state === 'draft' ? 'draft' : 'todo' },
   ];
+}
+
+/** A character as a reference for the message's words: its id and name, and its picked face. */
+export function characterRefOf(s: FilmState, c: CharacterRef): InlineRef {
+  const f = facePath(c);
+  const face = f ? repoPath(s.film.folder, s.film.repo, f) : undefined;
+  return { kind: 'character', label: `${c.id} · ${c.name}`, character: c.id, title: c.name, ...(face ? { file: face } : {}) };
 }
 
 /** The picked face's file: the candidate the pick names, else the pick file itself (a character from the library). */
@@ -212,7 +221,7 @@ export function CharacterCards({ s, part, base, onChip }: { s: FilmState; part: 
       {all.map((c) => {
         const lines = castLines(c);
         return (
-          <article key={c.id} data-cast-card={c.id} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-edge bg-panel">
+          <article key={c.id} data-cast-card={c.id} {...refData(characterRefOf(s, c))} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-edge bg-panel">
             <Picture s={s} c={c} part={part} />
             <Link href={`${base}/character/${encodeURIComponent(c.id)}?from=${part}`} onClick={() => onChip?.(`char:${c.id}`, `${c.id} · ${c.name}`)} aria-label={`Open ${c.name}`}
               className="flex min-w-0 flex-1 flex-col gap-1 border-t border-line px-2.5 pb-2.5 pt-2 text-ink no-underline transition-colors duration-150 hover:bg-raised/60">

@@ -19,6 +19,9 @@ import { Media } from '@/components/media/Media';
 import { sceneNow, TONE_BAR, TONE_CHIP, TONE_DOT, type SceneNow } from '@/components/lib/scenes';
 import { cn } from '@/lib/utils';
 import { Feed, ShownLink } from '@/components/feed/Feed';
+import { refData } from '@/components/lib/refPick';
+import { sceneRefOf, takeRefOf } from '@/components/shell/refItems';
+import type { InlineRef } from '@/lib/refs';
 
 interface FeedData { cards: FeedCard[] }
 // a test take: a clip kept under tests/, or a card that calls itself a test
@@ -32,12 +35,12 @@ function tileNames(takes: TakeRef[]): Map<string, string> {
 }
 
 /** One take as a small tile: its frame, or why there is none. The scene's best take is ringed. */
-function TakeTile({ t, name, state, href, best, used, size }: { t: TakeRef; name: string; state: FilmState; href: string; best: boolean; used: boolean; size: string }) {
+function TakeTile({ t, name, state, href, best, used, size, mark }: { t: TakeRef; name: string; state: FilmState; href: string; best: boolean; used: boolean; size: string; mark?: InlineRef }) {
   const box = cn('relative block overflow-hidden rounded-[5px] border transition-[border-color,transform] duration-200 ease-out group-hover/tile:-translate-y-px', size, best ? 'border-ink ring-1 ring-ink' : 'border-edge group-hover/tile:border-sub');
   const what = t.path ? (t.verdict === 'redo' ? 'needs a redo' : t.verdict === 'good' ? 'holds' : t.verdict === 'usable' ? 'usable' : 'landed') : t.stopped ?? 'rendering';
   return (
     <Link href={href} title={`${takeLabel(t.id)}: ${what}${used ? ', in the cut' : ''}${t.finding ? `. ${t.finding}` : t.stoppedWhy ? `. ${t.stoppedWhy}` : ''}`} aria-label={`${takeLabel(t.id)}, ${what}${used ? ', in the cut' : ''}`}
-      className="group/tile relative z-[1] flex flex-none flex-col items-center gap-1 no-underline">
+      {...(mark ? refData(mark) : {})} className="group/tile relative z-[1] flex flex-none flex-col items-center gap-1 no-underline">
       {t.path ? (
         <span className={box}>
           <Media path={filmPath(state, t.path)} w={120} t={0.5} missingLabel="" className="absolute inset-0" />
@@ -90,7 +93,7 @@ function SceneRow({ sc, state, base, now, tests, asks, working, dense }: { sc: S
   const testCap = wide ? 4 : 6;
   const testsShown = tests.length <= testCap ? tests : [...tests.filter(inCutTest), ...tests.filter((c) => !inCutTest(c))].slice(0, testCap).sort((a, b) => tests.indexOf(a) - tests.indexOf(b));
   return (
-    <article id={sc.id} aria-label={`${sc.id} ${sc.title}: ${now.label}`}
+    <article id={sc.id} aria-label={`${sc.id} ${sc.title}: ${now.label}`} {...refData(sceneRefOf(sc))}
       className={cn('group relative flex scroll-mt-4 rounded-[12px] border bg-panel transition-[border-color,background-color] duration-200 ease-out hover:bg-raised/40', asks.length ? 'border-ink/70' : 'border-edge hover:border-edge-strong', dense ? 'gap-3.5 p-2.5' : 'gap-4 p-3.5 max-[560px]:gap-3 max-[560px]:p-3')}>
       {/* the whole row opens the scene; the clip and the tiles sit above this link */}
       <Link href={href} aria-label={`Open ${sc.id}`} className="absolute inset-0 z-0 rounded-[12px]" />
@@ -144,7 +147,7 @@ function SceneRow({ sc, state, base, now, tests, asks, working, dense }: { sc: S
           <div className="pointer-events-auto flex flex-wrap items-start gap-x-2 gap-y-2 pt-1">
             {sc.takes.length > 0 && <span className={cn('flex w-[38px] flex-none items-center text-[11px] text-mute', size.split(' ')[0])}>Takes</span>}
             {hidden > 0 && <Link href={href} title={`${hidden} earlier takes`} className={cn('relative z-[1] flex flex-none items-center px-0.5 text-[11.5px] text-sub no-underline hover:text-ink', size.split(' ')[0])}>+{hidden}</Link>}
-            {shown.map((t) => <TakeTile key={t.id} t={t} name={names.get(t.id) ?? ''} state={state} href={`${href}?take=${encodeURIComponent(t.id)}`} best={t.id === now.best?.id} used={now.inCut.includes(t.id)} size={size} />)}
+            {shown.map((t) => <TakeTile key={t.id} mark={takeRefOf(state, sc, t)} t={t} name={names.get(t.id) ?? ''} state={state} href={`${href}?take=${encodeURIComponent(t.id)}`} best={t.id === now.best?.id} used={now.inCut.includes(t.id)} size={size} />)}
             {tests.length > 0 && (
               <>
                 <span className={cn('ml-2 flex flex-none items-center border-l border-line pl-3 text-[11px] text-mute', size.split(' ')[0])}>Tests</span>
