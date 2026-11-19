@@ -1,5 +1,7 @@
 # Hitchcock Harness
 
+Hitchcock Harness is an open-source, opinionated filmmaking tool, built from the ground up to streamline the process of high-quality AI filmmaking.
+
 <!-- The walkthrough video: the poster below links to it on YouTube (the link goes in the round brackets at the end of the next line). -->
 ![The three-minute walkthrough of Hitchcock Harness](docs/launch-poster.jpg)
 
