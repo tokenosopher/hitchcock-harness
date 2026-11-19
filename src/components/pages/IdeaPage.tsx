@@ -13,6 +13,7 @@ import { PageBody, StageTitle } from '@/components/shell/StageTitle';
 import { Badge, Card, CardHead, Dot } from '@/components/shell/atoms';
 import { CODE_RE, RESERVED_SLUGS, SETUP_DEFAULTS, codeOf, slugOf, type Ratio } from '@/lib/newFilm';
 import { cn } from '@/lib/utils';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 interface Taken { drive: 'connected' | 'not connected'; filmsDir: boolean; slugs: string[]; codes: { code: string; film: string }[] }
 
@@ -149,6 +150,7 @@ export function IdeaPage() {
       <PageBody>
         <StageTitle kicker="Stage 1 · Setup and story" title="The idea"
           sub="Your idea becomes the film's setup and a brief. The Story page opens when the brief is written." />
+        <StepIntro step="idea" lines={0} />
 
         <Card>
           <CardHead label="The idea · as you’d tell it" right="brief.md" />

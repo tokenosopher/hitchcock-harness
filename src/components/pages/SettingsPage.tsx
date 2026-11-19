@@ -16,6 +16,7 @@ import { Reveal } from '@/components/shell/Reveal';
 import { IconArrowUpRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { useJson } from './postCommon';
+import { IntroSettings } from '@/components/intro/IntroSettings';
 
 const PLAN: Record<string, string> = { max: 'Max plan', pro: 'Pro plan', team: 'Team plan', enterprise: 'Enterprise plan' };
 
@@ -143,6 +144,7 @@ export function SettingsPage() {
         </Section>
 
         <ReserveSection initial={s.reserve} />
+        <IntroSettings />
 
         <Section label="Folders" sub="Nothing is copied: the harness reads the folders where they are. The films live in the studio folder.">
           <Row k="Studio folder">

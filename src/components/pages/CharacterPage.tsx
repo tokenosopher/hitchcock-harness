@@ -27,6 +27,7 @@ import type { FlowKey } from '@/components/lib/derive';
 import { StepBar } from '@/components/flow/StepBar';
 import { StepMenu } from '@/components/flow/StepMenu';
 import { glyphOf, type Glyph } from '@/components/flow/FlowBoard';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 export function castStatus(c: CharacterRef, tasks: TaskCard[]): { text: string; dot: DotState } {
   if (c.extra) return { text: c.sheet?.approved ? 'group sheet · done' : 'group sheet · waiting', dot: c.sheet?.approved ? 'done' : 'waiting' };
@@ -241,6 +242,7 @@ export function CharacterPage() {
         <StepBar waiting={flow.waiting} step="Characters" deep back="Back to Characters" backPhoneOnly onBack={() => router.push(back)} onWaiting={() => router.push(`${base}?open=gate`)}
           right={<QCChip spec={qcSpec('sheet')} targets={{ target: c.id, label: `${c.id} sheet`, entry: qcEntry(state, 'sheet', c.id), ready: !!c.sheet?.path, waitsFor: c.sheet?.path ? `${c.id}'s sheet` : faceDone ? 'the sheet' : 'the face pick, then the sheet' }} />} />
 
+        <StepIntro step="character" />
         <div className="flex min-w-0 flex-col gap-5">
           <div className="flex min-w-0 flex-col gap-4">
             {/* the made things in the order the takes use them (ASKS 46): the video element, the sheet, the face, the voice */}

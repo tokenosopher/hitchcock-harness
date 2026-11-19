@@ -9,6 +9,7 @@ import { PageBody, StageTitle, Loading } from '@/components/shell/StageTitle';
 import { Feed } from '@/components/feed/Feed';
 import { CAST_PARTS, CharacterCards, castLine, PART_NAME, type CastPart } from '@/components/characters/Cards';
 import { useFilmPage, filmMeta } from './common';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 export function CharactersPage() {
   const { state, error, ui, base } = useFilmPage();
@@ -21,6 +22,7 @@ export function CharactersPage() {
       <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Characters' }]} meta={filmMeta(state)} phoneSub="Characters" />
       <PageBody wide>
         <StageTitle kicker={`Stages 2 and 3 · ${PART_NAME[part]}`} title="Characters" sub={castLine(state, part)} />
+        <StepIntro step={part} />
         <CharacterCards s={state} part={part} base={base} onChip={(id, label, ref) => ui.addChip({ id, label, ref })} />
         <Feed query="place=faces,clothing,sheet,voices,elements" note="faces, clothing, sheets, voices and elements" from="the Characters page" />
       </PageBody>

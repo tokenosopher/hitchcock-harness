@@ -27,6 +27,7 @@ import { ClosedRelease, OpenRelease } from '@/components/release/ReleaseOpen';
 import { Feed, ShownLink } from '@/components/feed/Feed';
 import { Reveal } from '@/components/shell/Reveal';
 import { releaseWords } from '@/components/lib/flow';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 const KIND_LABEL: Partial<Record<DeliveredFile['kind'], string>> = {
   captioned: 'Captioned · 1080×1920', clean: 'Clean master', 'captioned-480p': 'Phone copy · 480p', srt: 'Subtitles', kit: 'The kit', page: 'Page',
@@ -252,6 +253,7 @@ function KitRelease({ r }: { r: ReleaseInfo }) {
       <PageBody wide>
         <StageTitle kicker="Stage 12 · Release" title="Release" sub={sent ? `Out on ${plural(out.length, 'platform')}. The posts, the finished files, and the thumbnails and copy made for them.` : 'Every line and every post on your word: you pick the thumbnail and each platform’s copy; nothing goes out without your go.'}
           right={<QCChip spec={qcSpec('kit')} targets={{ target: FILM_TARGET, label: 'kit', entry: qcEntry(state, 'kit', FILM_TARGET), ready: !!r.kit, waitsFor: r.kit ? 'the social kit and the platform checklist' : 'social/kit.md' }} />} />
+        <StepIntro step="release" />
 
         {/* ---- the delivery strip */}
         <Card>

@@ -24,6 +24,7 @@ import { PhonePlatform } from './PhoneRelease';
 import { DockProvider, layoutFor, useFadeOn, useTyping, useWidth } from './layout';
 import type { Platform, ReleaseFile } from './file';
 import type { FilmState } from '@/server/types';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 export function PlatformPage() {
   const { film, state, error, base } = useFilmPage();
@@ -77,6 +78,7 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
     <div ref={setWrap} data-layout={layout} className={cn('@container/page flex w-full flex-1 flex-col', !one && 'min-h-0')}>
       <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Release', href: `${base}/release${qs}` }, { label: p.name }]} meta={filmMeta(state)} phoneSub={`Release · ${p.name}`}
         crumbExtra={<Pill className="ml-1 @max-[820px]/page:hidden">final: master of {file.final!.version}</Pill>} actions={<Pill className="h-8">{posted.words}</Pill>} />
+      <StepIntro step="platform" className="px-5 py-3" />
       <Tabs file={file} p={p} now={now} base={base} qs={qs} prev={prev} next={next} sticky={one} />
       <div data-state-line className="flex min-h-[42px] flex-none flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line px-5 py-2 text-[12.5px] text-sub">
         <StateWords st={st} big className="flex-wrap whitespace-normal" />

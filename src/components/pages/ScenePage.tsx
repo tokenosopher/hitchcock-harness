@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { Feed, OtherClips } from '@/components/feed/Feed';
 import { refData } from '@/components/lib/refPick';
 import { shotRefOf, takeRefOf } from '@/components/shell/refItems';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 const FPS = 24;
 
@@ -201,6 +202,7 @@ export function ScenePage() {
           <span className="lbl">Stages 6 to 8 · {sc.id} {sc.title}</span>
           <h1 className="m-0 text-[20px] font-semibold tracking-[-0.02em]">{sc.id} · {sc.title}</h1>
           <p className="m-0 text-[13px] text-sub">Scene {index + 1} of {state.scenes.length}{inCut.length ? ` · in ${cutNameAhead}: ${inCutText}` : outside.length ? ` · ${cutNameAhead} uses ${outside.length === 1 ? 'a test take' : `${outside.length} test takes`} of this scene, shown under Test takes` : sc.takes.length ? (state.cut ? ` · none of its takes is in ${cutNameAhead}` : ' · no cut yet') : ' · no take yet'}{cutFrom}</p>
+          <StepIntro step="scene" className="pt-2.5" />
         </div>
         <QCChip spec={qcSpec('take')} targets={takeCheck(state, sc, misses)} />
       </div>

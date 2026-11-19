@@ -16,6 +16,7 @@ No button in the app spends credits by itself. A button either records your choi
 - **In the middle: the film.** Its main page opens on a board called "The flow", one tile for each step (story, locations, faces, clothing, voices, previz, the edit, the release), each marked done, being made, or yours to look at. Click a tile to open that step's page. The pages show what is in the film's folder; nothing has to be saved or refreshed.
 - **On the right: the chat with Alma**, always open. One conversation per film, kept from the first idea to the release.
 - **Waiting for you**, on the film's main page: the list of things only you can decide (a pick, a yes, a go). When you don't know what to do next, look here first.
+- **A word from Alma at the top of every step.** Each step's page opens with a few lines from her: what you do there, and why it comes at that point of the film. **Hide** under it hides that step's intro, and the small **A** left in its place brings it back; **Hide all intros** hides every one. The switch **Step intros** in Settings brings them all back.
 
 ## The film, step by step
 

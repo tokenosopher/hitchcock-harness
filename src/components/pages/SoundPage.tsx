@@ -18,6 +18,7 @@ import { finalsFirst } from '@/components/media/Shelf';
 import { cn } from '@/lib/utils';
 import { filmMeta, filmPath, useFilmPage } from './common';
 import { fmtBytes, PanelHead, useJson } from './postCommon';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 const FIRST = 6;
 
@@ -103,6 +104,7 @@ export function SoundPage() {
         <StageTitle kicker="Stage 11 · Sound and music" title="Sound"
           sub={settled ? 'The music, effects, voice fixes and mixes made for this film, by folder, then the rounds Alma played you.'
             : 'Music, effects, voice fixes and the mix. A round to choose from waits here until you answer it; the rest is what Alma has played you and what the folders hold.'} />
+        <StepIntro step="sound" />
 
         {final && (
           <Card className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-[13px]">

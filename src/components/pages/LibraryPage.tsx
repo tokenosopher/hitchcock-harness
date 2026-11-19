@@ -17,6 +17,7 @@ import { audioOf, fileUrl, KIND_FOLDER, useLibrary, type LibraryItem, type Libra
 import type { FilmRef } from '@/server/types';
 import { cn } from '@/lib/utils';
 import { usePresence } from '@/components/shell/Reveal';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 type Tab = 'faces' | 'voices' | 'characters' | 'locations';
 const TABS: { t: Tab; name: string; kind: LibraryKind }[] = [
@@ -148,6 +149,7 @@ export function LibraryPage() {
       <PageBody wide>
         <StageTitle kicker="Library · across all films" title={name}
           sub="Everything picked or saved in any film. Reuse a face, a voice or a place instead of generating it again; every pick made in the harness lands here by itself." />
+        <StepIntro step="library" />
 
         <div role="tablist" aria-label="Library sections" className="scroll flex gap-[18px] overflow-x-auto border-b border-line">
           {TABS.map((x) => (
