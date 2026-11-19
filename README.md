@@ -128,6 +128,10 @@ Four things run on your Mac and cost nothing: laying out each scene's rough prev
 - **Alma does not answer**: check you are signed in to Claude (run `claude` in a Terminal). The Settings page shows the login and whether Higgsfield is set up.
 - **Higgsfield errors**: run `claude`, type `/mcp`, and sign in to higgsfield again.
 
+## Licence
+
+Hitchcock Harness is open source under the MIT licence: see `LICENSE`. The Poppins typeface used for subtitles (`studio/brand/fonts/`) is under the SIL Open Font License; its text is in `OFL.txt` beside it.
+
 ---
 
 v0.2.0 (19 Nov 2026). v0.1.0 was made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026); v0.2.0 adds the changes of Hitchcock Harness up to 66f9435, its unit checks as of 0dab272, and a word from Alma at the top of every step.
