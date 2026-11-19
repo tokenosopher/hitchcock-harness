@@ -27,7 +27,10 @@ function scriptSection(md: string): string | undefined {
   return lines.slice(start + 1, end).join('\n');
 }
 
-const LINE = /^\*\*([^*]+?):?\*\*\s*(?:\*\([^)]*\):?\*\s*)?:?\s*["“](.*)["”]\s*$/;
+const LINE = /^\*\*([^*]+?):?\*\*\s*(?:\*\(([^)]*)\):?\*\s*)?:?\s*["“](.*)["”]\s*$/;
+/** A line's direction that says it is heard over the picture, not spoken in the scene ("over the picture", "V.O.",
+ *  "voice-over"): a narrator's line, laid in the edit, which no previz take speaks. */
+export const VOICE_OVER = /\bover the (?:picture|pictures|image|scene|shot)\b|\bV\.\s?O\.?(?![a-z])|\bvoice[- ]?over\b/i;
 const ACTION = /^`\[(\d+(?:\.\d+)?)\s*s\]`\s*(.*)$/;
 
 /** script.md as the planned parts read it: the locked version, the pace it names, and per scene its title, its lines
@@ -51,7 +54,7 @@ export function parseScript(md: string): { locked?: { version: string; date?: st
     const a = ACTION.exec(l);
     if (a) { cur.items.push({ text: a[2].trim(), secs: Number(a[1]) }); continue; }
     const m = LINE.exec(l);
-    if (m) { cur.items.push({ who: m[1].trim(), text: m[2].trim() }); continue; }
+    if (m) { cur.items.push({ who: m[1].trim(), text: m[3].trim(), ...(m[2] && VOICE_OVER.test(m[2]) ? { vo: true } : {}) }); continue; }
     // the scene's timing row: | S1 | 2 | 19 | 6 | 19 ÷ 2.9 + 0.5 + 6 = 13.1 → 13 | 0:13 |
     if (l.startsWith('|')) {
       const cells = l.split('|').slice(1, -1).map((c) => c.trim());

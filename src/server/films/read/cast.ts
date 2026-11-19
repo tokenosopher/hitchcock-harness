@@ -19,6 +19,10 @@ export interface CharacterExtra {
 /** The side channel is `more` here: the contract's `extra` already means "an extra (no voice)". */
 export type CharacterRefX = CharacterRef & { more: CharacterExtra };
 
+/** A raw Higgsfield id in brackets ("preset voice (b483a172-…)", as tools/voices/hf_candidates.py writes a brief it
+ *  was not given): a person reads the words, never the id. */
+const UUID_NOTE = /\s*\((?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+
 const CAST_DIR = /^(C\d+[a-z]?(?:-C\d+[a-z]?)*)-(.+)$/;
 
 function kindOf(roundName: string): Kind {
@@ -154,7 +158,7 @@ function voiceFor(ctx: FilmCtx, cid: string, vf: VoiceFiles, rows: TastePickX[],
       path: file && present.has(file) ? file : undefined,
       hz: asNumber(r.f0),
       seconds: asNumber(r.seconds),
-      note: asString(r.brief) ?? asString(r.round),
+      note: (asString(r.brief) ?? asString(r.round))?.replace(UUID_NOTE, '') || undefined,
     });
   });
   const known = new Set(rounds.flatMap((r) => r.candidates.map((c) => c.id)));
@@ -207,8 +211,9 @@ async function elementFor(ctx: FilmCtx, cid: string, dirName: string, elements: 
   // the record first: elements.json's video_element of the character, else of its first look that has a file
   for (const k of keys) {
     const fromJson = asRecord(asRecord(elements?.[k])?.video_element);
-    let f = asString(fromJson?.final_file);
-    let d = asString(fromJson?.draft_file);
+    // an empty string is a field left blank ("final_file": "" on a film with no 1080p): no file, not a file named ""
+    let f = asString(fromJson?.final_file) || undefined;
+    let d = asString(fromJson?.draft_file) || undefined;
     if (f && !(await exists(abs(ctx, f)))) f = undefined;
     if (d && !(await exists(abs(ctx, d)))) d = undefined;
     if (f || d) { final = f; draft = d; break; }

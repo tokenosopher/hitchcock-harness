@@ -25,6 +25,7 @@
     "marks:test": "tsx scripts/marks-test.ts",
     "ondemand:test": "tsx scripts/ondemand-test.ts",
     "left:test": "tsx scripts/left-test.ts",
+    "pages:test": "tsx scripts/pages-test.ts",
     "cast:test": "tsx scripts/cast-test.ts",
     "board:test": "tsx scripts/board-test.ts",
     "samecut:test": "tsx scripts/samecut-test.ts",

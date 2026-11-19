@@ -2,7 +2,7 @@
 // the empty views (newest version per camera), and the props.
 import type { LocationRef, Round } from '../../types';
 import type { TastePickX } from './taste';
-import { abs, IMAGE_RE, isoDay, list, natCmp, statOf, titleCase, type FilmCtx } from '../util';
+import { abs, IMAGE_RE, isoDay, list, natCmp, sameFile, statOf, titleCase, type FilmCtx } from '../util';
 
 export interface LocationExtra {
   picks: { file: string; candidateId: string }[];    // "L01-shore-pick-u5b-2.png" → u5b-2 (the contract's Round has no pick)
@@ -58,6 +58,22 @@ export async function readLocations(
         candidates: imgs.map((f) => ({ id: f.name.replace(/\.[^.]+$/, '').replace(new RegExp(`^${lid}(-${slug})?-`), ''), path: `${folder}/${e.name}/${f.name}` })),
       });
     }
+    // the round the flow itself files (Flow 4, Outputs): the candidates loose at the root next to the pick
+    // "<L>-<slug>-pick.png", no round folder; a candidate is an image with no version that is not a pick, master,
+    // plan, top or staging ("L01-lamp-room-cand-A.png")
+    const flowPick = entries.filter((e) => !e.dir && /-pick(-v\d+)?\.(png|jpe?g|webp)$/i.test(e.name)).map((e) => e.name).sort(natCmp).pop();
+    if (flowPick) {
+      const loose = entries.filter((e) => !e.dir && IMAGE_RE.test(e.name) && !/-v\d+(?![\d])/.test(e.name) && !/pick|master|plan|top|staging/i.test(e.name));
+      if (loose.length) {
+        const st = await statOf(abs(ctx, `${folder}/${loose[0].name}`));
+        const pickSize = (await statOf(abs(ctx, `${folder}/${flowPick}`)))?.size;
+        const candidates: Round['candidates'] = loose.map((f) => ({ id: f.name.replace(/\.[^.]+$/, '').replace(new RegExp(`^${lid}(-${slug})?-`), '').replace(/^cand(?:idate)?-/i, ''), path: `${folder}/${f.name}` }));
+        const round: Round = { id: 'r1', date: st ? isoDay(st.mtime) : undefined, candidates };
+        if (pickSize !== undefined)
+          for (const c of candidates) if (!round.pick && c.path && (await sameFile(abs(ctx, `${folder}/${flowPick}`), abs(ctx, c.path), pickSize))) round.pick = c.id;
+        if (!styleImages.some((r) => r.id === round.id)) styleImages.push(round);
+      }
+    }
     // picks at the root: "<L>-<slug>-pick-<candidate>.png"
     const picks = entries
       .filter((e) => !e.dir && /-pick-/.test(e.name))
@@ -77,7 +93,9 @@ export async function readLocations(
     const all = await imagesUnder(ctx, folder, 1);
     const masters = all.filter((p) => /master/i.test(p.split('/').pop()!) && !/staging/i.test(p)).sort(natCmp);
     const rootMaster = entries.find((e) => !e.dir && /-master\.(png|jpe?g)$/i.test(e.name));
-    const masterPath = rootMaster ? `${folder}/${rootMaster.name}` : masters[masters.length - 1];
+    // before any master is painted, the picked picture is the place's main image (Flow 4: "the pick L0N-<name>-pick.png")
+    const masterPath = rootMaster ? `${folder}/${rootMaster.name}` : masters[masters.length - 1] ?? (flowPick ? `${folder}/${flowPick}` : undefined);
+    const fromPick = !rootMaster && !masters.length && !!flowPick;
     const approvedInTaste = taste.some((t) => new RegExp(`^${lid}\\b.*master`, 'i').test(t.what) && /approved|yes|correct/i.test(t.pick));
     const top = all.filter((p) => /-top(-v\d+)?\.(png|jpe?g)$/i.test(p)).sort(natCmp).pop();
 
@@ -113,7 +131,7 @@ export async function readLocations(
       name: sceneLocations.get(lid) ?? names.get(lid) ?? titleCase(slug),
       folder,
       styleImages: styleImages.length ? styleImages : undefined,
-      master: masterPath ? { path: masterPath, picked: !!rootMaster || approvedInTaste, ...(measured(masterPath) ? { measured: true } : {}) } : undefined,
+      master: masterPath ? { path: masterPath, picked: !!rootMaster || approvedInTaste || fromPick, ...(measured(masterPath) ? { measured: true } : {}) } : undefined,
       views: views.length ? views : undefined,
       ...(plates.length ? { plates } : {}),
       props: [],

@@ -19,7 +19,7 @@ import { invalidateFilmState } from '../films/state';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
 import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, locationDraft, roundFolders, voiceDraft, type FilmInfo } from '../library/sources';
 import { filmTarget, type FilmTarget } from './film';
-import { appendTasteRow, candidatesCell, type TasteRow } from './taste';
+import { appendTasteRow, candidatesCell, pickedWhere, type TasteRow } from './taste';
 import { isFile, nextVersion, Writer, type WriteRecord } from './writes';
 
 export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take';
@@ -237,7 +237,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
     const folder = await idFolder(info, 'cast', target);
     const name = folder ? await charName(ft, target, folder.slug) : target;
     choice = `${target} ${name} voice`;
-    const words = input.note ? `The user, ${day(date)}: "${input.note}"` : `The user, ${day(date)}, picked on ${where} of Hitchcock Harness`;
+    const words = input.note ? `The user, ${day(date)}: "${input.note}"` : `The user, ${day(date)}, picked ${pickedWhere(where)}`;
     if (libEntry) {
       const v = libEntry.meta.voice;
       if (!v?.voiceId || v.voiceIdKind !== 'saved voice') throw new PickError(`library voice ${libEntry.meta.id} is a design preview, not a saved Higgsfield voice: ask Alma to save it first`, 409);
@@ -321,7 +321,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   const pickId = candidate.replace(/^option /, '');
   const row: TasteRow = {
     date, film: ft.title, choice, candidates: candidatesText, pick: candidate, pickNote,
-    words: input.note ? `"${input.note}"` : `– (picked on ${where} of Hitchcock Harness)`,
+    words: input.note ? `"${input.note}"` : `– (picked ${pickedWhere(where)})`,
     predicted,
     right: prediction !== undefined ? prediction === pickId || prediction === candidate : undefined,
   };
