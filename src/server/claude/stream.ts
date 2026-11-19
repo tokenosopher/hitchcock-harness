@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { ThreadEvent } from '../types';
 import { redact, redactDeep } from './redact';
 import { oneLine, resultSummary, toolSummary } from './summarize';
-import { TaskTracker } from './tasks';
+import { resumedAgent, TaskTracker } from './tasks';
 
 type Json = Record<string, unknown>;
 
@@ -35,6 +35,7 @@ export class StreamParser {
   private textCount = new Map<string, number>();                     // msgId → text blocks numbered so far (partials)
   private finalTextCount = new Map<string, number>();                // msgId → text blocks numbered so far (finals)
   private seenDenials = new Set<string>();
+  private sends = new Map<string, string | undefined>();             // SendMessage tool_use id → its summary
   private initSeen = false;
 
   constructor(tasks?: TaskTracker) {
@@ -210,6 +211,7 @@ export class StreamParser {
           out.push({ kind: 'task', id: card.id, at, task: card });
         } else {
           out.push({ kind: 'tool_use', id: tid, at, name, summary: toolSummary(name, b.input), input: redactDeep(b.input) });
+          if (name === 'SendMessage') this.sends.set(tid, s(obj(b.input).summary));
           if (name === 'TaskStop') {
             const card = this.tasks.stopped(s(obj(b.input).task_id) ?? s(obj(b.input).shell_id), at);
             if (card) out.push({ kind: 'task', id: card.id, at, task: card });
@@ -242,6 +244,14 @@ export class StreamParser {
         continue;
       }
       out.push({ kind: 'tool_result', id: `result:${tuid}`, at, toolUseId: tuid, summary: resultSummary(b.content, ok), ok });
+      if (this.sends.has(tuid)) {
+        // SendMessage woke a finished sub-agent: its card runs again
+        const summary = this.sends.get(tuid);
+        this.sends.delete(tuid);
+        const agentId = ok ? resumedAgent(b.content, msg.tool_use_result) : undefined;
+        const card = agentId ? this.tasks.resumed(tuid, agentId, summary, at) : undefined;
+        if (card) out.push({ kind: 'task', id: card.id, at, task: card });
+      }
     }
     return out;
   }

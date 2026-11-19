@@ -19,6 +19,20 @@ import { useTyping } from './typing';
 import { useHydrated, useSize } from '@/components/lib/sizes';
 import { Edge } from './Edge';
 import { uploadImage } from '@/components/lib/uploads';
+import { usePresence } from './Reveal';
+import { isUsageLimitText } from '@/server/claude/limit';
+import { UserWords } from './RefCard';
+import { hasRefTags, splitRefTags, type InlineRef } from '@/lib/refs';
+import type { Chip } from '@/server/types';
+
+/** A selected chip ("Alma saw") that names the same thing as a chip in the words is shown once, in the words. */
+function sameThing(c: Chip, refs: InlineRef[]): boolean {
+  return refs.some((r) => (r.kind === 'clip' || r.kind === 'panel') && r.track && r.clip ? c.id === `clip:${r.track}:${r.clip}`
+    : r.kind === 'take' && r.take ? c.id === `take:${r.take}`
+      : r.kind === 'shot' && r.scene && r.shot && !r.take ? c.id === `shot:${r.scene}-${r.shot}`
+        : r.kind === 'character' && r.character ? c.id === `char:${r.character}`
+          : false);
+}
 
 type Row =
   | { kind: 'divider'; key: string; text: string }
@@ -99,8 +113,50 @@ function Working({ since }: { since: number }) {
   );
 }
 
+/** Beside the model picker, only while the reserve switch is on: Alma runs on the API credits, not the plan.
+ *  It slides open and fades, both ways. */
+function ReserveMarker({ reserve }: { reserve?: { on: boolean; onKey: boolean } }) {
+  const open = !!reserve?.on;
+  const { mounted, shown, done } = usePresence(open);
+  // the words of the last open state stay while it closes
+  const [pending, setPending] = useState(false);
+  if (open && pending !== !reserve.onKey) setPending(!reserve.onKey);
+  if (!mounted) return null;
+  return (
+    <span onTransitionEnd={(e) => { if (e.target === e.currentTarget && e.propertyName === 'opacity') done(); }}
+      title="Alma is running on your API credits, not your plan. Turn it off in Settings."
+      className={cn('flex-none cursor-default overflow-hidden text-right text-[11px] leading-[1.25] text-sub transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none', shown ? 'max-w-[96px] opacity-100' : 'max-w-0 opacity-0')}>
+      <span className="block w-max max-w-[96px]">{pending ? 'API credits from her next turn' : 'API credits'}</span>
+    </span>
+  );
+}
+
+/** One line under a turn that a plan limit stopped, while a key is saved and the reserve is off. */
+function ReserveOffer({ onUse }: { onUse: () => Promise<{ ok: boolean; error?: string }> }) {
+  const [state, setState] = useState<{ busy?: boolean; error?: string }>({});
+  return (
+    <div className="flex flex-col gap-1.5 pl-8 text-[11.5px] leading-normal text-sub duration-200 animate-in fade-in motion-reduce:animate-none">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <span>The plan’s limit is reached. Alma can carry on with your API credits.</span>
+        <button type="button" disabled={state.busy} onClick={async () => { setState({ busy: true }); const r = await onUse(); setState(r.ok ? {} : { error: r.error }); }}
+          className="h-6 flex-none cursor-pointer rounded-[6px] border border-edge bg-transparent px-2 text-[11.5px] font-medium text-ink transition-colors hover:bg-raised disabled:cursor-default disabled:opacity-60">
+          Use API credits
+        </button>
+      </div>
+      {state.error && <span className="text-bad">{state.error}</span>}
+    </div>
+  );
+}
+
+/** True when the last turn (after the last user message) ended with Claude Code's usage-limit words. */
+function lastTurnHitLimit(events: ThreadEvent[]): boolean {
+  let i = events.length - 1;
+  while (i >= 0 && events[i].kind !== 'user') i--;
+  return events.slice(i + 1).some((e) => (e.kind === 'assistant_text' || e.kind === 'error' || e.kind === 'system') && isUsageLimitText(e.text));
+}
+
 export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: () => void }) {
-  const { events, loaded, tasks, error, workingSince, model, setModel } = useThread();
+  const { events, loaded, tasks, error, workingSince, model, setModel, reserve, turnOnReserve } = useThread();
   const threadW = useSize('thread');
   const ready = useHydrated();
   const { state } = useFilm();
@@ -136,6 +192,8 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
     if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
   };
   const working = workingSince !== undefined;
+  const hitLimit = useMemo(() => lastTurnHitLimit(events), [events]);
+  const offerReserve = hitLimit && !working && !!reserve?.hasKey && !reserve.on;
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
@@ -211,6 +269,7 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
           <span className="truncate text-[12px] text-sub" title={subTitle}>{sub || '\u00a0'}</span>
         </div>
         <NotifyToggle />
+        <ReserveMarker reserve={reserve} />
         <label className="sr-only" htmlFor="alma-model">The model Alma runs on</label>
         <select id="alma-model" value={model.choice} onChange={(e) => void setModel(e.target.value as AlmaModel)}
           title={`The model Alma runs on, from her next turn. ${model.choice ? '' : `Default is Claude Code's own setting${model.fallback ? ` (${model.fallback})` : ''}. `}${model.served ? `Running now: ${model.served}.` : ''}`}
@@ -303,11 +362,13 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
               if (e.kind === 'user') {
                 return (
                   <div key={r.key} className="flex max-w-[88%] flex-col items-end gap-[5px] self-end">
-                    <div className="max-w-full whitespace-pre-wrap rounded-[14px_14px_4px_14px] [overflow-wrap:anywhere] bg-bubble px-[13px] py-[9px] text-[13.5px] leading-normal text-ink">{e.text}</div>
+                    {/* the user's words, with the things they put into them drawn as chips */}
+                    <div className={cn('max-w-full whitespace-pre-wrap rounded-[14px_14px_4px_14px] [overflow-wrap:anywhere] bg-bubble px-[13px] py-[9px] text-[13.5px] text-ink', hasRefTags(e.text) ? 'leading-[1.6]' : 'leading-normal')}><UserWords text={e.text} film={film} /></div>
                     {/* what Alma saw with this message: the chips that went with it */}
                     {e.context && e.context.selected.length > 0 && (() => {
+                      const inline = hasRefTags(e.text) ? splitRefTags(e.text).filter((p): p is InlineRef => typeof p !== 'string') : [];
                       const pictures = e.context.selected.filter((c) => uploadImage(c));
-                      const seen = e.context.selected.filter((c) => !uploadImage(c));
+                      const seen = e.context.selected.filter((c) => !uploadImage(c) && !sameThing(c, inline));
                       // pictures the user attached show as pictures, above the rest
                       const shown = pictures.length > 0 && (
                         <div className="flex max-w-full flex-wrap justify-end gap-1.5">
@@ -394,6 +455,7 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
               }
               return <Fragment key={r.key} />;
             })}
+            {offerReserve && <ReserveOffer onUse={turnOnReserve} />}
             {working && <Working since={workingSince} />}
           </div>
         </div>

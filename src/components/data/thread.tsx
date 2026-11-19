@@ -23,10 +23,14 @@ interface ThreadValue {
   /** The model this film's Alma runs on: the choice ('' = Claude Code's own setting), what that setting is, and what the CLI last reported. */
   model: { choice: AlmaModel; fallback?: string; served?: string };
   setModel: (m: AlmaModel) => Promise<boolean>;
+  /** The reserve switch, as the server last told it; undefined until it has. */
+  reserve?: NonNullable<ThreadInfo['reserve']>;
+  /** Turns the reserve on (the offer under a usage-limit message); false with the reason when the server refused. */
+  turnOnReserve: () => Promise<{ ok: boolean; error?: string }>;
   /** Interrupts Alma's current turn (DELETE on the thread route); the server also drops the messages queued behind it. */
   stop: () => Promise<boolean>;
 }
-const Ctx = createContext<ThreadValue>({ events: [], loaded: false, tasks: [], sending: false, send: async () => false, stop: async () => false, model: { choice: '' }, setModel: async () => false });
+const Ctx = createContext<ThreadValue>({ events: [], loaded: false, tasks: [], sending: false, send: async () => false, stop: async () => false, model: { choice: '' }, setModel: async () => false, turnOnReserve: async () => ({ ok: false }) });
 
 const FAST_POLL_MS = 2000;
 const FAST_POLL_FOR_MS = 180_000;
@@ -85,6 +89,7 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
   const [events, setEvents] = useState<ThreadEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [model, setModelState] = useState<ThreadValue['model']>({ choice: '' });
+  const [reserve, setReserve] = useState<ThreadValue['reserve']>();
   const [error, setError] = useState<string>();
   const [sending, setSending] = useState(false);
   const [workingSince, setWorkingSince] = useState<number>();
@@ -135,11 +140,12 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
     es.onopen = heard;
     es.addEventListener('ping', heard);
     const takeInfo = (i: ThreadInfo) => { if (live) setModelState({ choice: i.model ?? '', fallback: i.defaultModel, served: i.servedModel }); };
-    fetch(`/api/films/${film}/thread?info=1`, { cache: 'no-store' }).then(async (r) => { if (r.ok) takeInfo((await r.json()) as ThreadInfo); }).catch(() => undefined);
+    const takeReserve = (i: ThreadInfo) => { if (live && i.reserve) setReserve(i.reserve); };
+    fetch(`/api/films/${film}/thread?info=1`, { cache: 'no-store' }).then(async (r) => { if (r.ok) { const i = (await r.json()) as ThreadInfo; takeInfo(i); takeReserve(i); } }).catch(() => undefined);
     es.addEventListener('info', (m) => {
       heard();
       // the first frame of a stream can come before the saved choice is read: only a frame that knows the default counts
-      try { const i = JSON.parse((m as MessageEvent<string>).data) as ThreadInfo; if (i.defaultModel !== undefined || i.model) takeInfo(i); } catch { /* a partial frame */ }
+      try { const i = JSON.parse((m as MessageEvent<string>).data) as ThreadInfo; if (i.defaultModel !== undefined || i.model) takeInfo(i); takeReserve(i); } catch { /* a partial frame */ }
     });
     // Events are applied in batches, a few hundredths of a second apart: on connect the stream replays up to 500
     // events, which were 500 renders of the whole thread, and a task replayed as running and then as finished
@@ -251,7 +257,19 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
     setModelState(before);
     return false;
   }, [film, model]);
-  const value = useMemo(() => ({ events: costed, loaded, tasks, error, sending, workingSince, send, stop, model, setModel }), [costed, loaded, tasks, error, sending, workingSince, send, stop, model, setModel]);
+  const turnOnReserve = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const r = await fetch('/api/settings/reserve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: true }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; on?: boolean; hasKey?: boolean };
+      if (!r.ok) return { ok: false, error: j.error ?? `The harness answered ${r.status}` };
+      // the server's info frame follows with what this Alma runs on; meanwhile it reads as from her next turn
+      setReserve((x) => ({ on: true, hasKey: j.hasKey ?? true, onKey: x?.onKey ?? false }));
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'The harness server is not answering' };
+    }
+  }, []);
+  const value = useMemo(() => ({ events: costed, loaded, tasks, error, sending, workingSince, send, stop, model, setModel, reserve, turnOnReserve }), [costed, loaded, tasks, error, sending, workingSince, send, stop, model, setModel, reserve, turnOnReserve]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -2,14 +2,17 @@
 // Settings: where Alma runs (the Claude Code login, account type only), her
 // permission mode, the folders and the studio folder, which services she can call (key names only, never a value),
 // the setup defaults (read-only for now) and the tunnel for the phone. Its thread is its own Alma session,
-// keyed "settings". Nothing here changes a setting: the buttons put a message in the composer.
+// keyed "settings". Nothing here changes a setting but the reserve switch: the other buttons put a message in the composer.
+import { useState } from 'react';
 import type { FolderFact, ServiceFact, SettingsInfo } from '@/server/settings';
+import type { ReserveView } from '@/server/claude/reserve';
 import { QC_LOCK_SCORE, QC_MAX_ROUNDS } from '@/server/types';
 import { usePage, useUI } from '@/components/data/ui';
 import { fmtDate } from '@/components/lib/format';
 import { Header } from '@/components/shell/Header';
 import { Loading, PageBody, StageTitle } from '@/components/shell/StageTitle';
 import { Btn, Card } from '@/components/shell/atoms';
+import { Reveal } from '@/components/shell/Reveal';
 import { IconArrowUpRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { useJson } from './postCommon';
@@ -39,6 +42,53 @@ function Section({ label, sub, children }: { label: string; sub: string; childre
       </div>
       {children}
     </Card>
+  );
+}
+
+/** The reserve switch: Alma on the plan (off) or on the API key saved in .env.local (on). */
+function ReserveSection({ initial }: { initial: ReserveView }) {
+  const [view, setView] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  async function flip() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const r = await fetch('/api/settings/reserve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: !view.on }) });
+      const j = (await r.json().catch(() => ({}))) as ReserveView & { error?: string };
+      if (r.ok) setView(j);
+      else setError(j.error ?? `The harness answered ${r.status}.`);
+    } catch {
+      setError('The harness server is not answering.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  const blocked = !view.hasKey && !view.on;
+  return (
+    <Section label="Reserve: API credits" sub="Alma runs on your Claude plan. Turn this on to run her on your monthly API credits instead, for when the plan’s weekly limit is reached.">
+      <Row k="API credits"
+        action={
+          <button type="button" role="switch" aria-checked={view.on} aria-label="Run Alma on your API credits" disabled={busy || blocked} onClick={() => void flip()}
+            className={cn('relative block h-[18px] w-8 flex-none cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50', view.on ? 'border-ink bg-ink' : 'border-edge-strong bg-panel')}>
+            <span className={cn('absolute top-[2px] size-3 rounded-full transition-all', view.on ? 'left-[16px] bg-bg' : 'left-[2px] bg-sub')} />
+          </button>
+        }>
+        <Lamp on={view.on} />{view.on ? 'On · Alma runs on your API credits' : 'Off · Alma runs on your plan'}
+        {blocked && <span className="block text-[12px] text-sub">No key saved yet. Add <span className="font-mono text-[11.5px]">HARNESS_RESERVE_API_KEY</span> to <span className="font-mono text-[11.5px]">.env.local</span> in the harness folder, with an API key from your Claude Console organization.</span>}
+        <Reveal open={view.on}>
+          <span className="block text-[12px] text-sub">On since {fmtDate(view.since)}. Spent this month: about ${view.spentThisMonth.toFixed(2)}, by Claude Code’s own count; the Console has the exact figure.</span>
+        </Reveal>
+        <Reveal open={!!error}>
+          <span role="alert" className="block text-[12px] text-bad">{error}</span>
+        </Reveal>
+      </Row>
+      <Reveal open={view.on}>
+        <p className="m-0 border-t border-line px-4 py-3 text-[12.5px] leading-normal text-sub">
+          Connectors that come from claude.ai (Notion, Gmail, Docs) are not available to Alma while this is on.
+        </p>
+      </Reveal>
+    </Section>
   );
 }
 
@@ -91,6 +141,8 @@ export function SettingsPage() {
             Re-check the plan terms before relying on it: the support article “Use the Claude Agent SDK with your Claude plan” and “Legal and compliance” in the Claude Code docs.
           </p>
         </Section>
+
+        <ReserveSection initial={s.reserve} />
 
         <Section label="Folders" sub="Nothing is copied: the harness reads the folders where they are. The films live in the studio folder.">
           <Row k="Studio folder">

@@ -15,13 +15,16 @@ import { claudeCodeDefaultModel, getAlmaModel, setAlmaModel } from './model';
 import { getSession, updateSession } from './sessions';
 import { StreamParser } from './stream';
 import { recordInit } from './lastInit';
+import { addReserveSpend, almaEnv, hasReserveKey, readReserve, reserveKeyForStart } from './reserve';
 import { TaskTracker } from './tasks';
+import { EARLIER_NOTE, EARLIER_STOPPED, endEarlier, recordExit, recordSession, recordStart, recordedFilms, type EarlierResult } from './procs';
 
 /** Told to Alma once per session (recorded with the system prompt). Says what the harness adds, nothing about films. */
 export const ALMA_APPEND_PROMPT = [
   'You are Alma, the agent of Hitchcock Harness, a web app the user works in instead of the terminal.',
   'The film rules are in the studio folder you run in (flow/), loaded with the studio-film skill from its .claude/skills. If a skill named plain "film" is also listed on this machine, it belongs to another setup: never load it and never read rules from anywhere but this studio.',
   'Each user message may start with a <harness-context ...> block: the film, the page the user is on, the pinned summary and the things they clicked (selected). Read it as what they are looking at; do not repeat it back.',
+  `Inside the user's words a <harness-ref kind="..." label="..." .../> tag is one thing they put into that sentence as they wrote it (a clip, a storyboard panel, a moment of the cut, a take, a shot, a scene, a card, a character, a view): its ids, and for the timeline the cut version and step, the time and the file, frozen when it was put in. Read "this one" as the tag beside it. What each attribute means is in the recipe ${RECIPES.show}, under "References in the user's words".`,
   'You run with tool permissions off because nobody sits at a terminal to answer a prompt. So take care: never delete anything without the user\'s yes on that exact name; never move or overwrite a media file, a cut version or a generated result (write a new version beside it); the record files the stage notes have you keep (review/cards.json, taste.md, regeneration-log.md, spend.md, brief.md, script.md and the like) are edited in place the way those notes say, re-read right before each write; never run git push, never force anything in git; never spend credits or money outside the gates the film rules give you; when a command could be destructive, say what you are about to do first. If a tool call is still denied, say in one line what you needed and carry on without it.',
   `Work that can run side by side goes to background sub-agents through the recipe ${RECIPES.dispatch}: one per independent unit (a character, a location, a scene), both chains together at the script lock, each described as "<job> · <target>" (for example "faces · C01 round 2") so the board shows it on the right step. The shared records (review/cards.json, taste.md, cut versions, commits) have two writers only, you and the harness on a button press, so re-read a record right before you write it; a sub-agent never writes them. Video generations are never handed to sub-agents: you submit each take yourself; takes for different scenes go out together, takes for the same scene one at a time, as the takes note says. Read the recipe before the first dispatch of a session.`,
   `The harness shows the film from its folders and from review/cards.json, the moment a file is written; nothing has to be built or served for it. What goes where, and how to write a card that asks the user to pick, say yes or give a go, is in the recipe ${RECIPES.show}: read it before the first thing you show in a session. A message that starts with <harness-action kind="answer" .../> or <harness-action kind="pick" .../> is the user's own answer, made with a button in the harness: it names the card or the asset and the option, and it counts as the yes, the pick or the go that the stage notes ask for; the line after it says what the harness already wrote and what is yours to do. <harness-action kind="answers" .../> is everything the user chose, sent with the one "Done picking" button: answers to cards and picks made on an asset\'s page, one item each, each as good as its own message; apply them all in one turn. A message that starts with <harness-action kind="new-film" .../> is the user starting a film with the New film form: the folder is made, the setup is settled, begin stage 1.`,
@@ -104,6 +107,9 @@ export class AlmaSession {
   private messageCount = 0;
   private since: string | undefined;
   private pendingControl = new Map<string, (ok: boolean, error?: string) => void>();
+  private starting = false;           // looking for an earlier Alma of this film before starting one
+  private earlierNote: string | undefined;  // told to Alma with her next message: an earlier Alma was stopped
+  private onKey = false;              // the running process was started on the reserve API key
 
   constructor(film: string, opts: AlmaOptions = {}) {
     this.film = film;
@@ -141,9 +147,17 @@ export class AlmaSession {
   get alive(): boolean {
     return this.child !== null;
   }
+  /** The pid of this server's Alma process for the film, if one runs. */
+  get pid(): number | undefined {
+    return this.child?.pid;
+  }
 
   info(): ThreadInfo {
-    return { film: this.film, sessionId: this.sessionId, messageCount: this.messageCount, since: this.since, running: this.tasks.running(), model: this.model ?? '', defaultModel: this.defaultModel, servedModel: this.servedModel };
+    const r = readReserve();
+    const hasKey = hasReserveKey();
+    // with no process running, the next start follows the setting, so nothing is pending
+    const onKey = this.child && !this.closing ? !!this.onKey : r.on && hasKey;
+    return { film: this.film, sessionId: this.sessionId, messageCount: this.messageCount, since: this.since, running: this.tasks.running(), model: this.model ?? '', defaultModel: this.defaultModel, servedModel: this.servedModel, reserve: { on: r.on, hasKey, onKey } };
   }
   /** The transcript shows some jobs ended that the live stream never reported: take that over. */
   learnEnded(from: TaskTracker): void {
@@ -229,18 +243,19 @@ export class AlmaSession {
   private pump(): void {
     if (this.inFlight || !this.queue.length || this.closing) return;
     if (almaDryRun()) return this.dryRun();
-    if (!this.child) this.start();
+    if (!this.child) return void this.startChecked();
     const child = this.child;
-    if (!child) return;
     const next = this.queue.shift()!;
     this.inFlight = next;
     this.clearIdle();
+    const note = this.earlierNote;
+    this.earlierNote = undefined;
     const line = {
       type: 'user',
       uuid: next.id,
       session_id: this.sessionId ?? '',
       parent_tool_use_id: null,
-      message: { role: 'user', content: [{ type: 'text', text: prefixContext(next.text, next.context) }] },
+      message: { role: 'user', content: [{ type: 'text', text: prefixContext(next.text, next.context, note) }] },
     };
     child.stdin.write(JSON.stringify(line) + '\n');
   }
@@ -288,26 +303,83 @@ export class AlmaSession {
     return [...a, ...this.extraArgs];
   }
 
-  /** The CLI runs on the user's own login: no API key, and none of the parent Claude Code session's variables. */
-  private env(): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    for (const k of Object.keys(env)) {
-      if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'CLAUDECODE' || k === 'CLAUDE_PID' || k === 'CLAUDE_EFFORT' || (k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS')) delete env[k];
+  /** The CLI runs on the user's own login (no API key, none of the parent Claude Code session's variables), or on
+   *  the reserve API key when the reserve switch is on and a key is saved. */
+  private env(reserveKey: string | undefined): NodeJS.ProcessEnv {
+    return almaEnv(process.env, reserveKey);
+  }
+
+  /** One Alma per film: an earlier Alma of this film that this server does not own (left by a server that crashed
+   *  or was restarted) is ended first; if it cannot be ended, no second one starts. */
+  private async startChecked(): Promise<void> {
+    if (this.starting) return;
+    this.starting = true;
+    let ok = false;
+    try {
+      ok = this.tell(await endEarlier(this.film, isOwnAlmaPid));
+    } catch (e) {
+      this.emit({ kind: 'error', id: randomUUID(), at: new Date().toISOString(), text: redact(`Could not check for an earlier Alma: ${String(e)}`) });
+    } finally {
+      this.starting = false;
     }
-    env.PYTHONDONTWRITEBYTECODE = '1';
-    return env;
+    if (ok && !this.child) this.start();
+    if (!this.child) {
+      // nothing started: the waiting messages are dropped, as when Alma stops (the user sends again)
+      this.inFlight = null;
+      this.queue = [];
+      this.emitInfo();
+      return;
+    }
+    this.pump();
+  }
+
+  /** Says in the thread what the look for an earlier Alma found; true when a new one may start. */
+  private tell(r: EarlierResult): boolean {
+    const at = new Date().toISOString();
+    if (r.kind === 'stopped') {
+      this.emit({ kind: 'system', id: randomUUID(), at, text: EARLIER_STOPPED });
+      this.earlierNote = EARLIER_NOTE;
+      return true;
+    }
+    if (r.kind === 'failed') {
+      this.emit({ kind: 'error', id: randomUUID(), at, text: `An earlier Alma session from before a restart is still running (pid ${r.pid}) and could not be stopped (${r.error}). No new Alma was started: stop pid ${r.pid} by hand, then send again.` });
+      return false;
+    }
+    if (r.kind === 'other-server') {
+      this.emit({ kind: 'error', id: randomUUID(), at, text: `This film's Alma (pid ${r.pid}) is still run by another Hitchcock Harness server (pid ${r.serverPid}). No second Alma was started: stop that server first, then send again.` });
+      return false;
+    }
+    return true;
+  }
+
+  /** At server start: ends an earlier Alma of this film left by a previous server, and says so in the thread. */
+  async sweepEarlier(): Promise<void> {
+    if (this.child || this.starting) return;
+    this.starting = true;
+    try { this.tell(await endEarlier(this.film, isOwnAlmaPid)); } finally { this.starting = false; }
+    if (this.queue.length) this.pump();
+  }
+
+  /** Server shutdown: asks this server's Alma process to stop (SIGTERM); it cannot be waited for at exit. */
+  stopNow(): void {
+    try { this.child?.kill('SIGTERM'); } catch { /* already gone */ }
   }
 
   private start(): void {
     const { claudeBin } = claudeConfig();
+    const reserveKey = reserveKeyForStart();
     let child: ChildProcessWithoutNullStreams;
     try {
-      child = spawn(claudeBin, this.args(), { cwd: this.cwd, env: this.env(), stdio: ['pipe', 'pipe', 'pipe'] });
+      child = spawn(claudeBin, this.args(), { cwd: this.cwd, env: this.env(reserveKey), stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (e) {
       this.emit({ kind: 'error', id: randomUUID(), at: new Date().toISOString(), text: redact(`Could not start Alma: ${String(e)}`) });
       return;
     }
     this.child = child;
+    this.onKey = !!reserveKey;
+    // a fresh process already runs on the chosen model and the chosen key: nothing is left to apply
+    this.restartWhenIdle = false;
+    if (child.pid) void recordStart(this.film, child.pid, claudeBin, this.cwd, this.sessionId);
     this.parser = new StreamParser(this.tasks);
     this.stderrTail = [];
     child.stdin.on('error', () => undefined);
@@ -338,6 +410,7 @@ export class AlmaSession {
       this.sessionId = signals.sessionId;
       this.since = this.since ?? new Date().toISOString();
       void updateSession(this.film, { sessionId: signals.sessionId, cwd: this.cwd });
+      if (this.child?.pid) void recordSession(this.film, this.child.pid, signals.sessionId);
       this.emitInfo();
     }
     if (signals.controlRequest) {
@@ -351,20 +424,21 @@ export class AlmaSession {
         const turn = total !== undefined && this.lastTotal !== undefined && total >= this.lastTotal ? total - this.lastTotal : total;
         this.emit({ ...ev, costUsd: turn !== undefined ? Math.round(turn * 10000) / 10000 : undefined });
         if (total !== undefined) this.lastTotal = total;
+        // a turn of a process started on the reserve key is paid from the API credits: count it for the month
+        if (this.onKey && turn !== undefined && turn > 0) void addReserveSpend(turn);
         void updateSession(this.film, { sessionId: ev.sessionId || this.sessionId || '', cwd: this.cwd, lastTotalCostUsd: this.lastTotal });
         this.inFlight = null;
-        if (this.restartWhenIdle && !this.tasks.running().length && this.child) {
-          // the model changed mid-turn and the CLI would not switch: start again on the new one, same session
-          this.restartWhenIdle = false;
-          this.closing = true;
-          this.child.stdin.end();
-        }
+        this.restartIfIdle();
         this.pump();
         if (!this.inFlight) this.scheduleIdle();
         this.emitInfo();
       } else {
         this.emit(ev);
-        if (ev.kind === 'task') this.emitInfo();
+        if (ev.kind === 'task') {
+          // the last background job ended after the turn did: a change waiting for a quiet moment applies now
+          if (!this.inFlight) this.restartIfIdle();
+          this.emitInfo();
+        }
       }
     }
   }
@@ -381,6 +455,7 @@ export class AlmaSession {
   }
 
   private onExit(child: ChildProcessWithoutNullStreams, code: number | null, signal: NodeJS.Signals | null): void {
+    if (child.pid) void recordExit(this.film, child.pid);
     if (this.child !== child) return;
     this.child = null;
     this.clearIdle();
@@ -436,6 +511,28 @@ export class AlmaSession {
     return { ok: true };
   }
   private restartWhenIdle = false;
+
+  /** A change that needs a new process (the model the CLI would not switch to, the reserve switch) waits for a
+   *  moment with no turn in flight and no background job running; then stdin is closed, the CLI finishes and exits,
+   *  and the next message resumes the same session (--resume) with the new arguments and environment. */
+  private restartIfIdle(): void {
+    if (!this.restartWhenIdle || this.inFlight || this.tasks.running().length || !this.child || this.closing) return;
+    this.restartWhenIdle = false;
+    this.closing = true;
+    this.child.stdin.end();
+  }
+
+  /** The reserve switch was flipped. A process started on the other footing is closed now if Alma is idle
+   *  with nothing running, else once she is; her next message starts again on the same session with the new
+   *  environment. Nothing is cut off. */
+  reserveChanged(): void {
+    // a flip back before it applied leaves one needless restart on the same session, which loses nothing
+    if (this.child && !this.closing && !!reserveKeyForStart() !== !!this.onKey) {
+      this.restartWhenIdle = true;
+      this.restartIfIdle();
+    }
+    this.emitInfo();
+  }
 
   /** Stops Alma's current turn (the session stays; queued messages are dropped). */
   async interrupt(): Promise<{ ok: boolean; error?: string }> {
@@ -510,6 +607,37 @@ export function getAlma(film: string, opts?: AlmaOptions): AlmaSession {
 
 export function allAlmas(): AlmaSession[] {
   return [...sessions.values()];
+}
+
+/** After the reserve switch is flipped: every live Alma moves to the new footing at her next quiet moment. */
+export function reserveChanged(): void {
+  for (const a of allAlmas()) getAlma(a.film).reserveChanged();
+}
+
+function isOwnAlmaPid(pid: number): boolean {
+  return allAlmas().some((a) => a.pid === pid);
+}
+
+/** Ends every Alma process this server started (SIGTERM). Called when the server exits. */
+export function stopOwnAlmas(): void {
+  for (const a of allAlmas()) a.stopNow();
+}
+
+/** Once per server process: end the Alma processes it started when it exits, and end any earlier Alma a previous
+ *  server left running (each film's thread is told). Not in dry runs, which start no process. */
+export async function onServerStart(): Promise<void> {
+  const flag = globalThis as unknown as { __almaLifecycle?: boolean };
+  if (flag.__almaLifecycle || almaDryRun()) return;
+  flag.__almaLifecycle = true;
+  process.on('exit', stopOwnAlmas);
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+    process.on(sig, () => {
+      stopOwnAlmas();
+      // with no other handler, a signal would no longer end the server: do what the default would have done
+      if (process.listenerCount(sig) === 1) process.exit(128 + (sig === 'SIGHUP' ? 1 : sig === 'SIGINT' ? 2 : 15));
+    });
+  }
+  for (const film of await recordedFilms()) await getAlma(film).sweepEarlier().catch(() => undefined);
 }
 
 /** Finds which film's Alma owns a task id (tool_use id, task id or agent id). */

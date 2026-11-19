@@ -29,9 +29,21 @@ export function buildContextBlock(ctx: HarnessContext): string {
   return `${open}${body}${CLOSE}`;
 }
 
-/** The text Alma receives: the context block, a blank line, then the user's own words. */
-export function prefixContext(text: string, ctx?: HarnessContext): string {
-  return ctx ? `${buildContextBlock(ctx)}\n\n${text}` : text;
+const NOTE_OPEN = '<harness-note>';
+const NOTE_CLOSE = '</harness-note>';
+
+/** The text Alma receives: the context block, a blank line, then the user's own words. A note from the harness
+ *  itself (an earlier Alma was stopped after a restart) goes between them as <harness-note>…</harness-note>. */
+export function prefixContext(text: string, ctx?: HarnessContext, note?: string): string {
+  const words = note ? `${NOTE_OPEN}${note.replace(/</g, '&lt;')}${NOTE_CLOSE}\n\n${text}` : text;
+  return ctx ? `${buildContextBlock(ctx)}\n\n${words}` : words;
+}
+
+/** Takes a leading harness note off the words (the thread shows the user's own words only). */
+function stripNote(text: string): string {
+  if (!text.startsWith(NOTE_OPEN)) return text;
+  const end = text.indexOf(NOTE_CLOSE);
+  return end < 0 ? text : text.slice(end + NOTE_CLOSE.length).replace(/^\s+/, '');
 }
 
 function readAttr(open: string, name: string): string | undefined {
@@ -44,10 +56,10 @@ function readAttr(open: string, name: string): string | undefined {
 /** Splits a stored prompt back into the user's words and the context it carried (for the thread history). */
 export function parseContextBlock(prompt: string): { text: string; context?: HarnessContext } {
   const start = prompt.indexOf(OPEN);
-  if (start !== 0) return { text: prompt };
+  if (start !== 0) return { text: stripNote(prompt) };
   const openEnd = prompt.indexOf('>', start);
   const end = prompt.indexOf(CLOSE, openEnd);
-  if (openEnd < 0 || end < 0) return { text: prompt };
+  if (openEnd < 0 || end < 0) return { text: stripNote(prompt) };
   const open = prompt.slice(start, openEnd);
   let selected: Chip[] = [];
   try {
@@ -67,5 +79,5 @@ export function parseContextBlock(prompt: string): { text: string; context?: Har
     selected,
     ...(readAttr(open, 'playhead') ? { playhead: readAttr(open, 'playhead') } : {}),
   };
-  return { text: prompt.slice(end + CLOSE.length).replace(/^\s+/, ''), context };
+  return { text: stripNote(prompt.slice(end + CLOSE.length).replace(/^\s+/, '')), context };
 }

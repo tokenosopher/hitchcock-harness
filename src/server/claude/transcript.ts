@@ -8,7 +8,7 @@ import { parseContextBlock } from '../context';
 import { projectSlug } from './config';
 import { redact, redactDeep } from './redact';
 import { oneLine, resultSummary, resultText, toolSummary } from './summarize';
-import { TaskTracker } from './tasks';
+import { resumedAgent, TaskTracker } from './tasks';
 
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {});
@@ -43,10 +43,11 @@ interface Kept {
   tasks: TaskTracker;
   textCount: Map<string, number>;
   toolNames: Map<string, string>;
+  sends: Map<string, string | undefined>;  // SendMessage tool_use id → its summary
   pendingCompaction: Extract<ThreadEvent, { kind: 'compaction' }> | null;
   bad: number;
 }
-const PARSER = 2; // raise when the reading below changes, so kept state from older code is dropped
+const PARSER = 3; // raise when the reading below changes, so kept state from older code is dropped
 const hg = globalThis as unknown as { __historyKept?: Map<string, Kept>; __historyBusy?: Map<string, Promise<unknown>> };
 const kept: Map<string, Kept> = (hg.__historyKept ??= new Map());
 const busy: Map<string, Promise<unknown>> = (hg.__historyBusy ??= new Map());
@@ -70,7 +71,7 @@ async function readMore(cwd: string, sessionId: string, file: string, key: strin
   let st = kept.get(key);
   if (!st || size < st.offset) {
     // first read, or the file was replaced by a shorter one: start again
-    st = { offset: 0, tail: Buffer.alloc(0), events: [], tasks: new TaskTracker(), textCount: new Map(), toolNames: new Map(), pendingCompaction: null, bad: 0 };
+    st = { offset: 0, tail: Buffer.alloc(0), events: [], tasks: new TaskTracker(), textCount: new Map(), toolNames: new Map(), sends: new Map(), pendingCompaction: null, bad: 0 };
     if (kept.size > 8) kept.delete(kept.keys().next().value as string);
     kept.set(key, st);
   }
@@ -89,7 +90,7 @@ async function readMore(cwd: string, sessionId: string, file: string, key: strin
       await fh.close();
     }
   }
-  const { events, tasks, textCount, toolNames } = st;
+  const { events, tasks, textCount, toolNames, sends } = st;
   let pendingCompaction = st.pendingCompaction;
   let bad = st.bad;
 
@@ -156,6 +157,14 @@ async function readMore(cwd: string, sessionId: string, file: string, key: strin
             if (card) events.push({ kind: 'task', id: card.id, at, task: card });
           } else {
             events.push({ kind: 'tool_result', id: `result:${tuid}`, at, toolUseId: tuid, summary: resultSummary(b.content, ok), ok });
+            if (sends.has(tuid)) {
+              // SendMessage woke a finished sub-agent: its card runs again
+              const summary = sends.get(tuid);
+              sends.delete(tuid);
+              const agentId = ok ? resumedAgent(b.content, e.toolUseResult) : undefined;
+              const card = agentId ? tasks.resumed(tuid, agentId, summary, at) : undefined;
+              if (card) events.push({ kind: 'task', id: card.id, at, task: card });
+            }
             const body = resultText(b.content);
             if (!ok && body.startsWith('Permission for this tool use was denied')) {
               // the live stream's permission_denied line is not in the JSONL; rebuild it
@@ -186,6 +195,7 @@ async function readMore(cwd: string, sessionId: string, file: string, key: strin
             events.push({ kind: 'task', id: card.id, at, task: card });
           } else {
             events.push({ kind: 'tool_use', id: tid, at, name, summary: toolSummary(name, b.input), input: redactDeep(b.input) });
+            if (name === 'SendMessage') sends.set(tid, s(obj(b.input).summary));
             if (name === 'TaskStop') {
               const card = tasks.stopped(s(obj(b.input).task_id) ?? s(obj(b.input).shell_id), at);
               if (card) events.push({ kind: 'task', id: card.id, at, task: card });

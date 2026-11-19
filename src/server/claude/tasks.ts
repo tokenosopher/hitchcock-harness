@@ -15,6 +15,7 @@ export interface AgentMeta {
   taskId?: string;            // the CLI's task id (task_started), what stop_task takes
   agentId?: string;           // the id SendMessage takes (from the async launch result); equals taskId for local agents
   background: boolean;
+  resumedAt?: string;         // when Alma last woke the finished agent with SendMessage
 }
 
 function title(input: Record<string, unknown>): string {
@@ -95,6 +96,19 @@ export function jobStatuses(content: unknown): { id: string; status: string }[] 
   return out;
 }
 
+/** The agent a SendMessage result says it resumed, or nothing (a message queued to a running agent, one to another
+ *  session, a failure). The result reads {"success":true,"message":"Resuming agent a02b0a9","resumedAgentId":
+ *  "a02b0a936578dac5e","revivedAgentId":"a02b0a936578dac5e","pin":{...}}, as tool_use_result (stream) or toolUseResult
+ *  (transcript), and as the same JSON in the tool_result text. */
+export function resumedAgent(content: unknown, toolUseResult: unknown): string | undefined {
+  let r = obj(toolUseResult);
+  if (!str(r.message)) {
+    try { r = obj(JSON.parse(resultText(content).trim())); } catch { return undefined; }
+  }
+  if (r.success !== true || !/^Resuming agent\b/.test(str(r.message) ?? '')) return undefined;
+  return str(r.resumedAgentId) ?? str(r.revivedAgentId);
+}
+
 export class TaskTracker {
   private cards = new Map<string, TaskCard>();
   private meta = new Map<string, AgentMeta>();
@@ -144,6 +158,13 @@ export class TaskTracker {
   }
 
   started(taskId: string, toolUseId: string | undefined, description: string | undefined): TaskCard | undefined {
+    // a resumed agent's run is started again under the SendMessage's tool_use_id (the CLI's resume path launches it
+    // with that id): its card runs again, as when the SendMessage's result confirms the resume
+    if (toolUseId && !this.cards.has(toolUseId)) {
+      const known = this.resolve(taskId);
+      const c = known ? this.cards.get(known) : undefined;
+      if (known && c && c.state !== 'running' && c.state !== 'queued') return this.resumed(toolUseId, taskId, undefined, new Date().toISOString());
+    }
     // a sub-agent's own Bash calls also send task_started (task_type local_bash, owned_by_subagent): not cards
     if (!toolUseId || !this.cards.has(toolUseId)) return undefined;
     this.byTaskId.set(taskId, toolUseId);
@@ -174,7 +195,9 @@ export class TaskTracker {
   }
 
   /** A sub-agent's tool call (assistant tool_use with parent_tool_use_id): a new step, and the live line. */
-  step(parentToolUseId: string, toolUseId: string | undefined, name: string, input: unknown, at: string): TaskCard | undefined {
+  step(parent: string, toolUseId: string | undefined, name: string, input: unknown, at: string): TaskCard | undefined {
+    // a resumed run's steps may be tagged with the SendMessage that woke it: the same card
+    const parentToolUseId = this.cards.has(parent) ? parent : this.byTaskId.get(parent) ?? parent;
     const c = this.cards.get(parentToolUseId);
     if (!c) return undefined;
     let text = stepLine(name, input);
@@ -312,6 +335,33 @@ export class TaskTracker {
     return settled;
   }
 
+  /** Alma woke a sub-agent with SendMessage. Confirmed by the tool's result
+   *  {"success":true,"message":"Resuming agent a02b0a9","resumedAgentId":"a02b0a936578dac5e",...}; the run ends with a
+   *  task_notification whose task-id is the agent id and whose tool-use-id is this SendMessage's id. The agent's card
+   *  runs again under its own title; an agent the app never saw gets a card of its own, titled by the message's summary. */
+  resumed(sendToolUseId: string, agentId: string, summary: string | undefined, at: string): TaskCard {
+    let id = this.resolve(agentId);
+    const fresh = !id;
+    if (!id) {
+      id = agentId;
+      this.cards.set(id, { id, title: oneLine(title({ description: summary ?? '' }), 120), state: 'running', startedAt: at, steps: [] });
+      this.meta.set(id, { toolUseId: id, taskId: agentId, agentId, background: true });
+    }
+    const c = this.cards.get(id)!;
+    const m = this.meta.get(id)!;
+    m.agentId ??= agentId;
+    this.byTaskId.set(agentId, id);
+    if (sendToolUseId) this.byTaskId.set(sendToolUseId, id);
+    if (!fresh && (c.state === 'running' || c.state === 'queued')) return this.snapshot(id);
+    m.resumedAt = at;
+    c.state = 'running';
+    c.endedAt = undefined;
+    c.liveLine = 'resumed with a new message';
+    // its file grows again: read it again at the next history read
+    this.filledDone.delete(id);
+    return this.snapshot(id);
+  }
+
   /** Takes over the end of jobs another reading (the transcript) knows about and this tracker never heard. */
   learnEnded(from: TaskTracker): boolean {
     let changed = false;
@@ -319,6 +369,9 @@ export class TaskTracker {
       if (c.state !== 'running' && c.state !== 'queued') continue;
       const other = from.get(c.id);
       if (!other || (other.state !== 'done' && other.state !== 'failed')) continue;
+      // an end from before the agent was resumed is not this run's end
+      const resumedAt = this.meta.get(c.id)?.resumedAt;
+      if (resumedAt && (!other.endedAt || Date.parse(other.endedAt) < Date.parse(resumedAt))) continue;
       c.state = other.state; c.endedAt = other.endedAt; c.liveLine = other.liveLine; c.result = c.result ?? other.result;
       changed = true;
     }

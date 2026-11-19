@@ -6,16 +6,27 @@
 import { connection } from 'next/server';
 import { getAlma } from '@/server/claude/process';
 import { isAlmaModel } from '@/server/claude/model';
+import { hasReserveKey, readReserve } from '@/server/claude/reserve';
 import { isMock, mockPost, mockThread } from '@/fixtures/mock';
 import { parseContext, sendToAlma, threadHistory, threadInfo, validFilm } from '@/server/claude/thread';
 
 type Ctx = { params: Promise<{ film: string }> };
 
+const mockReserve = () => {
+  const on = readReserve().on;
+  const hasKey = hasReserveKey();
+  return { on, hasKey, onKey: on && hasKey };
+};
+
 export async function GET(req: Request, ctx: Ctx): Promise<Response> {
   await connection();
   const { film } = await ctx.params;
   if (!validFilm(film)) return Response.json({ error: 'unknown film' }, { status: 404 });
-  if (isMock()) return Response.json(mockThread(film)); // workstream A's fixture shim, removed at integration
+  if (isMock()) {
+    // workstream A's fixture shim, removed at integration; the info answer carries the real reserve switch
+    if (new URL(req.url).searchParams.get('info')) return Response.json({ film, messageCount: 0, running: [], reserve: mockReserve() });
+    return Response.json(mockThread(film));
+  }
   if (new URL(req.url).searchParams.get('info')) return Response.json(await threadInfo(film));
   const { events, warnings } = await threadHistory(film);
   return Response.json(events, { headers: warnings.length ? { 'X-Harness-Warnings': encodeURIComponent(warnings.join(' | ')) } : {} });
@@ -38,7 +49,10 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
     mockPost(film, text, parseContext(film, b.context));
     return Response.json({ ok: true }, { status: 202 });
   }
-  const result = await sendToAlma(film, text, parseContext(film, b.context));
+  // "/compact" (alone, or followed by what to keep) is Claude Code's own command: it only works as the first thing
+  // in the message, so it goes to Alma without the page context in front of it
+  const command = /^\/compact(\s|$)/.test(text);
+  const result = await sendToAlma(film, text, command ? undefined : parseContext(film, b.context));
   return Response.json(result, { status: 202 });
 }
 

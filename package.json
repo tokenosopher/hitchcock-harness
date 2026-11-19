@@ -30,7 +30,10 @@
     "samecut:test": "tsx scripts/samecut-test.ts",
     "working:test": "tsx scripts/working-test.ts",
     "alma-drop:test": "tsx scripts/alma-drop-test.ts",
-    "history-list:test": "tsx scripts/history-list-test.ts"
+    "history-list:test": "tsx scripts/history-list-test.ts",
+    "one-alma:test": "tsx scripts/one-alma-test.ts",
+    "resumed:test": "tsx scripts/resumed-test.ts",
+    "reserve:test": "tsx scripts/reserve-test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { harnessConfig } from './config';
 import { claudeConfig } from './claude/config';
 import { readLastInit } from './claude/lastInit';
+import { reserveView, type ReserveView } from './claude/reserve';
 import { readSessions } from './claude/sessions';
 import { FLOW_DIR } from './films/read/release';
 import { listSlow } from './films/util';
@@ -27,6 +28,8 @@ export interface SettingsInfo {
   lastInit?: { at: string; thread: string; model?: string; permissionMode?: string };
   defaults: { label: string; value: string }[];
   tunnel: { port: number; running: boolean; url?: string; pid?: number; note: string };
+  /** The reserve switch: whether a key is saved, never the key. */
+  reserve: ReserveView;
 }
 
 function run(cmd: string, args: string[], ms: number, env?: NodeJS.ProcessEnv): Promise<string | undefined> {
@@ -206,5 +209,6 @@ export async function readSettings(): Promise<SettingsInfo> {
       { label: '480p of the cut', value: cfg.auto480p ? 'rendered after every change (HARNESS_AUTO_480P=1)' : 'rendered when asked for (HARNESS_AUTO_480P=1 renders it after every change)' },
     ],
     tunnel: tun,
+    reserve: reserveView(),
   };
 }
