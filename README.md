@@ -1,5 +1,8 @@
 # Hitchcock Harness
 
+<!-- The walkthrough video. For a player right here: open this file in the editor on github.com, drag the video file into it, and put the https://github.com/user-attachments/assets/… link that GitHub writes alone on its own line, in place of the poster line below. -->
+[![Watch the three-minute walkthrough of Hitchcock Harness](docs/launch-poster.jpg)](https://github.com/tokenosopher/hitchcock-harness/releases/download/v0.2.0/hitchcock-harness-walkthrough.mp4)
+
 > "Once the screenplay is finished, I'd just as soon not make the film at all. … When you finish the script, the film is perfect. But in shooting it you lose perhaps 40 per cent of your original conception."
 >
 > [Alfred Hitchcock, to Roger Ebert, 1969](https://www.rogerebert.com/interviews/hitchcock-never-mess-about-with-a-dead-body-you-may-be-one)
