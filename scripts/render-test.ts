@@ -927,6 +927,64 @@ async function main(): Promise<void> {
       const listed = (await renderFiles(film)).filter((f) => f.kind === 'master' && !f.tag).map((f) => `${f.path.split('/').pop()}${f.earlier ? ' (earlier)' : ''}`).sort();
       check('again: the Renders tab lists both, the first marked earlier', JSON.stringify(listed) === JSON.stringify(['v1-master-2.mp4', 'v1-master.mp4 (earlier)']), listed.join(', '));
     }
+
+    // 5. every frame of each upscaled stretch. A stretch of the base cut with a seek could lose its last frame, and the
+    //    black under it showed, wherever the picture under the stretch ran a hair late: the picture's pieces are joined
+    //    in microseconds, so after a piece whose length is not a whole number of them (a title card of 74 frames, say)
+    //    the frames under a stretch can come a microsecond after the stretch's own. Here: a new shot of 74 frames from
+    //    the 480p, then two stretches of the base, each cut with a seek (v1's b1 less its last two frames, then its
+    //    mirrored a2: the second is not the next frame of the base), then a new shot. The lengths matter: with these,
+    //    both stretches end on a frame that runs late (made as before the fix, black at 119 and 167); with b1 whole,
+    //    both would land on time and hide the fault.
+    {
+      const r = await render(timeline('v90', [
+        { id: 'V1', kind: 'video', name: 'Picture', clips: [
+          { id: 'e1', src: F('E-480p.mp4'), in: 0, out: fr(74), at: 0 },
+          { id: 'b1', src: F('B-480p.mp4'), in: 0.5, out: fr(58), at: fr(74) },
+          { id: 'a2', src: F('A-480p.mp4'), in: 5, out: 7, at: fr(120), flip: 'h' },
+          { id: 'e2', src: F('E-480p.mp4'), in: 4, out: 5, at: fr(168) },
+        ] },
+      ]), 'master', true);
+      const line = r.summary.find((l) => l.startsWith('upscaled cut:')) ?? 'no line';
+      check('stretches: the cut checks out, and the base gives two stretches', !r.problems.length && /, 2 stretches laid over the picture/.test(line), r.problems.join('; ') || line);
+      const out = frames(r.file);
+      check('stretches: as long as the cut', out.length === 192, `${out.length} frames`);
+      const dark = out.flatMap((fm, k) => (mean(fm)[0] < 20 ? [k] : []));
+      check('stretches: no black frame anywhere (none at the end of a stretch)', !dark.length, dark.length ? `black at frame ${dark.join(', ')}` : 'none');
+      expect('stretches: the new shot before them is its 480p', out, 0, 74, (f) => ({ n: f, tag: 'E', base: false }));
+      expect('stretches: the first stretch gives every frame, its last one included', out, 74, 120, (f) => ({ ...B(12 + f - 74), base: true }));
+      expect('stretches: the second, cut with its own seek, gives every frame, mirrored once', out, 120, 168, (f) => ({ ...A(120 + f - 120, true), base: true }));
+      expect('stretches: then the new shot after them', out, 168, 192, (f) => ({ n: 96 + f - 168, tag: 'E', base: false }));
+    }
+
+    // 6. a master made before that fix: from a cut that uses the upscaled cut it counts as out of date, so it is made
+    //    again on request without a change to the cut. Its record names the very picture a master would be made from
+    //    now, and every file it uses is older than it, so the fix is the only reason it can be out of date: made after
+    //    the fix it is up to date, and so is one made before the fix from a cut that uses no upscaled cut.
+    {
+      const rd = path.join(dir, 'cut', 'renders');
+      const { utimesSync, copyFileSync } = await import('node:fs');
+      const before = new Date('2026-11-17T12:00:00.000Z');
+      utimesSync(baseFile, before, before);
+      const madeAt = async (v: string, clips: Clip[], at: string) => {
+        const raw = timeline(v, [{ id: 'V1', kind: 'video', name: 'Picture', clips }]);
+        const { timeline: t, problems } = await T.validateTimeline(raw, film);
+        if (!t) throw new Error(problems.join('; '));
+        const s = path.join(scratch, v);
+        mkdirSync(s, { recursive: true });
+        const { picture } = await R.buildGraph(film, t, 'master', path.join(s, 'out.mp4'), s);
+        writeFileSync(path.join(dir, 'cut', `${v}.json`), JSON.stringify({ ...raw, renders: { master: { path: `cut/renders/${v}-master.mp4`, at, hash: 'by hand', picture } } }, null, 1));
+        copyFileSync(p480.file, path.join(rd, `${v}-master.mp4`));
+        return R.masterStaleness(slug, v);
+      };
+      const baseClips: Clip[] = [{ id: 'b1', src: F('B-480p.mp4'), in: 0.5, out: 2.5, at: 0 }, { id: 'a2', src: F('A-480p.mp4'), in: 5, out: 7, at: 2, flip: 'h' }];
+      const pre = await madeAt('v91', baseClips, '2026-11-18T12:00:00.000Z');
+      check('before the fix: a master from a cut that uses the upscaled cut is out of date, and says why', pre.state === 'stale' && pre.reason === 'The master of v91 was made before the upscaled-stretch fix: it has one black frame at the end of each stretch from the upscaled cut' && pre.path === 'cut/renders/v91-master.mp4', JSON.stringify(pre));
+      const post = await madeAt('v92', baseClips, '2026-11-19T07:00:00.000Z');
+      check('after the fix: the same master is up to date', post.state === 'fresh', JSON.stringify(post));
+      const none = await madeAt('v93', [{ id: 'e1', src: F('E-480p.mp4'), in: 0, out: 2, at: 0 }], '2026-11-18T12:00:00.000Z');
+      check('before the fix, from a cut without the upscaled cut: up to date', none.state === 'fresh', JSON.stringify(none));
+    }
   }
 
   console.log(`ok · ${checks} checks in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

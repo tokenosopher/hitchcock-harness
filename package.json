@@ -33,7 +33,13 @@
     "history-list:test": "tsx scripts/history-list-test.ts",
     "one-alma:test": "tsx scripts/one-alma-test.ts",
     "resumed:test": "tsx scripts/resumed-test.ts",
-    "reserve:test": "tsx scripts/reserve-test.ts"
+    "reserve:test": "tsx scripts/reserve-test.ts",
+    "waitlist:test": "tsx scripts/waitlist-test.ts",
+    "phonefull:test": "tsx scripts/phonefull-test.ts",
+    "refs:test": "tsx scripts/refs-test.ts",
+    "test:quick": "node tests/run.mjs quick",
+    "test:changed": "node tests/run.mjs changed",
+    "test:slow": "node tests/run.mjs slow"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

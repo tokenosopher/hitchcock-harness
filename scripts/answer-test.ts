@@ -1,17 +1,26 @@
-// npm run answer:test -- <empty test root>
+// npm run answer:test [-- <empty test root>]
 // Builds a small film of its own under <root> (a repo with taste.md and one film whose review/cards.json holds
 // cards that ask), then runs the feed reader and the answer action against it. Nothing is sent to Alma and no
-// real film is read or written. Refuses a root that is not empty or that sits inside the real film repo.
+// real film is read or written. Refuses a root that is not empty or that sits inside the real film repo. Without a
+// root it makes one in the temp folder (so a runner can run it) and deletes it after.
+import { mkdtempSync, rmSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-const root = path.resolve(process.argv[2] ?? '');
-if (!process.argv[2]) {
-  console.error('usage: npm run answer:test -- <empty test root>');
-  process.exit(2);
-}
+const own = !process.argv[2];
+const root = own ? mkdtempSync(path.join(os.tmpdir(), 'answer-test-')) : path.resolve(process.argv[2]);
 process.env.HARNESS_FILM_REPO = path.join(root, 'repo');
 process.env.HARNESS_DIR = path.join(root, 'harness');
+// never a message to the real Alma, even from a call that is meant to be refused
+process.env.HARNESS_ALMA_DRYRUN = '1';
+process.env.HARNESS_ALMA_DRYRUN_FILE = path.join(root, 'alma-dryrun.jsonl');
+
+let bad = 0;
+const check = (what: string, ok: boolean, got?: unknown): void => {
+  if (!ok) { bad++; process.exitCode = 1; }
+  console.log(`${ok ? 'ok  ' : 'FAIL'} · ${what}${ok || got === undefined ? '' : ` · ${JSON.stringify(got).slice(0, 300)}`}`);
+};
 
 const FILM = 'test-film';
 const CARDS = {
@@ -61,24 +70,25 @@ async function main(): Promise<void> {
     // several picks with one button: one message, a taste row each; a bad one stops them all before any write
     const { answerCards } = await import('../src/server/actions/answer');
     const before = await fs.readFile(path.join(repo, 'taste.md'), 'utf8');
-    const bad = await answerCards([{ card: 'word-r3', option: '4' }, { card: 'music-r1', option: 'NOPE' }], FILM).then(() => 'taken', (e: { status?: number }) => `refused ${e.status}`);
+    const refusedMany = await answerCards([{ card: 'word-r3', option: '4' }, { card: 'music-r1', option: 'NOPE' }], FILM).then(() => 'taken', (e: { status?: number }) => `refused ${e.status}`);
     console.log('\n--- several answers');
-    console.log('  one bad option:', bad, '· taste.md untouched:', (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before);
+    check('several answers with one bad option: refused before any write', refusedMany.startsWith('refused') && (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before, refusedMany);
     const dry = await answerCards([{ card: 'word-r3', option: '4', from: 'the gate on Main' }, { card: 'music-r1', option: 'FILM', from: 'the gate on Main' }], FILM, { dryRun: true });
-    console.log('  dry run: notified', dry.notified, '· taste.md untouched:', (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before);
+    check('several answers, dry: nothing written', (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before, dry.notified);
     console.log(dry.message.split('\n').map((l) => '  | ' + l).join('\n'));
     // "Done picking": a pick, a yes and a go together, one message
     const { sendChoices } = await import('../src/server/actions/answer');
     const all = await sendChoices({ answers: [{ card: 'word-r3', option: '2' }, { card: 'title-card' }, { card: 'pickup-s3-go' }], picks: [] }, FILM, { dryRun: true });
-    console.log('  done picking, dry: notified', all.notified, '· taste.md untouched:', (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before);
+    check('done picking, dry: one message, nothing written', !!all.message && (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before, all.notified);
     console.log(all.message.split('\n').map((l) => '  | ' + l).join('\n'));
-    console.log('  nothing chosen:', await sendChoices({ answers: [], picks: [] }, FILM).then(() => 'taken', (e: { status?: number }) => `refused ${e.status}`));
+    const none = await sendChoices({ answers: [], picks: [] }, FILM).then(() => 'taken', (e: { status?: number }) => `refused ${e.status}`);
+    check('nothing chosen: refused', none.startsWith('refused'), none);
   }
   await show('as written');
 
   const fails = async (label: string, input: Parameters<typeof answerCard>[0]): Promise<void> => {
-    try { await answerCard(input, FILM, { notify: false }); console.log(`  NOT REFUSED: ${label}`); process.exitCode = 1; }
-    catch (e) { console.log(`  refused (${label}): ${(e as Error).message}`); }
+    try { await answerCard(input, FILM, { notify: false }); check(`refused: ${label}`, false, 'taken'); }
+    catch (e) { check(`refused: ${label}`, true); console.log(`       ${(e as Error).message}`); }
   };
   console.log('\n--- refusals');
   await fails('no such card', { card: 'nope' });
@@ -91,8 +101,7 @@ async function main(): Promise<void> {
   console.log('\n--- dry run: word-r3 → 3');
   for (const w of dry.writes) console.log(`  ${w.op.padEnd(6)} ${w.where}`);
   console.log(`  taste row: ${dry.tasteRow}`);
-  console.log(`  taste.md untouched: ${(await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before}`);
-  console.log(`  answers.json written: ${await fs.stat(path.join(process.env.HARNESS_DIR!, 'answers.json')).then(() => true, () => false)}`);
+  check('a dry run writes neither taste.md nor answers.json', (await fs.readFile(path.join(repo, 'taste.md'), 'utf8')) === before && !(await fs.stat(path.join(process.env.HARNESS_DIR!, 'answers.json')).then(() => true, () => false)));
 
   for (const input of [
     { card: 'word-r3', option: '3', note: 'the third, it is firmer', from: 'the gate page' },
@@ -107,12 +116,16 @@ async function main(): Promise<void> {
     console.log(`  to Alma (not sent):\n    ${res.message.split('\n').join('\n    ')}`);
   }
   const after = await fs.readFile(path.join(repo, 'taste.md'), 'utf8');
-  console.log(`\ntaste.md: ${after.split('\n').length - before.split('\n').length} rows added; the score section kept last: ${after.trimEnd().endsWith('1 of 1.')}`);
+  check('taste.md: a row for each pick, the score section kept last', after.split('\n').length - before.split('\n').length === 2 && after.trimEnd().endsWith('1 of 1.'), after.split('\n').length - before.split('\n').length);
+  const kept = Object.keys(JSON.parse(await fs.readFile(path.join(process.env.HARNESS_DIR!, 'answers.json'), 'utf8'))[FILM] ?? {});
+  check('answers.json holds the four answers', kept.sort().join() === 'music-r1,pickup-s3-go,title-card,word-r3', kept);
   console.log('answers.json:', await fs.readFile(path.join(process.env.HARNESS_DIR!, 'answers.json'), 'utf8'));
   await show('after the answers');
 }
 
-main().catch((e: unknown) => {
+main().then(() => {
+  console.log(bad ? `${bad} checks failed` : 'answer:test · every check passed');
+}, (e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
-  process.exit(1);
-});
+  process.exitCode = 1;
+}).finally(() => { if (own) rmSync(root, { recursive: true, force: true }); });

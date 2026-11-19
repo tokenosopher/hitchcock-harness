@@ -115,7 +115,7 @@ async function main(): Promise<void> {
   await until(() => !alma.busy && starts().length === 2);
   const second = starts()[1];
   check('the next message resumes the same session on the key', !!second && second.onKey && second.resumed && second.sid === first.sid && !second.passedReserveName, second);
-  check('the turn on the key is counted for this month', (r.readReserve().spent[r.monthOf()] ?? 0) > 1.75, r.readReserve().spent);
+  check('the turn on the key is counted for this month', await until(() => (r.readReserve().spent[r.monthOf()] ?? 0) > 1.75), r.readReserve().spent);
   const before = r.readReserve().spent[r.monthOf()];
 
   // busy: the flip waits for the end of the turn

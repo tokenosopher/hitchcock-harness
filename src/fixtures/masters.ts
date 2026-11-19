@@ -131,8 +131,14 @@ export async function mockMedia(p: string | null): Promise<Resolved | undefined>
   // MOCK_MEDIA_DIR (16 Nov, the playback tests on a slow link): the sample film's own files, takes and sounds, from a
   // folder of made-up media at the same paths under it (`<dir>/blocks/S3/takes/…`); without it they do not exist
   const own = process.env.MOCK_MEDIA_DIR && p && !render ? /^assets\/films\/the-lighthouse\/((?:blocks|audio)\/[^\0]+)$/.exec(p)?.[1] : undefined;
-  const file = p === SAMPLE_TAKE_1080 ? process.env.MOCK_TAKE_FILE : p?.endsWith(`/${masterPath}`) ? process.env.MOCK_MASTER_FILE
-    : render ? process.env.MOCK_RENDER_FILE ?? path.join(process.cwd(), 'src/fixtures/media/sample-render.mp4')
+  // the sample master (the base of the 1080p view) plays the same small test video unless MOCK_MASTER_FILE names a
+  // heavier one (MOCK_TAKE_FILE for a take's full-size file): a 1080p view whose picture cannot be shown drops to 480p,
+  // so without a file here the sample's 1080p view and its Upscale tab never showed
+  const sample = path.join(process.cwd(), 'src/fixtures/media/sample-render.mp4');
+  // so does a sample take's own full-size file (the FIX-bottle take's 1080p, on every sample film that lists it)
+  const take1080 = p === SAMPLE_TAKE_1080 || (!!p && /^assets\/films\/sample-[a-z0-9-]+\/blocks\/[^/]+\/takes\/[^/]+-1080p\.mp4$/.test(p));
+  const file = take1080 ? process.env.MOCK_TAKE_FILE ?? sample : p?.endsWith(`/${masterPath}`) ? process.env.MOCK_MASTER_FILE ?? sample
+    : render ? process.env.MOCK_RENDER_FILE ?? sample
     : own && !own.split('/').includes('..') ? path.join(process.env.MOCK_MEDIA_DIR!, own) : undefined;
   if (!file || !p) return undefined;
   try {

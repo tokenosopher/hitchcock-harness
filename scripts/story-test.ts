@@ -1,15 +1,16 @@
-// npm run story:test -- <empty test root>
+// npm run story:test [-- <empty test root>]
 // Builds a small film of its own under <root> and runs the story reader and the two story writes against it:
 // a first save, an unchanged save, a save from a stale version (refused, then forced), a version Alma would
-// write, and the settle. Nothing is sent to Alma and no real film is read or written.
+// write, and the settle. Nothing is sent to Alma and no real film is read or written. Without a root it makes one
+// in the temp folder (so a runner can run it) and deletes it after.
+import { mkdtempSync, rmSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-const root = path.resolve(process.argv[2] ?? '');
-if (!process.argv[2]) {
-  console.error('usage: npm run story:test -- <empty test root>');
-  process.exit(2);
-}
+const own = !process.argv[2];
+const root = own ? mkdtempSync(path.join(os.tmpdir(), 'story-test-')) : path.resolve(process.argv[2]);
+if (own) process.on('exit', () => rmSync(root, { recursive: true, force: true }));
 process.env.HARNESS_FILM_REPO = path.join(root, 'repo');
 process.env.HARNESS_DIR = path.join(root, 'harness');
 process.env.HARNESS_ALMA_DRYRUN = '1';

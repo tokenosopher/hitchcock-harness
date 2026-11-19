@@ -20,6 +20,9 @@ import { QC_SPECS } from '../src/components/lib/qc';
 import { SCRIPT_EDITED_KIND, scriptEditedMessage } from '../src/lib/script-edit';
 import { BEFORE_EVERY_UPLOAD, beforeEveryUploadIn, FLOW_DIR, RELEASE_NOTE } from '../src/server/films/read/release';
 
+// it only reads Alma's prompt from process.ts; the dry run anyway, so nothing loaded here can start a real claude
+process.env.HARNESS_ALMA_DRYRUN = '1';
+
 const STEP: Record<string, string> = {
   Story: 'story', Locations: 'loc', Views: 'views', Shots: 'shots', Previz: 'previz', Faces: 'faces', Clothing: 'clothing', Sheet: 'sheet', Voices: 'voices',
   Elements: 'elements', Scenes: 'scenes', Edit: 'edit', Finish: 'finish', Sound: 'sound', Release: 'release',
