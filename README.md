@@ -1,6 +1,6 @@
 # Hitchcock Harness
 
-Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password: both sign-ins stay with Claude Code.
+Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below): both sign-ins stay with Claude Code.
 
 New here? After installing, read GUIDE.md: your first film, step by step.
 
@@ -68,6 +68,8 @@ Then open **http://localhost:8800** in your browser. Leave the Terminal window o
 - **There is one hard stop before the videos.** When every character, place and scene prompt is ready, she stops and asks "Go for the video?" with the total. You review every scene, its prompt and what goes into it on the **Go for the video** page before you say go.
 - Everything after that (another round, a redo of a take, the 1080p of each take in Seedance 2.5) gets its own quote and waits for your yes.
 - Every paid job is written down in the film's `spend.md`, and the total shows at the top of the film's pages.
+
+**Optional: the reserve key.** If your Claude plan's limit stops Alma mid-film, she can run on API credits instead. Put an API key from your Claude Console organization in `.env.local` as `HARNESS_RESERVE_API_KEY=…` (never in `.env.example`, never committed), then turn on **Settings → Reserve: API credits**. It is off by default, and off again with the same switch; while it is on, Alma's turns are paid from your API credits and the page shows the month's spend.
 
 ## A word on safety
 
