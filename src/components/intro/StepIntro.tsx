@@ -94,7 +94,7 @@ export function StepIntro({ step, className, lines, width }: { step: IntroKey; c
   // known at the first draw: drawn as it is; known only after the server answers: it slides in
   const [ready, setReady] = useState(shows !== undefined);
   useEffect(() => { if (shows !== undefined && !ready) { const t = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(t); } }, [shows, ready]);
-  // for a few seconds after a Hide, the mark offers Undo and Hide all intros; after Hide all intros, Undo brings them back
+  // for a few seconds after a Hide the row offers Undo (and, on the desktop, the way to Settings); then it settles
   const [after, setAfter] = useState<'hid' | undefined>();
   useEffect(() => { if (!after) return; const t = setTimeout(() => setAfter(undefined), 8000); return () => clearTimeout(t); }, [after]);
   // the fold. Phone: whole sentences, read off hidden twins of each sentence prefix. Desktop: the same, within `lines`.
