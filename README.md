@@ -2,8 +2,7 @@
 
 Hitchcock Harness is an open-source, opinionated filmmaking tool, built from the ground up to streamline the process of high-quality AI filmmaking.
 
-<!-- The walkthrough video: the poster below links to it on YouTube (the link goes in the round brackets at the end of the next line). -->
-![The three-minute walkthrough of Hitchcock Harness](docs/launch-poster.jpg)
+[![Watch the three-minute walkthrough of Hitchcock Harness on YouTube](docs/launch-poster.jpg)](https://youtu.be/4-v9g7aOiIg)
 
 > "Once the screenplay is finished, I'd just as soon not make the film at all. … When you finish the script, the film is perfect. But in shooting it you lose perhaps 40 per cent of your original conception."
 >
