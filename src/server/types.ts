@@ -38,7 +38,7 @@ export interface FilmRef {
 export interface Cost { credits?: number; usd?: { amount: number; service: string }[] }
 
 export interface ScriptVersion { version: string; date?: string; locked: boolean; path: string; /** saved by the user on the Story page (ASKS 64) */ by?: 'you' }
-export interface ScriptLine { id: string; speaker: string; text: string; sceneId?: string; direction?: string }  // direction: "beat" from **ALEXANDER** *(beat)*
+export interface ScriptLine { id: string; speaker: string; text: string; sceneId?: string; direction?: string }  // direction: "beat" from **MAREN** *(beat)*
 
 export interface CharacterRef {
   id: string;                   // "C01"
@@ -593,7 +593,7 @@ export interface GoMediaItem {
   kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
   n: number;                    // the number within its kind
   ref: string;                  // "V1", "I4", "A1"
-  tag: string;                  // "ALEXANDER", "CRANEION SQUARE", "PAGE 2"
+  tag: string;                  // "MAREN", "THE LAMP ROOM", "PAGE 2"
   what: string;                 // "C02 element", "C05-C06 sheet", "P01 prop", "L01 view", "boards v4 · page 2", "voice line"
   file: string;                 // the file sent, relative to the film folder
   desc?: string;                // the media list's description (what the prompt says about it)

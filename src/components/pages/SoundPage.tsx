@@ -23,7 +23,7 @@ import { StepIntro } from '@/components/intro/StepIntro';
 const FIRST = 6;
 
 function FileRow({ f, group, path, on, onChip }: { f: SoundFile; group: SoundGroup; path: string; on: boolean; onChip: () => void }) {
-  // the folder inside the group, when the file sits deeper than the group's own folder ("clone-alexander/q8")
+  // the folder inside the group, when the file sits deeper than the group's own folder ("clone-keeper/q8")
   const dir = f.path.split('/').slice(0, -1).join('/');
   const inside = group.folder.split(', ').reduce((d, root) => (d === root ? '' : d.startsWith(`${root}/`) ? d.slice(root.length + 1) : d), dir);
   return (
