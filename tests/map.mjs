@@ -1,0 +1,47 @@
+// Which check covers what: one row per unit check (scripts/*-test.ts), read by tests/run.mjs. tests/README.md says how
+// to run them; keep this file up to date when you add, move or rename a check or the code it checks.
+//
+//   file    the check (a unit script under scripts/)
+//   tier    'quick'  runs in `npm run test:quick` (a few seconds at most)
+//           'slow'   runs only in `npm run test:slow`, or in `test:changed` when what it covers changed
+//   covers  the source files it checks, as globs (** any folders, * any name): `test:changed` runs it when one changed
+//   secs    about how long it takes on its own (the runner starts the longest first)
+
+const CHARACTERS = ['src/components/characters/**', 'src/components/pages/Character*.tsx', 'src/server/films/read/cast.ts', 'src/app/films/*/character/**'];
+const LEFT = ['src/components/edit/left.ts', 'src/components/edit/leftInput.ts', 'src/server/edit/left.ts', 'src/fixtures/left.ts', 'src/components/flow/waitList.ts'];
+const TAKES = ['src/components/edit/shots.ts', 'src/server/edit/shots.ts', 'src/fixtures/shots.ts'];
+
+export default [
+  { file: 'scripts/alma-drop-test.ts', tier: 'slow', covers: ['src/server/edit/alma-drop.ts', 'src/server/edit/working*.ts', 'src/server/edit/watch.ts', 'src/server/edit/timeline.ts'], secs: 9 },
+  { file: 'scripts/answer-test.ts', tier: 'quick', covers: ['src/server/actions/answer*.ts', 'src/server/films/read/feed.ts'], secs: 1 },
+  { file: 'scripts/board-test.ts', tier: 'quick', covers: ['src/components/lib/flow.ts', 'src/components/lib/derive.ts', 'src/components/characters/Cards.tsx', 'src/server/films/read/master.ts', 'src/server/films/read/feed.ts', 'src/fixtures/cast.ts'], secs: 1 },
+  { file: 'scripts/cast-test.ts', tier: 'quick', covers: [...CHARACTERS, 'src/components/lib/derive.ts'], secs: 1 },
+  { file: 'scripts/controls-test.ts', tier: 'quick', covers: ['src/components/edit/controls.ts', 'src/components/edit/model.ts'], secs: 1 },
+  { file: 'scripts/files-test.ts', tier: 'slow', covers: ['src/server/edit/files.ts', 'src/components/edit/placeFile.ts', 'src/components/edit/model.ts', 'src/fixtures/files.ts'], secs: 21 },
+  { file: 'scripts/fixes-test.ts', tier: 'quick', covers: ['src/components/edit/model.ts', 'src/components/edit/shots.ts', 'src/components/edit/controls.ts'], secs: 1 },
+  { file: 'scripts/history-list-test.ts', tier: 'quick', covers: ['src/components/edit/historyList.ts', 'src/components/edit/history.ts'], secs: 1 },
+  { file: 'scripts/left-test.ts', tier: 'quick', covers: [...LEFT], secs: 1 },
+  { file: 'scripts/marks-test.ts', tier: 'quick', covers: ['src/server/edit/marks.ts', 'src/components/edit/marks.ts', 'src/server/context.ts'], secs: 1 },
+  { file: 'scripts/master-test.ts', tier: 'quick', covers: ['src/server/films/registry.ts', 'src/server/films/read/master.ts', 'src/server/films/read/post.ts', 'src/server/films/read/feed.ts', 'src/server/edit/state.ts', 'src/server/release/final.ts', 'src/components/edit/fullsize.ts', 'src/components/edit/sameCut.ts'], secs: 1 },
+  { file: 'scripts/ondemand-test.ts', tier: 'slow', covers: ['src/server/edit/render*.ts', 'src/server/edit/watch.ts', 'src/server/edit/working*.ts', 'src/server/edit/alma-drop.ts'], secs: 11 },
+  { file: 'scripts/one-alma-test.ts', tier: 'quick', covers: ['src/server/claude/procs.ts', 'src/server/claude/process.ts', 'src/server/context.ts'], secs: 4 },
+  { file: 'scripts/phonefull-test.ts', tier: 'quick', covers: ['src/components/edit/phoneFull.ts'], secs: 1 },
+  { file: 'scripts/recipes-test.ts', tier: 'quick', covers: ['recipes/**', 'src/components/lib/derive.ts', 'src/components/lib/qc.ts', 'src/components/release/**', 'src/server/recipes.ts', 'src/server/claude/process.ts', 'src/server/films/read/release.ts', 'src/server/edit/alma-drop.ts', 'src/lib/script-edit.ts'], secs: 1 },
+  { file: 'scripts/refs-test.ts', tier: 'quick', covers: ['src/lib/refs.ts', 'src/components/lib/refPick.ts', 'src/components/shell/refItems.ts', 'src/components/shell/refPicking.ts'], secs: 1 },
+  { file: 'scripts/render-test.ts', tier: 'slow', covers: ['src/server/edit/render*.ts', 'src/server/edit/timeline.ts', 'src/server/edit/probe.ts', 'src/components/edit/fullsize.ts', 'src/components/edit/renderAsk.ts', 'src/components/edit/masters.ts'], secs: 70 },
+  { file: 'scripts/renders-test.ts', tier: 'quick', covers: ['src/components/edit/renderList.ts', 'src/server/edit/render-files.ts', 'src/components/edit/masters.ts', 'src/components/edit/fullsize.ts', 'src/fixtures/renders.ts'], secs: 1 },
+  { file: 'scripts/reserve-test.ts', tier: 'quick', covers: ['src/server/claude/reserve.ts', 'src/server/claude/limit.ts', 'src/server/claude/process.ts'], secs: 2 },
+  { file: 'scripts/resumed-test.ts', tier: 'quick', covers: ['src/server/claude/stream.ts', 'src/server/claude/tasks.ts', 'src/server/claude/transcript.ts'], secs: 1 },
+  { file: 'scripts/samecut-test.ts', tier: 'quick', covers: ['src/components/edit/sameCut.ts'], secs: 1 },
+  { file: 'scripts/shots-out-test.ts', tier: 'quick', covers: [...TAKES, 'src/components/edit/model.ts'], secs: 1 },
+  { file: 'scripts/sound-test.ts', tier: 'quick', covers: ['src/components/edit/model.ts'], secs: 1 },
+  { file: 'scripts/story-test.ts', tier: 'quick', covers: ['src/server/films/read/story.ts', 'src/server/actions/story.ts'], secs: 1 },
+  { file: 'scripts/subs-test.ts', tier: 'quick', covers: ['src/components/edit/subs*.ts', 'src/components/edit/model.ts', 'src/server/edit/timeline.ts'], secs: 1 },
+  { file: 'scripts/tracks-test.ts', tier: 'quick', covers: ['src/components/edit/model.ts'], secs: 1 },
+  { file: 'scripts/waitlist-test.ts', tier: 'quick', covers: ['src/components/flow/waitList.ts', 'src/components/edit/left.ts', 'src/components/lib/flow.ts', 'src/components/lib/derive.ts', 'src/fixtures/day1.ts', 'src/fixtures/index.ts'], secs: 1 },
+  { file: 'scripts/working-test.ts', tier: 'quick', covers: ['src/server/edit/working*.ts', 'src/components/edit/history.ts', 'src/server/edit/timeline.ts'], secs: 4 },
+];
+
+/** Never run by the runner: hand tools. smoke:thread sends one real message to Alma (a real claude process);
+ *  films:check reads the films in the studio. */
+export const manual = ['scripts/smoke-thread.ts', 'src/server/films/check.ts'];

@@ -55,4 +55,4 @@ Alma runs with Claude Code's permission prompts off (`--dangerously-skip-permiss
 
 ## Checks
 
-`npx tsc --noEmit` and `npx next build` must pass. The `npm run *:test` scripts are developer tests; most run on made-up films in a temp folder. `MOCK=boards npx next dev -p <port>` serves an invented sample film (src/fixtures/) instead of the studio's films.
+`npx tsc --noEmit` and `npx next build` must pass. The `npm run *:test` scripts are developer tests; most run on made-up films in a temp folder. `npm run test:quick`, `test:changed` and `test:slow` run them (tests/README.md). `MOCK=boards npx next dev -p <port>` serves an invented sample film (src/fixtures/) instead of the studio's films.
