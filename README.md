@@ -30,6 +30,14 @@ New here? After installing, read GUIDE.md: your first film, step by step.
 
 ## Install
 
+Open Claude Code and point it at https://github.com/tokenosopher/hitchcock-harness: Claude will set it up. Paste this:
+
+```
+Clone https://github.com/tokenosopher/hitchcock-harness and set it up for me.
+```
+
+Or do it by hand:
+
 1. Open the Terminal app and install the programs:
    ```bash
    brew install node ffmpeg python git uv
