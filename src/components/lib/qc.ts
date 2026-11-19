@@ -93,7 +93,7 @@ export function nextSentence(r: QCReport): string {
 }
 
 // The recipes' absolute paths come from the server once (the client does not know where the harness lives);
-// the same paths ALMA_APPEND_PROMPT names (src/server/recipes.ts).
+// the same paths almaAppendPrompt() names (src/server/recipes.ts).
 let recipes: Promise<{ recipe: string; edit: string }> | undefined;
 function recipePaths(): Promise<{ recipe: string; edit: string }> {
   recipes ??= fetch('/api/qc').then((r) => r.json() as Promise<{ recipe: string; edit: string }>)

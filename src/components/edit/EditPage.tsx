@@ -660,7 +660,7 @@ export function EditPage() {
     setNudge(d ? { d, v: tl.version, refs } : undefined);
     if (d === (base?.d ?? 0)) say(step > 0 ? 'It cannot go further: a clip that is not selected is in the way.' : 'It cannot go further back.');
   };
-  // "Ask Alma" names the edit recipe by its absolute path, the one ALMA_APPEND_PROMPT gives her
+  // "Ask Alma" names the edit recipe by its absolute path, the one almaAppendPrompt() gives her
   const [editRecipe, setEditRecipe] = useState('recipes/edit.md');
   useEffect(() => { let live = true; void editRecipePath().then((p) => { if (live) setEditRecipe(p); }); return () => { live = false; }; }, []);
   const askAlma = () => {

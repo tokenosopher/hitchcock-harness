@@ -14,7 +14,7 @@ import { OP_NAMES } from '../src/components/release/ops';
 import { PLATFORM_KINDS } from '../src/components/release/platforms';
 import { optionsTag } from '../src/server/edit/render-options';
 import { variantBase } from '../src/server/edit/render';
-import { ALMA_APPEND_PROMPT } from '../src/server/claude/process';
+import { almaAppendPrompt } from '../src/server/claude/process';
 import { checkDrop, DROP_DIR, DROP_NAME, isDropFile } from '../src/server/edit/alma-drop';
 import { QC_SPECS } from '../src/components/lib/qc';
 import { SCRIPT_EDITED_KIND, scriptEditedMessage } from '../src/lib/script-edit';
@@ -22,6 +22,7 @@ import { BEFORE_EVERY_UPLOAD, beforeEveryUploadIn, FLOW_DIR, RELEASE_NOTE } from
 
 // it only reads Alma's prompt from process.ts; the dry run anyway, so nothing loaded here can start a real claude
 process.env.HARNESS_ALMA_DRYRUN = '1';
+const ALMA_APPEND_PROMPT = almaAppendPrompt();
 
 const STEP: Record<string, string> = {
   Story: 'story', Locations: 'loc', Views: 'views', Shots: 'shots', Previz: 'previz', Faces: 'faces', Clothing: 'clothing', Sheet: 'sheet', Voices: 'voices',

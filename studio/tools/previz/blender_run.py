@@ -1,17 +1,17 @@
-"""Run Blender headless with at most SLOTS renders at once across every agent on this Mac.
-It can be changed while renders wait: write a number into /tmp/previz-blender-slots (every waiting run reads it on each
-try); remove the file to go back to SLOTS.
+"""Run Blender headless with at most SLOTS renders at once across every agent of this studio.
+It can be changed while renders wait: write a number into <studio>/scratch.nosync/previz-blender/line-slots (every waiting
+run reads it on each try); remove the file to go back to SLOTS.
     .venv/bin/python tools/previz/blender_run.py <scene script>.py -- --film $FILM <script args>
 Blender is /Applications/Blender.app, or the program named in BLENDER_BIN. Waits for a free slot (an flock on
-/tmp/previz-blender-slot-N), runs `Blender -b -P <script> -- <args>`, streams its output minus the per-frame noise, and exits
+<studio>/scratch.nosync/previz-blender/line-slot-N), runs `Blender -b -P <script> -- <args>`, streams its output minus the per-frame noise, and exits
 with Blender's return code. Set SLOTS=1 in the environment to serialise (SLOTS set in a run's environment beats the live file
 for that run).
 
-First come, first served: each waiting run takes a numbered ticket (/tmp/previz-blender-queue/), and only the lowest waiting
+First come, first served: each waiting run takes a numbered ticket (<studio>/scratch.nosync/previz-blender/line-queue/), and only the lowest waiting
 number may take a freed slot, so a new run never jumps one that has waited longer.
 A fast lane for runs that render nothing: --project, --shots-file, --build and tools/previz/build_location.py only build
 the scene and print or write text. They never take a render slot: they have their own FAST_SLOTS (default 3, slot files
-/tmp/previz-blender-fast-N, their own queue), so a camera question is not stuck behind takes.
+line-fast-N, their own queue), so a camera question is not stuck behind takes.
 Every run ends with one line: `blender_run: <lane> slot N, waited W s, ran R s, exit E` (timing.py reads it).
 
 The memory check. A grey previz render can take about 2 GB; eight at once can fill a 16 GB Mac's memory. SLOTS stays the
@@ -20,16 +20,21 @@ ceiling; a render also waits while the Mac has no room for one more:
   - a further render starts only when macOS reports normal memory pressure and at least MEM_NEED_GB (3) is free, counting
     MEM_NEED_GB as already taken by each render started in the last MEM_RAMP_S (45) seconds, which has not grown yet;
   - the line stays first come, first served: the run at the head waits for memory and the others wait behind it.
-MEM_CHECK=0 in a run's environment switches the check off for that run; a number in /tmp/previz-blender-mem-need changes
+MEM_CHECK=0 in a run's environment switches the check off for that run; a number in <studio>/scratch.nosync/previz-blender/line-mem-need changes
 MEM_NEED_GB while renders wait. The fast lane is never held (its runs render nothing).
 A render also prints `blender_run: memory: <free> GB free at the start, waited M s for memory, peak <P> GB`, and every
-run adds one line to ~/Library/Logs/previz/blender-runs.log, so the limit can be set from what was measured."""
+run adds one line to <studio>/scratch.nosync/previz-blender/blender-runs.log, so the limit can be set from what was measured.
+Every file of the line lives in the studio folder (<studio> is the folder that holds tools/), never in /tmp, so every agent
+of this studio shares one line; BLENDER_RUN_PREFIX and BLENDER_RUN_LOG choose other places."""
 import fcntl, json, os, resource, subprocess, sys, time
 
 BLENDER = os.environ.get('BLENDER_BIN', '/Applications/Blender.app/Contents/MacOS/Blender')
 SLOTS = int(os.environ.get('SLOTS', 8))
 FAST_SLOTS = int(os.environ.get('FAST_SLOTS', 3))
-PREFIX = os.environ.get('BLENDER_RUN_PREFIX', '/tmp/previz-blender')     # the tests use their own, so they never touch the real line
+STUDIO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # tools/previz/ -> the studio
+LINE_DIR = os.path.join(STUDIO, 'scratch.nosync', 'previz-blender')
+PREFIX = os.environ.get('BLENDER_RUN_PREFIX', os.path.join(LINE_DIR, 'line'))   # the tests use their own, so they never touch the real line
+os.makedirs(os.path.dirname(PREFIX), exist_ok=True)
 LIVE = PREFIX + '-slots'
 MEM_LIVE = PREFIX + '-mem-need'
 RUNNING = PREFIX + '-running'                                            # one file per render that holds a slot: <pid>, its mtime the start
@@ -37,7 +42,7 @@ MEM_CHECK = os.environ.get('MEM_CHECK', '1') != '0'
 MEM_NEED_GB = float(os.environ.get('MEM_NEED_GB', 3))
 MEM_RAMP_S = float(os.environ.get('MEM_RAMP_S', 45))
 MEM_MIN_PARALLEL = int(os.environ.get('MEM_MIN_PARALLEL', 4))
-RUN_LOG = os.environ.get('BLENDER_RUN_LOG', os.path.expanduser('~/Library/Logs/previz/blender-runs.log'))
+RUN_LOG = os.environ.get('BLENDER_RUN_LOG', os.path.join(LINE_DIR, 'blender-runs.log'))
 FAST_FLAGS = ('--project', '--shots-file', '--build')
 FAST_SCRIPTS = ('build_location.py',)
 LANES = {'render': dict(slot=PREFIX + '-slot-%d', queue=PREFIX + '-queue'),

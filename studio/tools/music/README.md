@@ -24,7 +24,7 @@ Stems of a take or a song come from Demucs on this Mac: `tools/stems/split.py` (
 ## A composed take on Higgsfield
 
 1. Write the cue in `audio/score/cues.json` (shape below).
-2. Quote it: `generate_audio` with `model: elevenlabs_music_v2_5`, the cue's `prompt`, `duration` (3 to 600 s),
+2. Quote it: `generate_audio` with `model: elevenlabs_music_v2`, the cue's `prompt`, `duration` (3 to 600 s),
    `force_instrumental`, `lyrics` (only for a sung cue, up to 120 s), `batch_size` 1, `use_unlim: false`, `folder_id`,
    and `get_cost: true`. Then the same call without `get_cost` on the go. Log the row in `spend.md`.
 3. Wait with `jobs_wait`. Write the result URL to a file with the file tool (never on a command line, never in the
@@ -71,7 +71,7 @@ Written by `log_take.py`, keyed `<CUE>-take<N>`:
 ```json
 {
  "THEME-take2": {
-  "cue": "THEME", "take": 2, "job": "<job id>", "model": "elevenlabs_music_v2_5",
+  "cue": "THEME", "take": 2, "job": "<job id>", "model": "elevenlabs_music_v2",
   "prompt": "Slow, warm chamber piece in D minor, …", "duration_asked": 92, "seconds": 92.0, "credits": 13.4,
   "date": "2026-11-20", "file": "audio/score/THEME-take2.mp3", "lufs": -17.8,
   "sections": [{"name": "intro", "start": 0.0, "end": 20.0, "lufs": -24.1}, {"name": "theme", "start": 20.0, "end": 65.0, "lufs": -16.9}],

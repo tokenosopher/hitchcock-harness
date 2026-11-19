@@ -14,7 +14,8 @@ and says how the end was found:
   call       the tool result of a foreground call that ran this one run (measured)
   call/n     a foreground call that ran n runs one after another: the call's time shared out evenly (estimated)
   task-file  a background task: the mtime of its output file in the session's tasks folder (measured, if the file is still there)
-  log-file   the run wrote to a /tmp log that still exists and no later run wrote to it: its mtime (measured)
+  log-file   the run wrote to a log (in a scratch.nosync folder, or /tmp in older films) that still exists and no later
+             run wrote to it: its mtime (measured)
   call-par   runs started together with & in one call and waited on: the call's end (an upper bound), or the run's own log
   failed     the shell never started it (left out of every count)
   seen       the first later tool result that shows the run's finish line or its log (an upper bound)
@@ -126,7 +127,7 @@ def runs_in(cmd):
     for m in RUN.finditer(cmd):
         script, args = m.group(1), m.group(2)
         tail = cmd[m.end():m.end() + 160]
-        lm = re.search(r'>\s*(/tmp/[^\s;&|)]+)', m.group(0) + tail[:60])
+        lm = re.search(r'>\s*["\']?((?:/tmp/|/private/tmp/|[^\s;&|)>"\']*scratch\.nosync/)[^\s;&|)"\']+)', m.group(0) + tail[:60])
         argsx = re.split(r'\s[12]?>', ' ' + args)[0]
         shell_bg = bool(re.match(r'[^\n;]*?&\s*(\)|$|\n|;|wait)', tail)) and '&&' not in tail[:6]
         # a shell function: count its call sites
