@@ -157,6 +157,8 @@ The flow already carries what it takes from each; read a source only to close a 
 ### The script
 20. Start `script.md` from `templates/script.md`: the ID table, then `## Story` with the settled story version word for word, dated, naming its file (`story/v<n>.md`). Below it go `## Script` (the generations, with a header line for every version: its number, its date, what changed), a timing table per generation, the whole-film timing, the flagged lines, and `## Audit`.
     - Keep the template's generation headings (`### S<n> · <name> · <LID> <location>`) and line rows (`**NAME:** "line"`), because `tools/release/make_script_json.py` reads them for the captions ([[Flow v3.2 - 12 Release]]).
+    - In the ID table's last column, the film's own entries, separate the entries in one cell with a semicolon (`C01 Maren; C02 Tobias`), and write a character as `C01 Name, role` at most.
+    - Mark a line heard over the picture and spoken by no one in the shot (a narrator) `*(over the picture)*` after the speaker's name (`**NARRATOR** *(over the picture)*: "line"`), so the timeline does not expect it in the previz or the take.
     - The user often dictates, so names arrive misheard. Map them to the cast and say once which names you used.
 21. Read the finished scripts folder first (Inputs). Then write pass 1 from the settled story: the dialogue and what happens, with no stage directions except the user's own. The film is under three minutes; plan the script to land there.
     - When the film opens on a title card, the script names it before the first generation: the place and year, and its subtitle line. It is the default opening for a period film. The card itself: [[Flow v3.2 - 9 Edit]].

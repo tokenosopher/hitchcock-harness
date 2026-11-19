@@ -64,7 +64,7 @@ status: live
    - Draw anything the audience must read (a dial, a sign, a paper, a headline) in code, or composite it from the real source, then set it into the plate in its light. The image model repeats and garbles numbers. Everything else carries no readable text: blank keys, code as a texture too small to read.
    - A plate that holds a drawn prop gets the drawing as a reference, so it sits in the room's perspective. Protect it in every later clean-up with the region composite (step 13).
    - **GATE:** show each prop on a card that asks, with your prediction of the pick from `taste.md`, and wait for the user's yes to each by ID, or the pick among a designed object's versions. Add every pick to `taste.md` with the candidates, the user's words, the prediction and whether it was right.
-8. **Assign an empty view to every camera.** Every location gets a master (the picked picture's camera) and a front and a back view. Then, for each shot, write down where each character faces, and:
+8. **Assign an empty view to every camera.** Every location gets a master (the picked picture's camera) and a front and a back view. The camera that carries the picked picture is named `MASTER` in the views script and every scene file, never another name (`camPICK`), because the pages count its plate as painted only by the master. Then, for each shot, write down where each character faces, and:
    - a close-up or a medium stands on the view **behind** the character, the reverse of what they face; their key light comes from what they face;
    - a wide gets a view of its own, painted from that shot's own camera and plate at the film's ratio, because the wide is the shot that shows the place. Two wides from the same camera, or from cameras a step apart with the same framing, share the one painted from it;
    - a camera that sees a really different side of the place from every view made so far gets a new view, made from its own plate;
@@ -128,7 +128,7 @@ status: live
 - `$FILM/props/P0N-<name>/`: prop references `P0N-<name>-v<n>.png`, a designed object's candidates and its version extracted from the picked place, drawn readable props, prop-state references under their own prop ID.
 - `taste.md` at the studio root: one entry per location and prop pick, with the candidates, the user's words, the prediction and whether it was right.
 - `$FILM/previz/rooms/L0N-<name>.json`: the room plan json, built from the pick, registered under `locations` in `$FILM/previz/film.json`.
-- `$FILM/previz/scenes/L0N_<name>_views.py`: the location's view cameras (the picture's camera, MASTER, FRONT, BACK, TOP and any other).
+- `$FILM/previz/scenes/L0N_<name>_views.py`: the location's view cameras (MASTER, the picture's camera, then FRONT, BACK, TOP and any other).
 - The plates: the grey plates `$FILM/previz/L0N/plates/cam<id>-00.00-empty.png` from the views script and `$FILM/previz/<G>/plates/cam<id>-<t>-empty.png` (the time as `04.20`) from a generation's scene script; the colour plates the paintings are made from, beside them.
 - `$FILM/previz/L0N/check/`: the fitting renders and their overlay on the pick; each painting's side-by-side, overlay and marked points against its plate.
 - Beside every image: its prompt as `<name>.prompt.txt`. Every Higgsfield job's id goes into its `spend.md` row.

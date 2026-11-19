@@ -19,6 +19,8 @@
 
 The user cites by ID and version ("C01 v4b").
 
+In the film's own script the table's last column holds the film's entries, separated in one cell by a semicolon (`C01 <Name>; C02 <Name>`), a character written `C01 <Name>, <role>` at most.
+
 ## Story (the settled story, story/v<n>.md, <YYYY-MM-DD>, word for word)
 
 <The settled version of story/ exactly as it is in its file, misheard names and all. Say once, below it, which cast names the misheard ones map to.>
@@ -33,6 +35,7 @@ The user cites by ID and version ("C01 v4b").
 **<NAME>** *(<to whom, or an action; never a breath or a sigh before the line>)*: "<line>"
 `[1 s]` <action between the lines; a silence longer than 0.5 s exists only where it is written: "(beat)", "A beat.", a leading "…">
 **<NAME>** *(off)*: "<line; a cut-off line ends on a dash, like this—>"
+**<NAME>** *(over the picture)*: "<a line heard over the picture and spoken by no one in the shot, a narrator's; the timeline does not expect it in the previz or the take>"
 
 | generation | lines | words | action s | ≈ s | ends at |
 |---|---|---|---|---|---|
