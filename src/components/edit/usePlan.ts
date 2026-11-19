@@ -5,7 +5,8 @@
 // the user (no version). Set only when the answer changed, so an idle page draws nothing.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export interface PlanState { locked: boolean; first?: boolean; pending?: string }
+/** `boards`: per scene, the storyboard version its boards come from and why. */
+export interface PlanState { locked: boolean; first?: boolean; pending?: string; boards?: { scene: string; version: string; why: string; panels: number; newer?: string; take?: number; newestTake?: number; lines?: string }[] }
 
 export function usePlan(film: string, changed?: string) {
   const [data, setData] = useState<PlanState>();
@@ -16,7 +17,7 @@ export function usePlan(film: string, changed?: string) {
     void fetch(`/api/films/${film}/cut/plan`, { cache: 'no-store' }).then(async (r) => {
       if (!r.ok || !live) return;
       const j = (await r.json()) as PlanState;
-      const d: PlanState = { locked: !!j.locked, ...(j.first ? { first: true } : {}), ...(j.pending ? { pending: j.pending } : {}) };
+      const d: PlanState = { locked: !!j.locked, ...(j.first ? { first: true } : {}), ...(j.pending ? { pending: j.pending } : {}), ...(Array.isArray(j.boards) && j.boards.length ? { boards: j.boards } : {}) };
       const s = JSON.stringify(d);
       if (s === last.current) return;
       last.current = s;

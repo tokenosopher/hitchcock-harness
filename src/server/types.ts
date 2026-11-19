@@ -79,8 +79,13 @@ export interface LocationRef {
   name: string;
   folder: string;
   styleImages?: Round[];
-  master?: { path?: string; picked?: boolean };
-  views?: { camera: string; path: string }[];
+  /** `measured`: a measure of the painting against its colour plate is in previz/<LID>/check/. */
+  master?: { path?: string; picked?: boolean; measured?: boolean };
+  views?: { camera: string; path: string; measured?: boolean }[];
+  /** The view cameras that have a colour plate (previz/<LID>/plates-colour/cam<X>-colour.png, the plan's TOP left out),
+   *  lower case ("master", "front", "back"): each wants a painted view, measured against it (Flow v3.2, 4, steps 8 to
+   *  11). Undefined when the film keeps no colour plates. */
+  plates?: string[];
   props?: PropRef[];
 }
 /** A prop (props/<PID>-<name>/): its candidate rounds, made on its own or cut out of a place, and the pick
@@ -350,7 +355,11 @@ export interface FeedSummary {
   asks: FeedCard[];
   /** Cards that ask and are being worked on instead of answered (FeedAsk.progress). */
   working?: FeedCard[];
+  /** The user's yeses: cards that ask for a yes, answered with anything but a no or "replaced by …", in brief (the go
+   *  for the first takes reads the yes on the boards and on each prop from them). */
+  approvals?: FeedApproval[];
 }
+export interface FeedApproval { key: string; id?: string; place: FeedPlace; ids: string[]; title: string; at?: string }
 
 // ---- Sound (10 Nov): stage 11's files, by name only. The rounds and their story are the feed's sound cards.
 export interface SoundFile { path: string; name: string; bytes?: number; date?: string }
@@ -432,6 +441,9 @@ export interface ThreadInfo {
   defaultModel?: string;
   /** The model the CLI last said it is running, e.g. "claude-fable-5-2[1m]"; unset until a turn has started. */
   servedModel?: string;
+  /** The reserve switch: `on` is the setting, `hasKey` whether a key is saved (never the key), `onKey`
+   *  whether this Alma's current process was started on it (it differs from `on` while a flip waits for her to be idle). */
+  reserve?: { on: boolean; hasKey: boolean; onKey: boolean };
 }
 
 // ---- The edit (build step 4). The timeline is a file in the film folder: cut/<version>.json.
@@ -463,7 +475,14 @@ export interface TimelineClip {
   who?: string;                 // a line's speaker ("TOBIAS"); absent on an action
   inFrame?: string;             // who and what a planned shot shows ("the boy, Maren, the bottle")
   made?: string;                // what the app built, "<scene hash>.<clip hash>": a clip changed by hand no longer matches
+  part?: number; parts?: number; // a planned line the previz take splits over several shots: this clip is part `part` of `parts`
+  timing?: string;              // a planned line: where its time comes from, in words ("at previz take 9's times", or why it is at reading pace)
+  /** A board that is one panel of its shot's storyboard: board `k` of the shot's `of`,
+   *  `n` its number in the storyboard, `s` its time in the scene as the storyboard names it (seconds). Every panel of a
+   *  shot is its own clip, from its own time to the next panel's; a take replaces all of a shot's panels together. */
+  panel?: BoardPanel;
 }
+export interface BoardPanel { k: number; of: number; n: number; s: number }
 export type PlanKind = 'line' | 'shot' | 'board';
 export interface TimelineTrack {
   id: string;                   // "V1", "A1", "A2", "C1"

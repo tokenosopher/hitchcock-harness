@@ -6,8 +6,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
-import type { Timeline } from '../types';
-import { bringUp, boardsBack, hasPlanned, READING_PACE, takeForBoards, type PlanScene, type PlanShot, type PlanSource, type TakeIn } from '@/components/edit/planned';
+import { QC_LOCK_SCORE, type Timeline } from '../types';
+import { bringUp, boardsBack, hasPlanned, READING_PACE, takeForBoards, type PlanPreviz, type PlanScene, type PlanShot, type PlanSource, type PrevizLine, type TakeIn } from '@/components/edit/planned';
 import { CutError, resolveSrc } from './timeline';
 import { ensureNow, historyNow, inFilmQueue, saveNow, stateNow, stepNow, WorkingError, type CutStore, type WorkingAnswer } from './working';
 import { probe } from './probe';
@@ -104,22 +104,192 @@ export function sceneFileShots(md: string): Map<string, { title: string; size?: 
 
 const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
-/** A scene's boards: each shot id → its first panel in the newest storyboard that has one for it (a later storyboard
- *  can redo only some shots), relative to the film repo. */
-async function boardsOf(film: FilmTarget, scene: string): Promise<Map<string, string>> {
-  const dir = path.join(film.dir, 'previz', scene, 'storyboard');
-  const vs = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^v\d+$/.test(n)).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)));
-  const out = new Map<string, string>();
-  for (const v of vs) {
-    const panels = await readJson<{ shot?: string; file?: string; t?: number }[]>(path.join(dir, v, 'panels.json'));
-    if (!Array.isArray(panels)) continue;
-    for (const p of [...panels].sort((a, b) => (a.t ?? 0) - (b.t ?? 0))) {
-      if (!p?.shot || !p.file || out.has(String(p.shot))) continue;
-      const abs = path.join(dir, v, p.file);
-      if (resolveSrc(film, film.show(abs)) && await fs.access(abs).then(() => true, () => false)) out.set(String(p.shot), film.show(abs));
+/** How long a storyboard folder must have been left alone before it counts as finished when nothing else vouches
+ *  for it: a builder writes its panels over a minute or two. */
+export const BOARDS_QUIET_MS = 5 * 60_000;
+
+export interface StoryboardPick {
+  version: string;
+  /** Every panel of the version: its number, its shot id, its time in the scene and its picture (relative to the repo). */
+  panels: { n: number; shot: string; t: number; src: string }[];
+  /** Why this version, in words: "the last checked, 8.6", "on your card". */
+  why: string;
+  /** A newer version that is not shown, in words: "v10 is being made", "v9 is not checked yet". */
+  newer?: string;
+  /** The previz take the version was made from, where something records it: the take the version's
+   *  newest previz check ran on (its `inputs`), else the take its boards card names. The storyboard folder itself does
+   *  not record it (tools/previz/asvlib.py `--panels` writes panels.json and the pictures only). */
+  take?: { n: number; how: 'check' | 'card' };
+  /** When anything in the version was last written (ms). */
+  touched: number;
+}
+
+/** The storyboard versions of a scene that something vouches for: the version each passed previz
+ *  check ran on (`qc/previz-<S>-r<n>.json`: the storyboard folder in its `inputs`, else "boards v<n>" in its label),
+ *  the newest check of any score, and the versions the boards cards of the scene name (review/cards.json). With each,
+ *  the previz take it was made from where they say it: a check's first take of the scene in its `inputs`
+ *  (the film, `<S>-previz-take-<n>.mp4`, else its json), a card's "previz take <n>" or the take's film in its files. */
+async function vouched(film: FilmTarget, scene: string): Promise<{ passed: Map<number, number>; last?: { v: number; score?: number }; cards: Set<number>; checkTake: Map<number, number>; cardTake: Map<number, number> }> {
+  const passed = new Map<number, number>(), cards = new Set<number>();
+  const checkTake = new Map<number, number>(), cardTake = new Map<number, number>();
+  const takeRound = new Map<number, number>();
+  let last: { v: number; score?: number; round: number } | undefined;
+  const re = new RegExp(`^previz-${scene}-r(\\d+)\\.json$`);
+  const inFolder = new RegExp(`previz/${scene}/storyboard/v(\\d+)/`);
+  const takeFilm = new RegExp(`previz/${scene}/${scene}-previz-take-(\\d+)\\.mp4$`), takeJson = new RegExp(`previz/${scene}/${scene}-previz-take-(\\d+)\\.json$`);
+  for (const f of await fs.readdir(path.join(film.dir, 'qc')).catch(() => [] as string[])) {
+    const m = re.exec(f);
+    if (!m) continue;
+    const j = await readJson<{ score?: unknown; label?: unknown; round?: unknown; inputs?: unknown }>(path.join(film.dir, 'qc', f));
+    if (!j) continue;
+    const paths = Array.isArray(j.inputs) ? j.inputs.map((x) => String((typeof x === 'string' ? x : (x as { path?: unknown })?.path) ?? '')) : [];
+    const fromInputs = paths.map((p) => inFolder.exec(p)?.[1]).find(Boolean);
+    const v = Number(fromInputs ?? /\bboards v(\d+)\b/i.exec(String(j.label ?? ''))?.[1]);
+    if (!Number.isInteger(v) || v < 1) continue;
+    const score = typeof j.score === 'number' ? j.score : undefined;
+    const round = typeof j.round === 'number' ? j.round : Number(m[1]);
+    if (score !== undefined && score >= QC_LOCK_SCORE) passed.set(v, Math.max(score, passed.get(v) ?? 0));
+    if (!last || round > last.round) last = { v, score, round };
+    const tk = Number(paths.map((p) => takeFilm.exec(p)?.[1]).find(Boolean) ?? paths.map((p) => takeJson.exec(p)?.[1]).find(Boolean));
+    if (Number.isInteger(tk) && tk > 0 && round >= (takeRound.get(v) ?? -1)) { checkTake.set(v, tk); takeRound.set(v, round); }
+  }
+  const cardsJson = await readJson<unknown>(path.join(film.dir, 'review', 'cards.json'));
+  const walk = (x: unknown): void => {
+    if (Array.isArray(x)) { x.forEach(walk); return; }
+    if (!x || typeof x !== 'object') return;
+    const o = x as Record<string, unknown>;
+    if (typeof o.id === 'string' && typeof o.title === 'string') {
+      const words = `${o.title} ${typeof o.sub === 'string' ? o.sub : ''}`;
+      const forScene = o.for === scene || (typeof o.for !== 'string' && new RegExp(`^${scene}\\b`).test(o.title));
+      const named = forScene ? /\bstoryboards? v(\d+)\b/i.exec(words)?.[1] : undefined;
+      const files = forScene ? JSON.stringify(o.items ?? o.media ?? []) : '';
+      // the take it names ("previz take 4 and storyboard v4"), else the take's film among its files
+      const tk = Number(/\bprevi[sz] take (\d+)\b/i.exec(words)?.[1] ?? new RegExp(`previz/${scene}/${scene}-previz-take-(\\d+)\\.mp4`).exec(files)?.[1]);
+      const vs: number[] = [];
+      // the version its title names, else the storyboard folder its files are in (never a version its words mention)
+      if (named) vs.push(Number(named));
+      else if (forScene) for (const m of files.matchAll(new RegExp(inFolder.source, 'g'))) vs.push(Number(m[1]));
+      for (const v of vs) cards.add(v);
+      if (Number.isInteger(tk) && tk > 0 && new Set(vs).size === 1) cardTake.set(vs[0], tk);
+      return;
     }
+    for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v);
+  };
+  walk(cardsJson);
+  return { passed, last: last ? { v: last.v, score: last.score } : undefined, cards, checkTake, cardTake };
+}
+
+/** A storyboard folder read whole: its panels.json and every panel it lists on disk, and when anything in it was last
+ *  written. Undefined while it is not whole. */
+async function readVersion(film: FilmTarget, dir: string): Promise<{ panels: StoryboardPick['panels']; touched: number } | undefined> {
+  const list = await readJson<{ n?: unknown; shot?: unknown; t?: unknown; file?: unknown }[]>(path.join(dir, 'panels.json'));
+  if (!Array.isArray(list) || !list.length) return undefined;
+  const stat = (f: string) => fs.stat(f).then((x) => x.mtimeMs, () => undefined);
+  let touched = Math.max((await stat(dir)) ?? 0, (await stat(path.join(dir, 'panels.json'))) ?? 0, (await stat(path.join(dir, 'panels'))) ?? 0);
+  const panels: StoryboardPick['panels'] = [];
+  for (const [i, p] of list.entries()) {
+    if (!p || typeof p.file !== 'string' || p.shot === undefined || p.shot === null) return undefined;
+    const t = typeof p.t === 'number' ? p.t : Number(/-(\d+(?:\.\d+)?)\.(?:png|jpe?g|webp)$/i.exec(p.file)?.[1]);
+    if (!Number.isFinite(t)) return undefined;
+    const abs = path.join(dir, p.file);
+    const m = await stat(abs);
+    if (m === undefined || !resolveSrc(film, film.show(abs))) return undefined;
+    touched = Math.max(touched, m);
+    panels.push({ n: typeof p.n === 'number' ? p.n : i + 1, shot: String(p.shot), t, src: film.show(abs) });
+  }
+  return { panels, touched };
+}
+
+/** The storyboard version a scene's boards come from, never a folder still being written: the
+ *  newest of the versions a passed previz check ran on and the versions a boards card of the scene names (what the
+ *  user saw in "Waiting for you"); else the version the newest check ran on, whatever its score; else the newest
+ *  version that is whole and has been left alone for a few minutes. Whole: its panels.json and every panel it lists. */
+export async function storyboardOf(film: FilmTarget, scene: string, now = Date.now()): Promise<StoryboardPick | undefined> {
+  const dir = path.join(film.dir, 'previz', scene, 'storyboard');
+  const vs = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^v\d+$/.test(n)).map((n) => Number(n.slice(1))).sort((a, b) => b - a);
+  if (!vs.length) return undefined;
+  const { passed, last, cards, checkTake, cardTake } = await vouched(film, scene);
+  const read = new Map<number, Awaited<ReturnType<typeof readVersion>>>();
+  const whole = async (v: number) => { if (!read.has(v)) read.set(v, await readVersion(film, path.join(dir, `v${v}`))); return read.get(v); };
+  const quiet = (r: { touched: number }) => now - r.touched >= BOARDS_QUIET_MS;
+  let pick: { v: number; why: string } | undefined;
+  for (const v of vs) {
+    if (!passed.has(v) && !cards.has(v)) continue;
+    if (!await whole(v)) continue;
+    const said = [passed.has(v) ? `checked, ${passed.get(v)}` : '', cards.has(v) ? 'on your card' : ''].filter(Boolean).join(' and ');
+    pick = { v, why: `${said}` };
+    break;
+  }
+  if (!pick && last && await whole(last.v)) pick = { v: last.v, why: `the last checked${last.score !== undefined ? `, ${last.score}, not passed` : ''}` };
+  if (!pick) for (const v of vs) { const r = await whole(v); if (r && quiet(r)) { pick = { v, why: 'the newest finished, not checked yet' }; break; } }
+  if (!pick) return undefined;
+  const top = vs[0];
+  let newer: string | undefined;
+  if (top > pick.v) {
+    const r = await whole(top);
+    newer = !r || !quiet(r) ? `v${top} is being made` : `v${top} is newer, not checked yet`;
+  }
+  const tk = checkTake.get(pick.v) ?? cardTake.get(pick.v);
+  const take = tk === undefined ? undefined : { n: tk, how: checkTake.has(pick.v) ? 'check' as const : 'card' as const };
+  const got = read.get(pick.v)!;
+  return { version: `v${pick.v}`, panels: got.panels, why: pick.why, touched: got.touched, ...(newer ? { newer } : {}), ...(take ? { take } : {}) };
+}
+
+/** One previz take of a scene as its json says it: its number, its spoken parts (`lines: [{who, text, t: [start, end]}]`,
+ *  seconds from the scene's start), its shots' own start and end (`shots: [{label, t0, t1}]`) and when it was written. */
+export interface PrevizTake { n: number; lines: PrevizLine[]; shots: { id: string; t0: number; t1: number }[]; written: number }
+
+/** Every previz take of a scene that reads (`previz/<S>/<S>-previz-take-<n>.json`), newest first. */
+export async function previzTakes(film: FilmTarget, scene: string): Promise<PrevizTake[]> {
+  const dir = path.join(film.dir, 'previz', scene);
+  const re = new RegExp(`^${scene}-previz-take-(\\d+)\\.json$`);
+  const ns = (await fs.readdir(dir).catch(() => [] as string[])).map((n) => Number(re.exec(n)?.[1])).filter((n) => Number.isInteger(n) && n > 0).sort((a, b) => b - a);
+  const out: PrevizTake[] = [];
+  for (const n of ns) {
+    const f = path.join(dir, `${scene}-previz-take-${n}.json`);
+    const j = await readJson<{ lines?: unknown; shots?: unknown }>(f);
+    if (!j) continue;
+    const lines = (Array.isArray(j.lines) ? j.lines : []).filter((l): l is PrevizLine => !!l && typeof l.who === 'string' && typeof l.text === 'string' && Array.isArray(l.t)
+      && typeof l.t[0] === 'number' && typeof l.t[1] === 'number' && l.t[1] > l.t[0]);
+    const shots = (Array.isArray(j.shots) ? j.shots as { label?: unknown; id?: unknown; t0?: unknown; t1?: unknown }[] : []).flatMap((x, i) =>
+      x && typeof x.t0 === 'number' && typeof x.t1 === 'number' && x.t1 > x.t0 ? [{ id: String(x.label ?? x.id ?? i + 1), t0: x.t0, t1: x.t1 }] : []);
+    const written = await fs.stat(f).then((x) => x.mtimeMs, () => 0);
+    out.push({ n, lines: lines.map((l) => ({ who: l.who, text: l.text, t: [l.t[0], l.t[1]] })), shots, written });
   }
   return out;
+}
+
+/** A take's shots hold every panel of a storyboard: each panel's time inside its own shot's start and end. */
+const holdsPanels = (t: PrevizTake, panels: StoryboardPick['panels']): boolean => {
+  if (!t.shots.length) return false;
+  const by = new Map(t.shots.map((s) => [s.id, s]));
+  return panels.every((p) => { const s = by.get(p.shot); return !!s && p.t >= s.t0 - 1e-6 && p.t <= s.t1 + 1e-6; });
+};
+
+/** The previz take a storyboard version was made from: the one its check or its card records; else, as
+ *  nothing records it, the take whose shots hold every panel and was written nearest in time to the version's files
+ *  (the kit renders a version's panels and its take from the same scene within minutes). */
+export function takeOfBoards(sb: StoryboardPick, takes: PrevizTake[]): { take: PrevizTake; how: 'check' | 'card' | 'nearest' } | undefined {
+  const rec = sb.take && takes.find((t) => t.n === sb.take!.n);
+  if (rec) return { take: rec, how: sb.take!.how };
+  const fit = takes.filter((t) => holdsPanels(t, sb.panels));
+  const near = (fit.length ? fit : takes).slice().sort((a, b) => Math.abs(a.written - sb.touched) - Math.abs(b.written - sb.touched) || b.n - a.n)[0];
+  return near ? { take: near, how: 'nearest' } : undefined;
+}
+
+/** A scene's newest previz take (`previz/<S>/<S>-previz-take-<n>.json`, the highest n that reads) and its spoken parts.
+ *  Undefined before the first take. */
+export async function previzOf(film: FilmTarget, scene: string): Promise<PlanPreviz | undefined> {
+  const t = (await previzTakes(film, scene))[0];
+  return t ? { take: t.n, lines: t.lines } : undefined;
+}
+
+/** The words for a scene whose lines follow an older take than its newest: "Lines at take 4, the take of
+ *  boards v4; take 9 is newer." Undefined when they follow the newest. */
+export function linesTakeWords(take: number, newest: number, version: string, how: 'check' | 'card' | 'nearest'): string | undefined {
+  if (take === newest) return undefined;
+  const whose = how === 'nearest' ? `the take made nearest in time to boards ${version} (the boards do not record theirs)` : `the take of boards ${version}`;
+  return `Lines at take ${take}, ${whose}; take ${newest} is newer.`;
 }
 
 /** What the planned parts are built from, read from the film's files; undefined when the film has no script. */
@@ -128,6 +298,7 @@ export async function readPlanSource(film: FilmTarget): Promise<PlanSource | und
   if (md === undefined) return undefined;
   const sc = parseScript(md);
   if (!sc) return undefined;
+  const took = new Set<string>();
   for (const s of sc.scenes) {
     let folder: string | undefined;
     for (const f of ['generations', 'blocks']) if (await fs.access(path.join(film.dir, f, s.id)).then(() => true, () => false)) { folder = path.join(film.dir, f, s.id); break; }
@@ -135,17 +306,40 @@ export async function readPlanSource(film: FilmTarget): Promise<PlanSource | und
     const j = await readJson<{ duration?: number; shots?: { id?: string | number; t0?: number; t1?: number; in_frame?: string[] }[] }>(path.join(folder, `${s.id}-shots.json`));
     if (!j || !Array.isArray(j.shots) || !j.shots.length) continue;
     const file = sceneFileShots((await read(path.join(folder, `${s.id}-scene.md`))) ?? '');
-    const boards = await boardsOf(film, s.id);
+    const sb = await storyboardOf(film, s.id);
+    // the lines and the shots' own times follow the previz take the shown boards were made from, never a newer one:
+    // a line sits under the picture it was timed with
+    const takes = sb ? await previzTakes(film, s.id) : [];
+    const of = sb ? takeOfBoards(sb, takes) : undefined;
+    if (of) {
+      s.previz = { take: of.take.n, lines: of.take.lines };
+      took.add(s.id);
+    }
+    const lines = sb && of ? linesTakeWords(of.take.n, takes[0].n, sb.version, of.how) : undefined;
+    if (sb) s.boards = { version: sb.version, why: sb.why, panels: sb.panels.length, ...(sb.newer ? { newer: sb.newer } : {}), ...(of ? { take: of.take.n, newestTake: takes[0].n, takeHow: of.how } : {}), ...(lines ? { lines } : {}) };
+    // the shots' start and end: the take's own where it has them, else the shot file's (the shot file is rewritten
+    // with every take, so it may already be a newer take's)
+    const fileShots = j.shots;
+    const list = of?.take.shots.length ? of.take.shots.map((x) => ({ ...(fileShots.find((y, i) => String(y?.id ?? i + 1) === x.id) ?? {}), id: x.id, t0: x.t0, t1: x.t1 })) : fileShots;
     const shots: PlanShot[] = [];
-    j.shots.forEach((x, i) => {
+    list.forEach((x, i) => {
       if (typeof x?.t0 !== 'number' || typeof x.t1 !== 'number') return;
       const id = String(x.id ?? i + 1);
       const f = file.get(id);
       const text = f ? (f.size ? `${sentence(f.title)}. ${f.size}` : sentence(f.title)) : undefined;
       shots.push({ n: shots.length + 1, id, t0: x.t0, t1: x.t1, ...(text ? { text } : {}), ...(x.in_frame?.length ? { inFrame: inFrameWords(x.in_frame, sc.names) } : {}),
-        ...(boards.get(id) ? { board: boards.get(id) } : {}) });
+        ...(() => {
+          const ps = (sb?.panels ?? []).filter((p) => p.shot === id).map((p) => ({ n: p.n, t: p.t, src: p.src }));
+          return ps.length ? { board: [...ps].sort((a, b) => a.t - b.t)[0].src, panels: ps } : {};
+        })() });
     });
     if (shots.length) s.shots = shots;
+  }
+  // a scene with no storyboard shown: its newest take's lines, as before
+  for (const s of sc.scenes) {
+    if (took.has(s.id)) continue;
+    const pv = await previzOf(film, s.id);
+    if (pv) s.previz = pv;
   }
   return { ...(sc.locked ? { locked: sc.locked } : {}), pace: sc.pace, scenes: sc.scenes };
 }
@@ -216,8 +410,17 @@ async function peekNow(s: CutStore): Promise<Partial<WorkingAnswer>> {
 }
 
 /** What an update would change, without writing anything: its words, or nothing. */
-export async function planPending(s: CutStore | undefined, src: PlanSource | undefined): Promise<{ locked: boolean; pending?: string; first?: boolean }> {
+export async function planPending(s: CutStore | undefined, src: PlanSource | undefined): Promise<{ locked: boolean; pending?: string; first?: boolean; boards?: BoardsNote[] }> {
   if (!src?.locked) return { locked: false };
+  const boards = boardsNotes(src);
+  return { ...(await pendingOf(s, src)), ...(boards.length ? { boards } : {}) };
+}
+
+/** Per scene, the storyboard version its boards come from and why, for the page to say. */
+export interface BoardsNote { scene: string; version: string; why: string; panels: number; newer?: string; take?: number; newestTake?: number; takeHow?: 'check' | 'card' | 'nearest'; lines?: string }
+export const boardsNotes = (src: PlanSource): BoardsNote[] => src.scenes.flatMap((x) => (x.boards ? [{ scene: x.id, ...x.boards }] : []));
+
+async function pendingOf(s: CutStore | undefined, src: PlanSource): Promise<{ locked: boolean; pending?: string; first?: boolean }> {
   if (!s) return { locked: true, first: true, pending: bringUp(undefined, src)?.words };
   const h = await historyNow(s).catch(() => undefined);
   if (!h) {

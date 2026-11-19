@@ -13,6 +13,8 @@ import { Loading, PageBody, StageTitle } from '@/components/shell/StageTitle';
 import { QCChip } from '@/components/shell/QCChip';
 import { Btn } from '@/components/shell/atoms';
 import { useFilmPage, filmMeta } from '@/components/pages/common';
+import { Reveal } from '@/components/shell/Reveal';
+import { takesReady } from '@/components/edit/takesReady';
 import { GoSceneCard } from './GoScene';
 import { fmtCr, goList, goMessage, threadBalance, totalCredits, totalSeconds, useGo } from './lib';
 import { cn } from '@/lib/utils';
@@ -50,6 +52,11 @@ export function GoPage() {
   const ready = shown.filter((s) => s.ready);
   const left = shown.filter((s) => !s.ready);
   const total = totalCredits(ready);
+  // the same test as the go in What's next: a scene's own prompt passing is not enough; its boards, their yes
+  // and every reference must be ready too. Scenes that already have a take (shown with the switch) are not held by it.
+  const first = state ? ready.filter((x) => !state.scenes.find((sc) => sc.id === x.id)?.takes.some((t) => t.kind === 'take')).map((x) => x.id) : [];
+  const whole = state && first.length ? takesReady(state, first) : undefined;
+  const held = !!whole && !whole.ready;
   const taken = (review?.scenes ?? []).filter((s) => s.takes > 0).length;
   usePage(state && review ? (shown.length ? `Go for the video · ${ready.length} ${ready.length === 1 ? 'generation' : 'generations'} · ≈ ${fmtCr(total)}` : 'Go for the video · every scene has a take') : undefined,
     'Say go, or tell Alma what to change first…', ready.length ? [`Quote the go exactly`, 'What changed since the last prompts?'] : []);
@@ -131,11 +138,12 @@ export function GoPage() {
             </div>
             <div className="flex flex-none flex-wrap gap-2 max-[760px]:w-full max-[760px]:flex-nowrap">
               <Btn onClick={change} className="h-9 max-[760px]:flex-1 max-[760px]:justify-center">Change{sel ? ` ${sel.id}` : ''}<span className="max-[760px]:hidden">{sel ? '' : ' something'}</span></Btn>
-              <Btn primary disabled={!ready.length} onClick={go} className="h-9 px-4 max-[760px]:flex-[2] max-[760px]:justify-center">
+              <Btn primary disabled={!ready.length || held} title={held ? whole?.full : undefined} onClick={go} className="h-9 px-4 max-[760px]:flex-[2] max-[760px]:justify-center">
                 Go for the video<span className="font-normal text-faint tabular-nums max-[760px]:hidden">· {ready.length} {ready.length === 1 ? 'generation' : 'generations'} · ≈ {fmtCr(total)}</span>
               </Btn>
             </div>
           </div>
+          <Reveal open={held}><p className="m-0 pt-2 text-[12.5px] text-warn" title={whole?.full} data-go-held>{whole?.line}</p></Reveal>
         </div>
       )}
     </>

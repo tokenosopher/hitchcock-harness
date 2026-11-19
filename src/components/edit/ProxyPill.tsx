@@ -17,7 +17,10 @@ export const ago = (iso: string | undefined, now: number) => {
   if (!Number.isFinite(s)) return '';
   if (s >= 3600 * 24) return fmtDate(iso);
   if (s >= 3600) return `${Math.floor(s / 3600)} h ago`;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} ago`;
+  // in minutes past the first minute ("everytime a second passes, it flickers"): the words change once a
+  // minute, not every second
+  if (s >= 60) return `${Math.floor(s / 60)} min ago`;
+  return 'just now';
 };
 
 export function proxyLabel(r: RenderState | undefined, version: string, now: number, done?: { at: string; seconds?: number }, edited = false): string {
@@ -53,8 +56,9 @@ export function ProxyPill({ store, version, done, edited, onOpen, planned }: { s
     <button type="button" onClick={onOpen} title={planned ?? (none ? 'The 480p is made when you ask for it: Renders, under the timeline' : 'Every rendered file is under the timeline, in Renders')} data-proxy-pill data-proxy-state={none ? 'none' : r!.state}
       className={`inline-flex h-7 cursor-pointer items-center gap-2 rounded-[14px] border border-edge px-2.5 text-[12px] transition-colors duration-150 hover:border-edge-strong hover:bg-raised ${none ? 'text-sub hover:text-ink' : 'text-ink'}`} aria-live="polite">
       <Dot state={r?.state === 'running' || r?.state === 'queued' ? 'running' : r?.state === 'failed' ? 'failed' : none ? 'waiting' : 'done'} />
-      {/* the words fade when they change from one kind to another (not on every percent) */}
-      <span key={r?.state === 'running' ? 'running' : label} className="duration-200 animate-in fade-in-0">{label}</span>
+      {/* the words fade when they change from one kind to another, never as the percent or the "ago" moves (the
+          span was keyed by its words, so it was made again, and faded in, every time they changed) */}
+      <span key={planned ? 'planned' : (r?.state ?? 'none')} className="duration-200 animate-in fade-in-0">{label}</span>
     </button>
   );
 }

@@ -108,7 +108,7 @@ export function EditNext({ s, base }: { s: FilmState; base: string }) {
   if (!input) return <p className="m-0 text-[13px] text-sub">No cut yet: the list starts with the first version of the timeline.</p>;
   return (
     <div data-edit-next className="flex flex-col gap-3">
-      <LeftTab film={film} tl={leftTl ?? NO_CUT} input={input} onDo={onDo} onUntick={(st) => st.ticked && void left.tick({ untick: st.ticked })} error={left.error} />
+      <LeftTab film={film} tl={leftTl ?? NO_CUT} input={input} onDo={onDo} onUntick={(st) => st.ticked && void left.tick({ untick: st.ticked })} error={left.error} from="What's next on the film's board" />
     </div>
   );
 }

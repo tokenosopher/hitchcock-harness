@@ -3,6 +3,7 @@
 import type { CharacterRef, CutInfo, FilmState, LocationRef, Round, SceneRef, ScriptLine, Stage, TakeRef, TaskCard, ThreadEvent } from '@/server/types';
 import { cutTakeIds as timelineTakeIds } from './cut';
 import { fmtCredits, fmtDate, sumCredits, takeLabel } from './format';
+import { takesReady } from '@/components/edit/takesReady';
 
 export type PickState = 'ready' | 'running' | 'queued' | 'waiting' | 'picked';
 
@@ -212,13 +213,14 @@ function predictionNote(r: Round): string {
 }
 const pickState = (p: PartState): PickState => (p === 'done' ? 'picked' : p);
 
-/** The scenes the go for the video starts: no take yet (landed or generating), the newest prompt passed its check.
- *  Empty unless every such scene is ready (SPEC principle 7: the one hard spend gate). */
+/** The scenes the go for the video starts: no take yet (landed or generating), the newest prompt passed its check,
+ *  and everything else the takes need made and approved (takesReady.ts). Empty unless every such scene is ready (SPEC principle 7: the one hard spend gate). */
 export function goScenes(s: FilmState, tasks: TaskCard[]): string[] {
   if (s.film.status === 'delivered' || !s.scenes.length || liveAims(tasks, 'scenes').length) return [];
   const rest = s.scenes.filter((sc) => !sc.takes.some((t) => t.kind === 'take'));
   if (!rest.length) return [];
-  return rest.every((sc) => sc.promptVersions[sc.promptVersions.length - 1]?.checkPassed) ? rest.map((sc) => sc.id) : [];
+  // and everything else the takes need is made and approved (the same test as What's next's go, takesReady.ts)
+  return rest.every((sc) => sc.promptVersions[sc.promptVersions.length - 1]?.checkPassed) && takesReady(s, rest.map((sc) => sc.id)).ready ? rest.map((sc) => sc.id) : [];
 }
 
 /** The gate page: every pick waiting, in the chains first (faces, masters), then at the gate (voices, the rest, the go). */

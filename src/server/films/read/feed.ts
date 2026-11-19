@@ -297,11 +297,15 @@ export const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;
 /** Open and really waiting for the user: not being worked on. */
 export const isWaiting = (c: FeedCard): boolean => isOpen(c) && !c.ask!.progress;
 
+/** A yes the user gave: a card that asks for a yes, answered with anything but a no or "replaced by …". */
+export const isYes = (c: FeedCard): boolean => c.ask?.kind === 'yes' && !!c.ask.answer && c.ask.answer.option !== 'no' && !/^replaced by\b/i.test(c.ask.answer.option ?? '');
+
 export function feedSummary(feed: Feed): FeedSummary {
   const counts: FeedSummary['counts'] = {};
   for (const c of feed.cards) counts[c.place] = (counts[c.place] ?? 0) + 1;
   const working = feed.cards.filter((c) => isOpen(c) && !isWaiting(c));
-  return { counts, asks: feed.cards.filter(isWaiting), ...(working.length ? { working } : {}) };
+  const approvals = feed.cards.filter(isYes).map((c) => ({ key: c.key, ...(c.id ? { id: c.id } : {}), place: c.place, ids: c.ids, title: c.title, ...(c.ask!.answer!.at ?? c.date ? { at: c.ask!.answer!.at ?? c.date } : {}) }));
+  return { counts, asks: feed.cards.filter(isWaiting), ...(working.length ? { working } : {}), ...(approvals.length ? { approvals } : {}) };
 }
 
 export interface FeedQuery {

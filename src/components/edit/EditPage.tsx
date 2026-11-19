@@ -55,15 +55,18 @@ import { dissolvePlan, maxDissolveF, pressWords, removeGainPoint, saveStatus, se
 import { isLine, isSrtClip } from './subs';
 import { hasSubtitles, placeSrt, splitSrt } from './subsEdit';
 import { downloadSrt, fetchSrt, SubtitleOverlay, subtitlesAsk } from './Subtitles';
-import { leftChip, leftWords, NEXT_TAB, soundCounts, subsCounts, unreadableSplit, whatIsLeft, type LeftDo, type LeftStep } from './left';
+import { leftChip, leftWords, NEXT_TAB, soundCounts, subsCounts, unreadableSplit, waitWords, whatIsLeft, type LeftDo, type LeftStep } from './left';
+import { WaitingCount } from '@/components/flow/WaitingNow';
 import { LeftTab, useLeft } from './LeftTab';
-import { hasPlanned, plannedCounts, sceneOfClip, PLANNED_RENDER_WHY } from './planned';
+import { hasPlanned, isFirstPart, plannedCounts, retakeWords, sceneOfClip, shotSpan, PLANNED_RENDER_WHY } from './planned';
 import { earlySteps, goTakesAsk, makingScenes } from './early';
 import { leftInputBefore } from './leftInput';
 import { usePlan } from './usePlan';
 import { PlannedView } from './PlannedView';
 import { BoardsBack, EmptyCard, PlannedTakes } from './PlannedTakes';
 import { useSendAsUser } from '@/components/release/AskAlma';
+import { usePhoneFull } from './phoneFull';
+import { useEditRefSource } from './refSource';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -98,11 +101,15 @@ const TAB_OF: Record<string, LowerTab> = { next: 'left', left: 'left', takes: 't
 const EMPTY_TL: Timeline = { version: 'w0', fps: 24, width: 1080, height: 1920, at: '1970-01-01T00:00:00.000Z', markers: [],
   tracks: [{ id: 'V1', kind: 'video', name: 'Picture', clips: [] }, { id: 'A1', kind: 'audio', name: 'Dialogue', clips: [] }] };
 
-/** What a timeline from day one holds, in words: "18 lines", "34 planned shots", "3 scenes from takes, 19 boards". */
+/** What a timeline from day one holds, in words: "18 lines", "34 planned shots", "3 scenes from takes, 41 shots, 107
+ *  boards" (every storyboard panel is a board of its own, so the shots and the boards are both said, to be
+ *  checked against the storyboards). */
 function plannedSaid(tl: Timeline): string {
   const pc = plannedCounts(tl);
-  return [pc.takes ? `${pc.takes} ${pc.takes === 1 ? 'scene' : 'scenes'} from takes` : '', pc.boards ? `${pc.boards} ${pc.boards === 1 ? 'board' : 'boards'}` : '',
-    pc.shots ? `${pc.shots} planned ${pc.shots === 1 ? 'shot' : 'shots'}` : '', !pc.shots && !pc.boards ? `${pc.lines} ${pc.lines === 1 ? 'line' : 'lines'}` : ''].filter(Boolean).join(', ');
+  const shots = pc.boardShots + pc.shots;
+  return [pc.takes ? `${pc.takes} ${pc.takes === 1 ? 'scene' : 'scenes'} from takes` : '',
+    pc.boards ? `${shots} ${shots === 1 ? 'shot' : 'shots'}, ${pc.boards} ${pc.boards === 1 ? 'board' : 'boards'}${pc.shots ? ` (${pc.shots} with no board yet)` : ''}` : pc.shots ? `${pc.shots} planned ${pc.shots === 1 ? 'shot' : 'shots'}` : '',
+    !pc.shots && !pc.boards ? `${pc.lines} ${pc.lines === 1 ? 'line' : 'lines'}` : ''].filter(Boolean).join(', ');
 }
 
 /** A new number for each click that starts a shot from its take again (SourceShot replays when it changes). */
@@ -378,6 +385,8 @@ export function EditPage() {
   // file (read once and on the film watcher's change; set only when it changed, so no draw is added)
   const filmMaster = state?.master?.version;
   const left = useLeft(film, state?.updatedAt, filmMaster);
+  // how many things wait for the user ("Waiting for you"'s count), shown on What's next's tab
+  const [waitingN, setWaitingN] = useState(0);
   // the film watcher saw a change (Alma's step, a version file written by hand, another tab): read the working cut
   // again when the server's is ahead of the page's (useCut followServer; nothing is drawn when nothing changed)
   const followCut = cut.followServer;
@@ -433,13 +442,19 @@ export function EditPage() {
   useEffect(() => { setPlayhead(restTc); }, [restTc, setPlayhead]);
   useEffect(() => () => setPlayhead(undefined), [setPlayhead]);
 
+  // the page's things for the message's words: a clip, a panel, a shot in the Takes view, the playhead's moment
+  useEditRefSource({
+    tl: shown ?? undefined, fps, frame, version: viewing?.version ?? cut.equals ?? cut.ref, edited: !viewing && !!cut.edited && !cut.equals,
+    rev: viewing ? undefined : cut.working?.rev, by: shots.by, names, setFrame, select: (r) => { setSel(r); setExtra(undefined); },
+  });
+
   const selFound = tl && sel ? findClip(tl, sel) : undefined;
   // the shots selected in the Takes view (ASKS 52): Alma reads them, and that the film is shown with them, not changed
   const picksSaid = picks.length ? ` · ${picks.length} ${picks.length === 1 ? 'shot' : 'shots'} from other takes shown in place, not in the film: ${picksWords(picks, state?.scenes.map((x) => x.id))}` : '';
   // what Alma reads of the page: the film's own stage (it was always "stage 9", also for a film at stage 1 before its
   // script), the cut, and before the takes what the timeline holds (QC round two)
   const stageSaid = `stage ${state?.film.stage ?? 9}`;
-  usePage(empty ? `${stageSaid} · Edit · ${plan.data?.locked ? 'the script is locked, the timeline is being made' : 'no script yet'}${lowerTab === 'left' && leftView ? ` · ${leftChip(leftView)}` : ''}` : tl ? `${stageSaid} · Edit ${viewing ? viewing.version : cut.equals ?? `${cutName} with edits`}${planned ? ` · ${plannedSaid(tl)}` : ''}${selFound ? ` · ${selFound.track.id} ${clipName(selFound.clip)}` : ''} · playhead ${restTc}${picksSaid}${lowerTab === 'left' && leftView ? ` · ${leftChip(leftView)}` : ''}` : `${stageSaid} · Edit`,
+  usePage(empty ? `${stageSaid} · Edit · ${plan.data?.locked ? 'the script is locked, the timeline is being made' : 'no script yet'}${lowerTab === 'left' && leftView ? ` · ${leftChip(leftView, waitingN)}` : ''}` : tl ? `${stageSaid} · Edit ${viewing ? viewing.version : cut.equals ?? `${cutName} with edits`}${planned ? ` · ${plannedSaid(tl)}` : ''}${selFound ? ` · ${selFound.track.id} ${clipName(selFound.clip)}` : ''} · playhead ${restTc}${picksSaid}${lowerTab === 'left' && leftView ? ` · ${leftChip(leftView, waitingN)}` : ''}` : `${stageSaid} · Edit`,
     phone ? 'Note at a timecode…' : empty && !plan.data?.locked ? 'Tell Alma the idea…' : 'Note at a timecode, or tell Alma what to cut…', phone ? ['Note at this timecode'] : ['What changed?', 'Render the 480p of this cut'], ['What changed in the last version?']);
 
   /** A shot as a version's note names it ("S2 shot 3"), when the shots are known (for the notes made here). */
@@ -473,7 +488,7 @@ export function EditPage() {
     const pw = o?.presses ? '' : pressWords(cut.current, pressOn?.p);
     const pressed = pw ? ` · ${pw}` : '';
     setPress(undefined);
-    await cut.commit({ tracks: dz.tl.tracks, markers: dz.tl.markers }, `${e.note}${split}${side}${fit}${pressed}`,
+    await cut.commit({ tracks: dz.tl.tracks, markers: dz.tl.markers, base: e.tl.version }, `${e.note}${split}${side}${fit}${pressed}`,
       dz.said.length ? () => say(`${cap(dz.said.join('; '))}, so the cut stays valid.`) : undefined);
   }, [cut, viewing, tl, noteNameOf, pressOn, say]);
 
@@ -1035,10 +1050,12 @@ export function EditPage() {
   // the line of the script under the playhead (the timeline from day one): what "At the playhead" says with no picture
   const mainA = mainTracks(shown ?? tl).a;
   const lineHere = planned ? mainA?.clips.find((c) => c.plan === 'line' && !c.muted && startF(c, fps) <= frame && endF(c, fps) > frame) : undefined;
-  const linesIn = (sc?: string) => (mainA?.clips ?? []).filter((c) => c.plan === 'line' && c.who && c.scene === sc).length;
-  const lineIndex = (c: TimelineClip) => (mainA?.clips ?? []).filter((x) => x.plan === 'line' && x.who && x.scene === c.scene).sort((a, b) => a.at - b.at).indexOf(c) + 1;
+  // a line the previz take splits over several shots counts once
+  const linesIn = (sc?: string) => (mainA?.clips ?? []).filter((c) => isFirstPart(c) && c.scene === sc).length;
+  const lineIndex = (c: TimelineClip) => (mainA?.clips ?? []).filter((x) => isFirstPart(x) && x.scene === c.scene && x.at <= c.at + 1e-6).length;
   const plannedScene = (sc: string) => (mainTracks(shown ?? tl).v?.clips ?? []).some((c) => c.plan && c.scene === sc) || !(mainTracks(shown ?? tl).v?.clips ?? []).some((c) => sceneOfClip(c) === sc);
-  const shotsIn = (sc?: string) => (mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => c.plan && c.scene === sc).length;
+  // a shot counts once however many of its storyboard panels are boards of their own
+  const shotsIn = (sc?: string) => new Set((mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => c.plan && c.scene === sc).map((c) => c.shot ?? c.id)).size;
   // the picture under the playhead is one of the shots selected, shown in its place (not in the film)
   const picked = !!(pic && tryEdit && tryEdit.ids.includes(pic.clip.id));
   const scene = pic?.clip.takeRef ? state.scenes.find((s) => s.id === pic.clip.takeRef!.scene) : undefined;
@@ -1092,7 +1109,7 @@ export function EditPage() {
   const viewer = (
     <>
     <Viewer key={`${tryEdit ? `try:${picks.map((x) => `${x.src}#${x.n}`).join(',')}` : hearEdit ? 'hear' : fullView ? 'full' : soloed.size ? 'solo' : pressOn ? 'cut' : phoneFile ?? 'cut'}`} tl={shown ?? tl} frame={frame} rate={rate} total={total} file={phoneFile} solo={soloed}
-      full={fullView} onLoading={sw.setLoading}
+      full={fullView} onLoading={sw.setLoading} onFail={fullView ? sw.fail : undefined}
       onFrame={(f) => { setFrameRaw(f); if (stopAt.current !== undefined && f >= stopAt.current) { stopAt.current = undefined; setRate(0); } }} onEnd={() => setRate(0)}
       className={cn('absolute inset-0 size-full bg-black object-contain', phoneFile && 'duration-200 animate-in fade-in-0')} />
     {/* the subtitle line under the playhead, always drawn over the live player; only the phone's 480p file has the lines
@@ -1113,7 +1130,8 @@ export function EditPage() {
 
   if (phone) {
     return (
-      <PhoneEdit state={state} tl={tl} name={empty ? '' : viewing?.version ?? cut.equals ?? `${cutName} with edits`} frame={frame} fps={fps} total={total} setFrame={(f) => { setRate(0); setFrame(f); }} viewer={viewer} transport={transport} file={phoneOwn?.kind} ahead={ahead && !settled ? aheadFigures : undefined}
+      <PhoneEdit state={state} tl={tl} name={empty ? '' : viewing?.version ?? cut.equals ?? `${cutName} with edits`} frame={frame} fps={fps} total={total} setFrame={(f) => { setRate(0); setFrame(f); }}
+        playing={rate !== 0} onPlay={() => setRate((r) => (r ? 0 : (frame >= total ? (setFrame(0), 1) : 1)))} viewer={viewer} transport={transport} file={phoneOwn?.kind} ahead={ahead && !settled ? aheadFigures : undefined}
         // played live (no file of this cut): the quiet line says so, and asks for the 480p where one can be made. No 480p
         // to ask for before there is a cut, of a cut that still holds planned clips (as on the desktop), of an older
         // version viewed, nor on a delivered film (nothing here runs)
@@ -1128,6 +1146,10 @@ export function EditPage() {
 
   // the timeline from day one (15 Nov): what a planned cut holds, in words; the two presses that change it as a step
   const pc = planned ? plannedCounts(tl) : undefined;
+  // which storyboard version a scene's boards come from, and why: "Boards v8, the last checked; v10 is being made."
+  // and, when they are older than the newest, which previz take the scene's lines follow: "Lines at take 4, the take of boards v4; take 9 is newer."
+  const boardsNote = (sc?: string) => { const b = plan.data?.boards?.find((x) => x.scene === sc); return b ? `Boards ${b.version}, ${b.why}${b.newer ? `; ${b.newer}` : ''}.${b.lines ? ` ${b.lines}` : ''}` : ''; };
+  const linesNote = (sc?: string) => plan.data?.boards?.find((x) => x.scene === sc)?.lines ?? '';
   const plannedWords = planned ? plannedSaid(tl) : '';
   const lower1 = (x: string) => x.charAt(0).toLowerCase() + x.slice(1);
   const planStep = async (run: () => Promise<{ ok: boolean; error?: string; words?: string }>, what: string) => {
@@ -1414,10 +1436,18 @@ export function EditPage() {
     setRate(1);
     say(`${t.scene} shot ${n} is back in the film (${cap1(name)}), playing from just before it. ⌘Z takes it out again.`);
   };
+  // a retake is of the whole shot: on a planned shot (a board panel among its others) the words, length and
+  // start are the shot's, whichever panel is selected
+  const retakeOf = (t: TimelineTrack, c: TimelineClip, scene: string | undefined, n: number) => {
+    const planned = tl ? retakeWords(tl, c, almaCut, (s) => smpte(s, fps)) : undefined;
+    const sp = planned && tl ? shotSpan(tl, c) : undefined;
+    if (planned && sp) { ui.prefill(planned, { ...clipChip(t, sp.first), label: `${t.id} · ${sp.scene} · shot ${sp.shot} · ${smpte(sp.at, fps)}` }); return; }
+    ui.prefill(`Retake ${scene ?? ''} shot ${n} (${takeLabel(c)}, ${secsOf(lenF(c, fps))}, at ${smpte(c.at, fps)} in cut ${almaCut}). What should change: `, clipChip(t, c));
+  };
   const askRetake = () => {
     const f = selClip();
     if (!f || !selShotN) return;
-    ui.prefill(`Retake ${selScene ?? ''} shot ${selShotN} (${takeLabel(f.clip)}, ${secsOf(lenF(f.clip, fps))}, at ${smpte(f.clip.at, fps)} in cut ${almaCut}). What should change: `, clipChip(f.track, f.clip));
+    retakeOf(f.track, f.clip, selScene, selShotN);
   };
   // where the video is, for the line across the takes: the take being watched, else the film's own shot
   const gridHead = (() => {
@@ -1592,7 +1622,7 @@ export function EditPage() {
       { label: 'Save this frame…', hint: under ? 'PNG' : 'no picture here', disabled: !under, onPick: () => void saveFrame(f) },
       ...(hit && hit.track.kind === 'video' && fullMarks?.get(hit.clip.id)?.kind === 'small' ? [{ label: 'Upscale on Higgsfield…', hint: 'the whole take', onPick: () => askUpscale(hit.clip.src) }] : []),
       ...(hit && hit.track.kind === 'video' && fullMarks && fullMarks.get(hit.clip.id)?.kind !== 'small' && !fullFor?.info.takes[(hit.clip.src ?? '')] ? [{ label: seedance.marks.has((hit.clip.src ?? '')) ? 'Do not redo in Seedance' : 'Redo in Seedance', hint: 'the whole take', onPick: () => seedance.toggle((hit.clip.src ?? '')) }] : []),
-      ...(hit && hitShot && hit.track.id === mainV ? [{ label: 'Retake this shot…', disabled: readOnly, onPick: () => ui.prefill(`Retake ${sceneOf(hit.clip, by) ?? ''} shot ${hitShot} (${takeLabel(hit.clip)}, ${secsOf(lenF(hit.clip, fps))}, at ${smpte(hit.clip.at, fps)} in cut ${almaCut}). What should change: `, clipChip(hit.track, hit.clip)) }] : []),
+      ...(hit && hitShot && hit.track.id === mainV ? [{ label: 'Retake this shot…', disabled: readOnly, onPick: () => retakeOf(hit.track, hit.clip, sceneOf(hit.clip, by), hitShot) }] : []),
       ...(ref && hit && isLine(hit.clip) ? [{ label: 'Retype…', hint: 'Enter', disabled: readOnly || hit.track.locked, onPick: () => retypeSel(ref) }] : []),
       ...(ref && hit && isSrtClip(hit.clip) ? [{ label: 'Split into lines to edit', hint: 'a line a cue', disabled: readOnly || hit.track.locked, onPick: () => void splitSrtClip(ref) }] : []),
       ...(ref && hit && (hit.track.kind === 'video' || hit.track.kind === 'audio') ? (() => {
@@ -1973,11 +2003,14 @@ export function EditPage() {
               const n = c.plan === 'line' ? lineIndex(c) : undefined;
               return (
                 <>
-                  <span className="line-clamp-2 text-[14px] font-medium leading-snug">{c.scene} · {c.plan === 'line' ? (c.who ? `line ${n} of ${linesIn(c.scene)}` : 'action') : `shot ${c.shot} of ${shotsIn(c.scene)}${c.plan === 'board' ? ' · board' : ''}`}</span>
+                  <span className="line-clamp-2 text-[14px] font-medium leading-snug">{c.scene} · {c.plan === 'line' ? (c.who ? `line ${n} of ${linesIn(c.scene)}${c.parts ? ` · part ${c.part} of ${c.parts}` : ''}` : 'action') : `shot ${c.shot} of ${shotsIn(c.scene)}${c.plan === 'board' ? (c.panel ? ` · board ${c.panel.k} of ${c.panel.of}` : ' · board') : ''}`}</span>
                   {sc && <span title={sc.title} className="line-clamp-1 text-[12.5px] leading-snug text-sub">{sc.title}</span>}
                   <span className="line-clamp-3 text-[12.5px] leading-snug text-sub">{c.plan === 'line'
-                    ? (c.who ? `${c.who.charAt(0) + c.who.slice(1).toLowerCase()}, about ${Math.max(1, Math.round(c.out - c.in))} s at reading pace.` : 'An action, as the script says it.')
+                    ? (c.who ? (c.timing?.startsWith('at previz') ? `${c.who.charAt(0) + c.who.slice(1).toLowerCase()}, ${Math.round((c.out - c.in) * 10) / 10} s ${c.timing}.` : `${c.who.charAt(0) + c.who.slice(1).toLowerCase()}, about ${Math.max(1, Math.round(c.out - c.in))} s ${c.timing ?? 'at reading pace'}.`) : `An action, as the script says it${c.timing ? `, ${c.timing}` : ''}.`)
+                    : c.panel ? `Storyboard panel ${c.panel.n}, at ${c.panel.s.toFixed(2)} s in the scene; on screen ${Math.round((c.out - c.in) * 100) / 100} s.`
                     : `${c.plan === 'shot' ? 'No board yet, so the shot plays as its description. ' : ''}${Math.round((c.out - c.in) * 10) / 10} s planned.`}</span>
+                  {c.plan === 'board' && boardsNote(c.scene) && <span key={boardsNote(c.scene)} data-boards-why className="line-clamp-3 text-[12px] leading-snug text-mute duration-200 animate-in fade-in-0">{boardsNote(c.scene)}</span>}
+                  {c.plan === 'line' && c.who && linesNote(c.scene) && <span key={linesNote(c.scene)} data-lines-take className="line-clamp-2 text-[12px] leading-snug text-mute duration-200 animate-in fade-in-0">{linesNote(c.scene)}</span>}
                 </>
               );
             })() : pic ? (
@@ -2018,7 +2051,7 @@ export function EditPage() {
         </section>
 
         <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch border-l border-line px-4 py-3 max-[1100px]:border-l-0 max-[1100px]:border-t">
-          <FilmStrip runs={runs} total={total} frame={frame} open={openId} shots={(mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => shotNo(c, by)).length}
+          <FilmStrip runs={runs} total={total} frame={frame} open={openId} shots={(mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => shotNo(c, by) && !(c.panel && c.panel.k > 1)).length}
             absent={absent} onPickAbsent={openAbsent} onPick={openRun} onZoom={(dir) => setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, dir }))} empty={empty} />
           <div className={cn('relative flex flex-none flex-col', empty && '[&_[role=toolbar]]:pointer-events-none [&_[role=toolbar]]:opacity-45')} style={{ height: tracksH }}>
             {/* no script yet: the timeline says when it starts, and the one thing to do now (15 Nov) */}
@@ -2050,7 +2083,7 @@ export function EditPage() {
               onHeadMenu={(m) => { setMenu(undefined); setHeadMenu(m); }} renaming={renaming} onPress={pressTrack} point={pointOn} onPoint={setPoint}
               onRenamed={(id, name) => { setRenaming(undefined); if (name !== undefined && !readOnly) void apply(renameTrack(tl, id, name)); }} onPeek={setPeek}
               laneNote={planned && mainV && !(mainTracks(tl).v?.clips.length) ? { [mainV]: 'No shots yet. They come with the shot lists.' } : undefined}
-              nameOf={noteName} clipText={(c, t) => { if (t.id !== mainV) return undefined; const n = shotNo(c, by); return n ? { title: `Shot ${n}`, sub: c.plan ? c.text ?? '' : takeLabel(c) } : undefined; }} />
+              nameOf={noteName} clipText={(c, t) => { if (t.id !== mainV) return undefined; const n = shotNo(c, by); return n ? { title: `Shot ${n}${c.panel && c.panel.of > 1 ? ` · ${c.panel.k}/${c.panel.of}` : ''}`, sub: c.plan ? c.text ?? '' : takeLabel(c) } : undefined; }} />
           </div>
           {menu && menuItems && <ContextMenu x={menu.x} y={menu.y} title={menuItems.title} items={menuItems.items} onClose={closeMenu} />}
           {headMenu && headItems && <ContextMenu x={headMenu.x} y={headMenu.y} title={headItems.title} items={headItems.items} onClose={closeHeadMenu} />}
@@ -2066,18 +2099,20 @@ export function EditPage() {
           {/* the lower panel's tabs, in the user's order (14 Nov): Takes, What's next, Upscale (in the 1080p view) and Renders */}
           <div className="flex flex-col gap-2">
             {check && fullFor && <FullBar shots={check.shots} takes={check.takes} marks={seedance.marks} onUpscale={() => askUpscale()} onSeedance={askSeedance} />}
+            {/* how many things wait for the user, for What's next's tab, read apart so the page is drawn only when it changes */}
+            <WaitingCount onCount={setWaitingN} />
             <div role="tablist" aria-label="Under the timeline" className="flex flex-wrap gap-1">
               {(check && fullFor ? ['takes', 'left', 'upscale', 'renders', 'history'] as const : ['takes', 'left', 'renders', 'history'] as const).map((k) => (
                 <button key={k} type="button" role="tab" aria-selected={lowerTab === k} onClick={() => setLowerTab(k)} data-tab={k}
                   className={cn('h-7 cursor-pointer whitespace-nowrap rounded-[7px] px-2.5 text-[12.5px] transition-colors duration-200', lowerTab === k ? 'bg-raised text-ink' : 'text-sub hover:text-ink')}>
-                  {k === 'left' ? <LeftLabel left={leftView?.left} /> : k === 'takes' ? 'Takes' : k === 'upscale' ? 'Upscale' : k === 'renders' ? 'Renders' : 'History'}
+                  {k === 'left' ? <LeftLabel left={leftView?.left} waiting={waitingN} /> : k === 'takes' ? 'Takes' : k === 'upscale' ? 'Upscale' : k === 'renders' ? 'Renders' : 'History'}
                 </button>
               ))}
             </div>
           </div>
           {lowerTab === 'left' && leftInput ? (
             <div key="left" className="duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
-              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} />
+              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} here="/edit" from="What's next on the Edit page" />
             </div>
           ) : empty && lowerTab !== 'left' ? (
             <div key={`empty-${lowerTab}`} className="duration-200 animate-in fade-in-0">
@@ -2157,12 +2192,17 @@ function SendOnce({ film, text, onDone }: { film: string; text: string; onDone: 
   return null;
 }
 
-function LeftLabel({ left }: { left?: number }) {
-  if (left === undefined) return <>{NEXT_TAB}</>;
+/** The tab's name and its count: the steps left, and, while anything waits for the user, how many things do:
+ *  "What's next 4 for you 8 left". */
+function LeftLabel({ left, waiting = 0 }: { left?: number; waiting?: number }) {
+  if (left === undefined && !waiting) return <>{NEXT_TAB}</>;
   return (
-    <span className="inline-flex items-center" title={leftWords(left)}>
+    <span className="inline-flex items-center" title={[waiting ? waitWords(waiting) : '', left !== undefined ? leftWords(left) : ''].filter(Boolean).join(' · ')}>
       {NEXT_TAB}
-      {left > 0
+      {waiting > 0 && <span key={`w${waiting}`} data-tab-waiting className="ml-1.5 inline-flex h-4 items-center rounded-full bg-warn/20 px-1.5 text-[11px] font-medium tabular-nums text-warn duration-200 animate-in fade-in-0">{waiting} for you</span>}
+      {left === undefined ? null : waiting > 0 && left > 0
+        ? <span key={`l${left}`} data-tab-left className="ml-1.5 text-[11.5px] tabular-nums text-mute duration-200 animate-in fade-in-0">{left} left</span>
+        : left > 0
         ? <>{' '}<span key={left} data-tab-left className="ml-1 font-mono text-[11.5px] tabular-nums text-mute duration-200 animate-in fade-in-0">{left}</span></>
         : <span data-tab-left="0" className="ml-1.5 inline-flex text-mute duration-200 animate-in fade-in-0"><IconCheck size={12} /></span>}
     </span>
@@ -2181,8 +2221,10 @@ function phonePick(p: { viewing?: { proxy?: string; master?: string }; equals?: 
 // with both rows the lane keeps only the picture row, so nothing is ever cut by Alma's bar
 const PIC_MIN = 120, PIC_MAX = 340, ONE_ROW = 240, RULER = 24, ROW = 52;
 
-function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, viewer, transport, file, smoother, crumbs, onNote, ahead }: {
+function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, playing, onPlay, viewer, transport, file, smoother, crumbs, onNote, ahead }: {
   state: FilmState; tl: Timeline; name: string; frame: number; fps: number; total: number; setFrame: (f: number) => void; ahead?: string;
+  /** The film plays; `onPlay` plays or pauses it (the full screen's own button). */
+  playing: boolean; onPlay: () => void;
   viewer: React.ReactNode; transport: React.ReactNode; crumbs: { label: string; href?: string }[]; onNote: () => void;
   /** The one file the player plays (smooth on a phone): the version's 480p or its master; absent while played live. */
   file?: '480p' | 'master';
@@ -2221,12 +2263,17 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, viewer, trans
   const [fit, setFit] = useState<{ w: number; h: number; rows: 1 | 2 }>();
   const ratio = tl.width / tl.height;
   const tracks = audio && video ? 2 : 1;
+  // full screen: the picture's own box, so the same player keeps playing; a landscape film turns sideways.
+  // While it is full screen the page's sizes are left as they were, so it comes back exactly where it went from.
+  const fs = usePhoneFull(box, tl.width > tl.height);
+  const isFull = useRef(false);
+  useEffect(() => { isFull.current = fs.full; }, [fs.full]);
   useLayoutEffect(() => {
     const el = root.current;
     const main = el?.closest('main');
     if (!el || !main) return;
     const measure = () => {
-      if (!box.current || !laneBox.current) return;
+      if (!box.current || !laneBox.current || isFull.current) return;
       const cs = getComputedStyle(main);
       const room = main.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
       // everything but the picture, with the lane at two rows (read from the current sizes, so a size still sliding
@@ -2251,14 +2298,54 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, viewer, trans
   const [eased, setEased] = useState(false);
   useEffect(() => { if (fit && !eased) { const t = setTimeout(() => setEased(true), 50); return () => clearTimeout(t); } }, [fit, eased]);
   const rows = fit?.rows ?? tracks;
+  // the full screen's controls show while paused and for a moment after a tap while it plays
+  const [awake, setAwake] = useState(true);
+  const awakeT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const wake = useCallback(() => { setAwake(true); if (awakeT.current) clearTimeout(awakeT.current); awakeT.current = setTimeout(() => setAwake(false), 2400); }, []);
+  useEffect(() => () => { if (awakeT.current) clearTimeout(awakeT.current); }, []);
+  const ctl = !playing || awake;
+  // the box comes back from full screen with a short fade, as it went
+  const [back, setBack] = useState(false);
+  const enterFull = () => { wake(); setBack(false); void fs.enter(); };
+  const leaveFull = () => { fs.leave(); setBack(true); };
   return (
     <div ref={root} data-phone-edit className="flex flex-none flex-col">
       <Header crumbs={[...crumbs.slice(0, 2)]} meta="" phoneSub={name ? `Edit ${name} · ${file === 'master' ? 'master file' : file ? '480p file' : 'played live'} · ${smpte(total / fps, fps)} · view only` : 'Edit · no cut yet · view only'} />
       <div className="flex flex-col items-center gap-3 px-4 pt-3">
         {ahead && <p className="m-0 flex w-full items-center text-[12px] text-sub"><span className="min-w-0 truncate font-mono text-[11px]">{ahead}</span><ToConfirm title="The record has a newer cut than the timeline; ask Alma on the desktop to bring the timeline up to it" /></p>}
-        <div ref={box} data-phone-picture className={cn('relative overflow-hidden rounded-[14px] border border-edge bg-black', !fit && 'h-[min(42dvh,340px)]', eased && 'transition-[width,height] duration-300 ease-out motion-reduce:transition-none')}
-          style={fit ? { width: fit.w, height: fit.h } : { aspectRatio: `${tl.width} / ${tl.height}` }}>
-          {viewer}
+        <div ref={box} data-phone-picture data-full={fs.full ? (fs.real ? 'screen' : 'page') : undefined}
+          className={cn('overflow-hidden bg-black [&:fullscreen]:rounded-none [&:fullscreen]:border-0',
+            fs.full ? 'fixed inset-0 z-[100] rounded-none border-0 duration-200 animate-in fade-in-0' : 'relative rounded-[14px] border border-edge',
+            !fs.full && back && 'duration-200 animate-in fade-in-0',
+            !fs.full && !fit && 'h-[min(42dvh,340px)]', !fs.full && eased && 'transition-[width,height] duration-300 ease-out motion-reduce:transition-none')}
+          style={fs.full ? undefined : fit ? { width: fit.w, height: fit.h } : { aspectRatio: `${tl.width} / ${tl.height}` }}>
+          {/* the picture and what is drawn over it; turned a quarter for a landscape film while the window stands upright */}
+          <div data-phone-stage data-sideways={fs.sideways || undefined} onClick={fs.full ? wake : undefined}
+            className="absolute inset-0"
+            style={fs.sideways ? { inset: 'auto', left: '50%', top: '50%', width: '100dvh', height: '100dvw', transform: 'translate(-50%, -50%) rotate(90deg)' } : undefined}>
+            {viewer}
+            {fs.full && (
+              // full screen: play, where it is, a bar to move through the film, and the way out; they fade while it plays
+              <div onClick={(e) => e.stopPropagation()} data-phone-full-bar
+                className={cn('absolute inset-x-0 bottom-0 z-[7] flex items-center gap-3 bg-gradient-to-t from-black/85 to-transparent px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-12 transition-opacity duration-300', ctl ? 'opacity-100' : 'pointer-events-none opacity-0')}>
+                <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={() => { onPlay(); wake(); }} className="flex size-11 flex-none cursor-pointer items-center justify-center rounded-full bg-ink text-bg">
+                  {playing ? <span className="flex gap-[3px]"><span className="h-3 w-[3px] bg-bg" /><span className="h-3 w-[3px] bg-bg" /></span> : <IconPlay size={13} />}
+                </button>
+                <span className="flex-none font-mono text-[12px] text-ink">{tc.slice(3)}</span>
+                <input type="range" aria-label="Where the film is" min={0} max={Math.max(1, total)} value={Math.min(frame, total)} onChange={(e) => { setFrame(Number(e.target.value)); wake(); }}
+                  className="h-1 min-w-0 flex-1 cursor-pointer accent-white" />
+                <span className="flex-none font-mono text-[12px] text-ink-3">{smpte(total / fps, fps).slice(3)}</span>
+              </div>
+            )}
+            <button type="button" data-phone-full onClick={(e) => { e.stopPropagation(); if (fs.full) leaveFull(); else enterFull(); }}
+              aria-label={fs.full ? 'Leave full screen' : 'Full screen'} title={fs.full ? 'Leave full screen' : 'Full screen'}
+              className={cn('absolute z-[8] flex size-10 cursor-pointer items-center justify-center rounded-[10px] border border-white/15 bg-black/65 text-ink transition-opacity duration-300 active:bg-black/85',
+                fs.full ? 'right-[max(12px,env(safe-area-inset-right))] top-[max(12px,env(safe-area-inset-top))]' : 'bottom-2 right-2', ctl ? 'opacity-100' : 'pointer-events-none opacity-0')}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {fs.full ? <path d="M6 3v3H3M13 6h-3V3M10 13v-3h3M3 10h3v3" /> : <path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" />}
+              </svg>
+            </button>
+          </div>
         </div>
         {smoother}
         <div className="flex w-full items-center justify-between font-mono text-[13px]"><span>{tc}</span><span className="text-mute">{smpte(total / fps, fps)}</span></div>
@@ -2279,7 +2366,7 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, viewer, trans
             {[video, audio].filter(Boolean).map((t, i) => (
               <div key={t!.id} data-phone-row={t!.id} aria-hidden={i >= rows || undefined} className={cn('relative h-[52px] transition-opacity duration-300 motion-reduce:transition-none', i >= rows && 'opacity-0')}>
                 {t!.clips.map((c) => (
-                  <button key={c.id} type="button" tabIndex={i >= rows ? -1 : undefined} onClick={() => setFrame(startF(c, fps))} title={`${clipName(c)} · ${smpte(c.at, fps)}`}
+                  <button key={c.id} type="button" data-phone-clip={`${t!.id}:${c.id}`} tabIndex={i >= rows ? -1 : undefined} onClick={() => setFrame(startF(c, fps))} title={`${clipName(c)} · ${smpte(c.at, fps)}`}
                     className={cn('absolute top-1 box-border h-[44px] overflow-hidden rounded-[8px] border border-edge-strong px-2 text-left text-[12px]', t!.kind === 'video' ? 'bg-raised text-ink' : 'bg-panel text-sub')}
                     style={{ left: startF(c, fps) * Z, width: Math.max(24, lenF(c, fps) * Z - 2) }}>
                     {lenF(c, fps) * Z > 40 && <span className="block truncate pt-1">{t!.kind === 'video' ? clipName(c).replace(/ · /, ' · ') : ''}</span>}

@@ -30,6 +30,9 @@ interface Props {
   full?: { info: FullInfo; base?: { b: FullBase; tl: Timeline } };
   /** Told while the file at the playhead is still loading (true) and once it plays (false). */
   onLoading?: (loading: boolean) => void;
+  /** The 1080p view only: its picture cannot be shown on this device (the file failed, never loaded, or plays without
+   *  being drawn), in words; the page goes to 480p and says why. Said once. */
+  onFail?: (why: string) => void;
 }
 
 interface Voice { el: HTMLAudioElement; gain?: GainNode; src?: string; wired?: boolean }
@@ -249,10 +252,12 @@ function FileViewer({ tl, frame, rate, total, file, onFrame, onEnd, className }:
 interface Shown { at: number; frame: boolean; pic: boolean; picLag: number; snd: boolean; sndLag: number; ahead: number }
 /** The longest a hold waits for a sound (the picture ready), and for a picture, before playing on without it. */
 const HOLD_SOUND = 8000, HOLD_PICTURE = 15000, GRACE = 120;
+/** How long an element just taken off screen is left where it is before it is moved (below). */
+const HIDE_SETTLE = 60;
 
 /** The cut played from its sources. Two elements; the one not on screen holds the next stretch, or, over a dissolve,
  *  the other picture of it. */
-function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, full, onLoading }: Props) {
+function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, full, onLoading, onFail }: Props) {
   const fps = tl.fps;
   const mix = useAudioMix(tl, solo);
   const a = useRef<HTMLVideoElement>(null);
@@ -269,9 +274,26 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
   const cb = useRef({ onFrame, onEnd, frame });
   const rateRef = useRef(rate);
   const exact = useRef<number>(undefined);
+  const againRef = useRef<() => void>(undefined);
   useEffect(() => { cb.current = { onFrame, onEnd, frame }; rateRef.current = rate; });
 
   const segAt = (f: number) => segs.findIndex((s) => s.from <= f && s.to > f);
+  // The 1080p picture that cannot be shown ("can hear the sound but can't see the video"): a file the
+  // browser cannot decode, one that never loads, or one that plays without its frames being drawn left the picture
+  // black under the sound. Said once to the page, which goes to 480p.
+  const failed = useRef(false);
+  const fail = (why: string) => { if (!failed.current && full && onFail) { failed.current = true; onFail(why); } };
+  const isFull = (el: HTMLVideoElement) => segs.some((s) => s.kind !== 'small' && srcOf(s) === el.dataset.src);
+  const drewAt = useRef(new WeakMap<HTMLVideoElement, number>());
+  useEffect(() => {
+    const ids: [HTMLVideoElement, number][] = [];
+    for (const el of [a.current, b.current]) {
+      if (!el || typeof el.requestVideoFrameCallback !== 'function') continue;
+      const watch = () => { const id = el.requestVideoFrameCallback(() => { drewAt.current.set(el, performance.now()); watch(); }); const k = ids.findIndex((x) => x[0] === el); if (k >= 0) ids[k][1] = id; else ids.push([el, id]); };
+      watch();
+    }
+    return () => { for (const [el, id] of ids) el.cancelVideoFrameCallback(id); };
+  }, []);
   const els = () => [a.current, b.current] as const;
   const srcOf = (p: Piece) => mediaUrl(p.src);
   // the file's time under timeline frame f: the stretch's own start in its file, at its rate (before or after the
@@ -323,6 +345,21 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
     return undefined;
   };
 
+  // Taken off screen, then moved ("a frame of the close-up of the window"). The browser puts a moved
+  // element's new frame on screen at once but applies its opacity a frame later, so an element hidden and moved in the
+  // same moment showed, for one frame, the picture it was moved to. An element just hidden is left where it is for
+  // HIDE_SETTLE; paused, the viewer looks again once that has passed.
+  const hide = (el: HTMLVideoElement) => {
+    if (el.style.opacity !== '0') el.dataset.hidAt = String(performance.now());
+    el.style.opacity = '0';
+  };
+  const settled = (el: HTMLVideoElement, playing: boolean) => {
+    const left = HIDE_SETTLE - (performance.now() - Number(el.dataset.hidAt ?? 0));
+    if (left <= 0) return true;
+    if (!playing) setTimeout(() => againRef.current?.(), left + 10);
+    return false;
+  };
+
   /** Show the stretch under frame f on the front element and load the one after it on the back one; over a dissolve,
    *  the other picture on the back one, the two mixed by their opacities (driven from the player's own clock: nothing
    *  of the page is drawn again for it). A file not ready is never shown as black: the picture on screen stays (the
@@ -339,14 +376,14 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
     let fr = pair[front.current];
     let back = pair[1 - front.current];
     if (i < 0) {
-      fr.style.opacity = '0'; back.style.opacity = '0';
+      hide(fr); hide(back);
       fr.pause(); back.pause();
       // a gap in the cut is black, as rendered; the stretch after it is loaded meanwhile, so it starts with its picture
       const after = segs.find((x) => x.from > f);
-      if (after && back.dataset.src !== srcOf(after) && fr.dataset.src !== srcOf(after)) { back.src = srcOf(after); back.dataset.src = srcOf(after); back.preload = 'auto'; }
+      if (after && back.dataset.src !== srcOf(after) && fr.dataset.src !== srcOf(after) && settled(back, playing)) { back.src = srcOf(after); back.dataset.src = srcOf(after); back.preload = 'auto'; }
       const pk = after ? [fr, back].find((x) => x.dataset.src === srcOf(after)) : undefined;
       const a0 = after ? Math.max(0, timeIn(after, after.from)) : 0;
-      if (pk && pk.readyState >= 1 && Math.abs(pk.currentTime - a0) > 0.02) { try { pk.currentTime = a0; } catch { /* loading */ } }
+      if (pk && pk.readyState >= 1 && Math.abs(pk.currentTime - a0) > 0.02 && settled(pk, playing)) { try { pk.currentTime = a0; } catch { /* loading */ } }
       return { at: -1, frame: true, pic: true, picLag: 0, snd: sound.ready, sndLag: sound.lag, ahead: Infinity };
     }
     const seg = segs[i];
@@ -401,13 +438,13 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
     look(fr, seg);
     fr.style.opacity = String(Math.round(dim * 1000) / 1000);
     fr.dataset.share = '1';
-    back.style.opacity = '0';
+    hide(back);
     back.dataset.share = '0';
     back.pause();
     // the next stretch on the back element, loaded and parked at its first frame (moved only when it is elsewhere: setting
     // the time on every frame made it seek again and again)
     const next = nextApart(i);
-    if (next) {
+    if (next && settled(back, playing)) {
       const nsrc = srcOf(next);
       if (back.dataset.src !== nsrc) { back.src = nsrc; back.dataset.src = nsrc; back.preload = 'auto'; }
       const n0 = Math.max(0, timeIn(next, next.from));
@@ -453,6 +490,7 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
     // picture that never loads is not waited for either, over the rest of its stretch: the clock runs on as it used to,
     // the picture before it stays on screen and the dot stays on.
     let held = false, heldAt = 0, since = 0, deaf = -2, blind = -2;
+    let drawWatch: { el?: HTMLVideoElement; since: number } = { since: performance.now() };
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
@@ -475,11 +513,19 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
         if (!held && short && now - since >= GRACE) { held = true; heldAt = since; since = 0; r = show(Math.floor(f), false); k = fit(r); }
         if (held && !k.play) {
           if (now - heldAt > HOLD_SOUND && r.frame && r.pic && !r.snd) deaf = r.at;
-          else if (now - heldAt > HOLD_PICTURE && !r.pic) blind = r.at;
+          else if (now - heldAt > HOLD_PICTURE && !r.pic) {
+            blind = r.at;
+            if (segs[r.at] && segs[r.at].kind !== 'small') fail(`the 1080p file did not load in ${HOLD_PICTURE / 1000} s on this connection`);
+          }
           k = fit(r);
         }
         if (held && k.play && (k.ahead >= 1 || now - heldAt > 4000 || deaf === r.at || blind === r.at)) { held = false; r = show(Math.floor(f), true); k = fit(r); }
         loading(held || (blind === r.at && !r.pic));
+        const fe = els()[front.current];
+        if (fe && !held && !fe.paused && fe.readyState >= 3 && isFull(fe)) {
+          if (fe !== drawWatch.el) drawWatch = { el: fe, since: now };
+          if (now - Math.max(drawWatch.since, drewAt.current.get(fe) ?? 0) > 3000) fail('the 1080p picture plays but is not drawn on this device');
+        } else drawWatch = { el: undefined, since: now };
         // a small lag (a file starting at a change of clip) is caught up by the element's own re-seek, as before: the
         // clock keeps wall time and holds only for a real wait
         go = !held;
@@ -498,9 +544,15 @@ function CutViewer({ tl, frame, rate, total, onFrame, onEnd, className, solo, fu
   const first = segs[0];
   // paused: a file that lands after the playhead moved is shown then (the picture before it stays until it does)
   const again = () => { if (rateRef.current === 0) loading(!show(cb.current.frame, false, true).frame); };
+  useEffect(() => { againRef.current = again; });
   // the 1080p view: where the picture at the playhead comes from
   const here = pieces ? segs.find((x) => x.from <= frame && x.to > frame) : undefined;
-  const ev = { onLoadedMetadata: again, onLoadedData: again, onSeeked: again, onCanPlay: again, onError: again };
+  const onError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const el = e.currentTarget;
+    if (isFull(el)) fail(`the browser here could not read the 1080p file (${el.error?.code === 3 ? 'it could not decode it' : el.error?.code === 4 ? 'it does not play this format' : el.error?.code === 2 ? 'the download broke off' : `error ${el.error?.code ?? '?'}`})`);
+    again();
+  };
+  const ev = { onLoadedMetadata: again, onLoadedData: again, onSeeked: again, onCanPlay: again, onError };
   return (
     <span className={className} style={{ position: 'absolute', inset: 0 }}>
       <video ref={a} playsInline muted preload="auto" className="absolute inset-0 size-full bg-black object-contain" style={{ opacity: first ? 1 : 0 }} {...ev} />

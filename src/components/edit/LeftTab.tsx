@@ -17,6 +17,8 @@ import { NEXT_TAB, STEP_SHORT, subsCounts, whatIsLeft, type LeftAnswer, type Lef
 import { EARLY_IDS, type EarlyId } from './early';
 import { parseSrt } from './subs';
 import { fetchSrt } from './Subtitles';
+import { useWaitingNow, WaitingNow } from '@/components/flow/WaitingNow';
+import { waitsByStep, waitsLine, type WaitItem } from '@/components/flow/waitList';
 
 /** The route's answer, read once and on each change of the film's folder (`changed`, the state's time); a tick shows at
  *  once and is saved, and goes back with a line saying why when the save fails. `also`: a version whose render part
@@ -95,7 +97,7 @@ function Glyph({ s }: { s: keyof typeof STATE }) {
   return <span aria-hidden="true" className="flex size-[13px] flex-none items-center justify-center"><span className="size-[8px] rounded-full border border-mute" /></span>;
 }
 
-export function LeftTab({ film, tl, input, onDo, onUntick, error }: {
+export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: {
   film: string;
   /** The cut on screen (for the cues of an .srt clip). */
   tl: Timeline;
@@ -103,9 +105,16 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error }: {
   onDo: (d: LeftDo) => void;
   onUntick: (s: LeftStep) => void;
   error?: string;
+  /** The page the list is on, after the film's address ("/edit"), and its name said to Alma with an answer given here. */
+  here?: string;
+  from: string;
 }) {
   const cues = useSrtCues(film, tl);
   const view = useMemo(() => whatIsLeft({ ...input, subs: subsCounts(tl, cues) }), [input, tl, cues]);
+  // what waits for the user, first: the list of "Waiting for you", and on each step what of it holds it up
+  const w = useWaitingNow();
+  const [openWait, setOpenWait] = useState<string>();
+  const waits = useMemo(() => (w ? waitsByStep(w.items, view.steps) : new Map<string, WaitItem[]>()), [w, view.steps]);
   // the early steps from the script on (15 Nov): the ones done before the step to look at fold into one row (two or
   // more), so the step to do is near the top, and a film with its takes in reads as it did, its seven under one line
   const [unfold, setUnfold] = useState(false);
@@ -117,6 +126,7 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error }: {
   const earlyNames = view.steps.slice(0, Math.max(0, lead)).map((s) => STEP_SHORT[s.id]).join(', ');
   return (
     <section aria-label={NEXT_TAB} data-left-tab className="flex min-w-0 flex-col gap-3">
+      {w && <WaitingNow w={w} here={here} from={from} open={openWait} onOpen={setOpenWait} />}
       <span className="text-[12.5px] leading-normal text-sub">
         {view.early && !view.early.done ? 'Every step from the script to the film going out.' : `The steps before cut ${input.cut} goes out.`} The first step not done is yours to look at.
         {view.count && <span key={view.count} data-left-count className="ml-1.5 text-mute duration-200 animate-in fade-in-0">{view.count}</span>}
@@ -138,7 +148,8 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error }: {
           </li>
         )}
         {shown.map((s) => (
-          <Row key={s.id} s={s} onDo={onDo} onUntick={onUntick} cls={foldable && view.steps.indexOf(s) < lead ? 'duration-200 animate-in fade-in-0 slide-in-from-top-1' : undefined} />
+          <Row key={s.id} s={s} onDo={onDo} onUntick={onUntick} waits={waits.get(s.id)} onWait={setOpenWait}
+            cls={foldable && view.steps.indexOf(s) < lead ? 'duration-200 animate-in fade-in-0 slide-in-from-top-1' : undefined} />
         ))}
       </ol>
       <p key={view.footer} data-left-footer className="m-0 text-[12.5px] text-sub duration-200 animate-in fade-in-0">{view.footer}</p>
@@ -146,7 +157,11 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error }: {
   );
 }
 
-function Row({ s, onDo, onUntick, cls }: { s: LeftStep; onDo: (d: LeftDo) => void; onUntick: (s: LeftStep) => void; cls?: string }) {
+function Row({ s, onDo, onUntick, cls, waits, onWait }: {
+  s: LeftStep; onDo: (d: LeftDo) => void; onUntick: (s: LeftStep) => void; cls?: string;
+  /** What waits for the user and holds this step up; a press opens the first of it in the list above. */
+  waits?: WaitItem[]; onWait: (key: string) => void;
+}) {
   const st: keyof typeof STATE = s.done ? 'done' : s.current ? 'current' : 'later';
   const press = () => onDo(s.row);
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
@@ -166,7 +181,13 @@ function Row({ s, onDo, onUntick, cls }: { s: LeftStep; onDo: (d: LeftDo) => voi
             {s.versions && <span key={s.versions} data-step-versions className="ml-2 font-mono text-[11px] font-normal text-mute duration-200 animate-in fade-in-0">{s.versions}</span>}
           </span>
           <span key={s.facts} data-step-facts className="line-clamp-2 text-[12px] leading-snug text-sub duration-200 animate-in fade-in-0" title={s.versions ? `${s.facts} (${s.versions})` : s.facts}>{s.facts}</span>
+          {waits && (
+            <button type="button" key={waitsLine(waits)} data-step-waits onClick={(e) => { stop(e); onWait(waits[0].key); }} onKeyDown={stop} title={waits.map((x) => x.title).join('\n')}
+              className="line-clamp-2 cursor-pointer border-0 bg-transparent p-0 text-left text-[12px] leading-snug text-warn underline decoration-warn/40 underline-offset-4 transition-colors duration-150 hover:decoration-warn duration-200 animate-in fade-in-0">{waitsLine(waits)}</button>
+          )}
           {s.note && <span key={s.note} data-step-note className="truncate text-[12px] text-warn duration-200 animate-in fade-in-0">{s.note}</span>}
+          {/* the button cannot start what it starts yet: no button, and quietly what is missing in its place */}
+          {s.wait && <span key={s.wait} data-step-wait title={s.waitFull ?? s.wait} className="line-clamp-2 text-[12px] leading-snug text-mute duration-200 animate-in fade-in-0 slide-in-from-top-1">{s.wait}</span>}
         </span>
         {s.ticked && (
           <button type="button" data-step-untick onClick={(e) => { stop(e); onUntick(s); }} onKeyDown={stop} title="Take the tick back"

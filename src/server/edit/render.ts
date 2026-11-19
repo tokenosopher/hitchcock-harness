@@ -265,10 +265,12 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
   /** Lays a stream over the picture from frame `at`. `exact`: placed by the frame itself, not by its time rounded to
    *  a millisecond (which, rounded up, starts it a frame late; the older overlays keep their rounding, so the 480p
    *  stays as it was). */
-  const over = (label: string, at: number, exact = false): void => {
+  /** Lays a picture over everything drawn so far from frame `at`; with `upto`, shown only up to that frame (not kept). */
+  const over = (label: string, at: number, exact = false, upto?: number): void => {
     const l = `o${ov}`;
     filters.push(`[${label}]setpts=PTS+${exact ? `${at}/(${fps}*TB)` : `${f3(at / fps)}/TB`}[${l}]`);
-    filters.push(`[${v}][${l}]overlay=eof_action=pass:repeatlast=0:format=auto[v${ov + 1}]`);
+    const only = upto !== undefined ? `enable='between(n,${at},${upto - 1})':` : '';
+    filters.push(`[${v}][${l}]overlay=${only}eof_action=pass:repeatlast=0:format=auto[v${ov + 1}]`);
     v = `v${ov + 1}`;
     ov++;
   };
@@ -327,8 +329,13 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
         if (c.fadeOut) chain.push(`fade=t=out:st=${f3(Math.max(0, e.n / fps - c.fadeOut))}:d=${f3(c.fadeOut)}`);
         chain.push(`trim=start_frame=${Math.max(0, o)}`, `setpts=N/(${fps}*TB)`);
       }
+      // The stretch's last frame was lost (one black frame at the end of every stretch cut with a
+      // seek, seen as a flicker before S6 shot 1 and S7 shot 2): the overlay took the stretch as ended at that frame.
+      // One copy of the last frame is added after it, and the stretch is shown only over its own frames, so every frame
+      // of it is there and the copy is never seen. Tried on v87's own graph: the four black frames gone, nothing else.
+      chain.push('tpad=stop=1:stop_mode=clone');
       filters.push(`[${i}:v]${chain.join(',')}[bp${k}]`);
-      over(`bp${k}`, p.from, true);
+      over(`bp${k}`, p.from, true, p.to);
     }
     summary.push(`upscaled cut: ${plan.base.b.path} (${plan.base.b.version}), ${runs.length} stretch${runs.length === 1 ? '' : 'es'} laid over the picture, cut by frame`);
   }
@@ -685,8 +692,18 @@ export async function masterStaleness(slug: string | FilmTarget, version: string
   const t = await readVersion(film, version);
   const rec = t.renders?.master?.path === m.path ? t.renders.master : undefined;
   const at = rec?.at ?? (await fs.stat(path.join(film.dir, m.path)).then((s) => s.mtime.toISOString(), () => undefined));
-  return { ...masterAge({ version, at, picture: rec?.picture }, await pictureNow(film, t)), path: m.path };
+  const now = await pictureNow(film, t);
+  const age = masterAge({ version, at, picture: rec?.picture }, now);
+  if (age.state !== 'stale' && madeBeforeFix(at, now.pieces)) return { state: 'stale', reason: `The master of ${version} was made before the upscaled-stretch fix: it has one black frame at the end of each stretch from the upscaled cut`, path: m.path };
+  return { ...age, path: m.path };
 }
+
+/** A render made before the upscaled-stretch fix (the time below; v0.1.0 had the fault) from a cut that uses an
+ *  upscaled cut lost the last frame of each stretch taken from it: such a master counts as out of date, so it is made again on request without a change to the
+ *  cut. */
+const STRETCH_FIX_AT = '2026-11-19T06:00:00Z';
+const madeBeforeFix = (at: string | undefined, pieces: Piece[]): boolean =>
+  !!at && Date.parse(at) < Date.parse(STRETCH_FIX_AT) && pieces.some((p) => p.kind === 'base');
 
 /** What a master of the version would be built from now (masters.ts PictureNow): the same reading the render makes. */
 async function pictureNow(film: FilmTarget, t: Timeline): Promise<Parameters<typeof masterAge>[1]> {
@@ -717,7 +734,9 @@ async function smallSource(film: FilmTarget, version: string, src: RenderOptions
   const main = `${variantBase(version, 'master', tag)}.mp4`;
   if (st.state !== 'done' || !(await fs.access(path.join(film.dir, main)).then(() => true, () => false))) return {};
   const t = await readVersion(film, version);
-  const age = masterAge({ version, at: st.finishedAt, picture: st.picture }, await pictureNow(film, t));
+  const now = await pictureNow(film, t);
+  const age0 = masterAge({ version, at: st.finishedAt, picture: st.picture }, now);
+  const age = age0.state !== 'stale' && madeBeforeFix(st.finishedAt, now.pieces) ? { state: 'stale' as const, reason: 'The master was made before the upscaled-stretch fix (a black frame at the end of each upscaled stretch)' } : age0;
   if (age.state === 'stale') return { stale: `${main} is out of date (${age.reason?.replace(/^The master of/, 'the render of')})` };
   return { use: { ...st, path: main, what: st.outputs?.find((o) => o.path === main)?.what } };
 }

@@ -6,6 +6,7 @@
 import type { Timeline, TimelineClip } from '@/server/types';
 import { mediaUrl } from '@/components/media/Media';
 import { endF, pictureAt, startF } from './model';
+import { isFirstPart } from './planned';
 
 const secs = (c: TimelineClip) => `${Math.round((c.out - c.in) * 10) / 10} s`;
 const Tag = ({ children }: { children: React.ReactNode }) => (
@@ -38,7 +39,7 @@ export function PlannedView({ tl, frame }: { tl: Timeline; frame: number }) {
       <span data-planned="board" className="absolute inset-0 z-[1] bg-black">
         {/* eslint-disable-next-line @next/next/no-img-element -- the board, a still from /api/media */}
         <img key={c.src} alt={`Board for ${c.scene}, shot ${c.shot}: ${c.text ?? ''}`} src={mediaUrl(c.src ?? '', { w: 640 })} className="absolute inset-0 size-full object-contain duration-200 animate-in fade-in-0" />
-        <Tag>{c.scene} · shot {c.shot} · board</Tag>
+        <Tag>{c.scene} · shot {c.shot} · {c.panel ? `board ${c.panel.k} of ${c.panel.of} · ${c.panel.s.toFixed(2)} s` : 'board'}</Tag>
         {subtitle}
       </span>
     );
@@ -60,12 +61,12 @@ export function PlannedView({ tl, frame }: { tl: Timeline; frame: number }) {
   // only the script: the line being read, else the one just read (a pause between lines), else the first to come
   const shown = at ?? [...lines].reverse().find((c) => startF(c, fps) <= frame) ?? lines[0];
   const scene = lines.filter((c) => c.scene === shown.scene);
-  const spokenIn = scene.filter((c) => c.who);
+  const spokenIn = scene.filter(isFirstPart);
   const next = lines[lines.indexOf(shown) + 1];
-  const n = spokenIn.indexOf(shown) + 1;
+  const n = spokenIn.filter((c) => c.at <= shown.at + 1e-6).length;
   return (
     <span data-planned="line" className="absolute inset-0 z-[1] flex flex-col bg-black">
-      <Tag>{shown.scene} · {shown.who ? `line ${n} of ${spokenIn.length}` : 'action'}</Tag>
+      <Tag>{shown.scene} · {shown.who ? `line ${n} of ${spokenIn.length}${shown.parts ? ` · part ${shown.part} of ${shown.parts}` : ''}` : 'action'}</Tag>
       <span key={shown.id} className="flex flex-1 flex-col justify-center gap-2 px-4 pt-8 duration-200 animate-in fade-in-0">
         {shown.who ? (
           <>

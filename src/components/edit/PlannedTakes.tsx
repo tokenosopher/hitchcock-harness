@@ -6,6 +6,7 @@
 import type { TimelineClip } from '@/server/types';
 import { mediaUrl } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
+import { isFirstPart } from './planned';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
@@ -31,7 +32,10 @@ export function PlannedTakes({ scene, title, picture, lines, making, hot, onShot
   hot?: number;
   onShot: (c: TimelineClip) => void;
 }) {
-  const spoken = lines.filter((c) => c.who).length, actions = lines.length - spoken;
+  const spoken = lines.filter(isFirstPart).length, actions = lines.filter((c) => !c.who).length;
+  // the scene's lines fell back to reading pace because its previz take and its script do not match up: said here
+  const fallback = lines.find((c) => c.timing?.startsWith('at reading pace'))?.timing;
+  const why = fallback && <p data-planned-timing className="m-0 text-[12px] leading-snug text-mute duration-200 animate-in fade-in-0">Its lines are {fallback}.</p>;
   const head = (rest: string) => (
     <p className="m-0 text-[12.5px] text-sub"><b className="font-medium text-ink">{scene}{title ? ` · ${title}` : ''}</b> · {rest}</p>
   );
@@ -39,26 +43,35 @@ export function PlannedTakes({ scene, title, picture, lines, making, hot, onShot
     return (
       <div data-planned-takes={scene} className="flex flex-col gap-2.5 duration-200 animate-in fade-in-0">
         {head('no takes yet')}
+        {why}
         <EmptyCard title="No takes yet." text={`${scene} is ${plural(spoken, 'line')} and ${plural(actions, 'action')} for now. Its shots come with the shot list, then its boards; the takes come after.`} />
       </div>
     );
   }
   const total = picture.reduce((k, c) => k + (c.out - c.in), 0);
   const boards = picture.filter((c) => c.plan === 'board').length;
+  // one column per shot: a shot's storyboard panels are boards of their own on the timeline
+  const shots: { c: TimelineClip; secs: number; panels: number }[] = [];
+  for (const c of picture) {
+    const last = shots[shots.length - 1];
+    if (last && c.shot !== undefined && last.c.shot === c.shot) { last.secs += c.out - c.in; last.panels++; } else shots.push({ c, secs: c.out - c.in, panels: 1 });
+  }
   return (
     <div data-planned-takes={scene} className="flex flex-col gap-2.5 duration-200 animate-in fade-in-0">
-      {head(`${plural(picture.length, 'shot')}, ${mmss(total)} planned · ${making ? 'a take is being made' : 'no takes yet'}`)}
-      <div className="grid gap-1" style={{ gridTemplateColumns: `104px repeat(${picture.length}, minmax(0, 1fr))` }}>
+      {head(`${plural(shots.length, 'shot')}${boards > shots.length ? `, ${plural(boards, 'board')}` : ''}, ${mmss(total)} planned · ${making ? 'a take is being made' : 'no takes yet'}`)}
+      {why}
+      <div className="grid gap-1" style={{ gridTemplateColumns: `104px repeat(${shots.length}, minmax(0, 1fr))` }}>
         <span />
-        {picture.map((c) => (
+        {shots.map(({ c, secs, panels }) => (
           <button key={c.id} type="button" onClick={() => onShot(c)} data-planned-col={c.shot} title={`${c.text ?? ''}${c.inFrame ? `\nIn frame: ${c.inFrame}` : ''}`}
             className={cn('flex cursor-pointer flex-col items-start gap-0.5 truncate rounded-md px-1 py-0.5 text-left text-[11.5px] transition-colors duration-150 hover:text-ink', hot === c.shot ? 'text-ink' : 'text-sub')}>
             <span className="truncate">Shot {c.shot}</span>
-            <span className="font-mono text-[11px] text-mute">{Math.round((c.out - c.in) * 10) / 10} s</span>
+            <span className="font-mono text-[11px] text-mute">{Math.round(secs * 10) / 10} s</span>
+            {panels > 1 && <span className="truncate text-[11px] text-mute">{panels} boards</span>}
           </button>
         ))}
         <span className="flex items-center text-[12px] text-mute">No take yet</span>
-        {boards ? picture.map((c) => (
+        {boards ? shots.map(({ c }) => (
           <button key={c.id} type="button" onClick={() => onShot(c)} aria-label={`${scene} shot ${c.shot}`}
             className={cn('relative aspect-[9/16] max-h-[96px] cursor-pointer overflow-hidden rounded-[7px] border border-dashed bg-black transition-colors duration-150', hot === c.shot ? 'border-ink' : 'border-edge-strong hover:border-sub')}>
             {c.src && (
@@ -67,7 +80,7 @@ export function PlannedTakes({ scene, title, picture, lines, making, hot, onShot
             )}
           </button>
         )) : (
-          <span className="flex min-h-[64px] items-center rounded-[7px] border border-dashed border-edge px-3 text-[12px] text-sub" style={{ gridColumn: `span ${picture.length}` }}>
+          <span className="flex min-h-[64px] items-center rounded-[7px] border border-dashed border-edge px-3 text-[12px] text-sub" style={{ gridColumn: `span ${shots.length}` }}>
             {making ? 'A take of this scene is being made.' : 'Its boards come next; the takes come after them.'}
           </span>
         )}

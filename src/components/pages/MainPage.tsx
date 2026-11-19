@@ -21,6 +21,8 @@ import { StepMenu } from '@/components/flow/StepMenu';
 import { placeName, placesLine, viewsLine } from '@/components/flow/Places';
 import { shotsLine } from '@/components/flow/CutSteps';
 import { WhatsNextReader, type WhatsNext } from '@/components/flow/useWhatsNext';
+import { waitWords } from '@/components/edit/left';
+import { waitItemsOf } from '@/components/flow/waitList';
 import { castBoxLines, castLine, type CastPart } from '@/components/characters/Cards';
 import { useFilmPage, filmMeta, filmMetaText } from './common';
 
@@ -44,7 +46,8 @@ function stepLine(s: FilmState, flow: Flow, k: FlowKey, wn: WhatsNext): string {
   if (k === 'loc') return placesLine(s);
   if (k === 'views') return viewsLine(s);
   if (k === 'shots') return shotsLine(s);
-  if (k === 'edit') return ["What's next", wn.view?.count].filter(Boolean).join(' · ');
+  // what waits for the user first, then the steps left, as What's next's tab says it
+  if (k === 'edit') { const n = waitItemsOf(flow, s).length; return ["What's next", n ? waitWords(n) : '', wn.view?.count].filter(Boolean).join(' · '); }
   if (k === 'release' && wn.posted) return [flow.nodes.release.status, `${wn.posted.n} of ${wn.posted.of} posted`].filter(Boolean).join(' · ');
   if (k === 'faces' || k === 'clothing' || k === 'sheet' || k === 'voices' || k === 'elements') return castLine(s, k as CastPart);
   return flow.nodes[k].status;

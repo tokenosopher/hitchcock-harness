@@ -185,9 +185,16 @@ function planProblems(c: TimelineClip, kind: TrackKind, cw: string): string[] {
   if (c.plan === 'board') {
     if (typeof c.src !== 'string' || !resolveSrc({ dir: '/', repo: '/' } as FilmTarget, c.src) || !STILL.test(c.src)) out.push(`${cw}: a board's src is a still image (png, jpg or webp) inside the film repo`);
   } else if (c.src !== undefined) out.push(`${cw}: a line or a planned shot has no src`);
+  if (c.panel !== undefined) {
+    const p = c.panel as unknown as Record<string, unknown>;
+    if (c.plan !== 'board') out.push(`${cw}: only a board is a panel`);
+    else if (!p || typeof p !== 'object' || !Number.isInteger(p.k) || !Number.isInteger(p.of) || !Number.isInteger(p.n) || !num(p.s) || (p.k as number) < 1 || (p.k as number) > (p.of as number)) out.push(`${cw}: panel is {k, of (board k of the shot's of), n (its number in the storyboard), s (seconds in the scene)}`);
+  }
   if (c.who !== undefined && typeof c.who !== 'string') out.push(`${cw}: who is a name`);
   if (c.inFrame !== undefined && typeof c.inFrame !== 'string') out.push(`${cw}: inFrame is words`);
   if (c.shot !== undefined && (!Number.isInteger(c.shot) || c.shot < 1)) out.push(`${cw}: shot is a whole number from 1`);
+  if ((c.part !== undefined || c.parts !== undefined) && !(c.plan === 'line' && Number.isInteger(c.part) && Number.isInteger(c.parts) && c.part! >= 1 && c.part! <= c.parts!)) out.push(`${cw}: part and parts are whole numbers on a line, part 1 to parts`);
+  if (c.timing !== undefined && typeof c.timing !== 'string') out.push(`${cw}: timing is words`);
   for (const k of ['speed', 'gainPoints', 'dissolve', 'flip'] as const) if (c[k] !== undefined) out.push(`${cw}: a planned clip has no ${k}`);
   return out;
 }

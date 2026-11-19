@@ -6,6 +6,7 @@ import type { FilmState, Timeline } from '@/server/types';
 import { faceDone } from '@/components/lib/derive';
 import { fmtDate } from '@/components/lib/format';
 import { hasPlanned, plannedCounts, sceneKinds } from './planned';
+import { takesReady } from './takesReady';
 
 export type EarlyId = 'script' | 'characters' | 'places' | 'shots' | 'boards' | 'takes';
 export const EARLY_IDS: EarlyId[] = ['script', 'characters', 'places', 'shots', 'boards', 'takes'];
@@ -25,7 +26,9 @@ export type EarlyDo =
   | { kind: 'takes-tab' }
   | { kind: 'go-takes'; n: number; scenes: string[] };
 
-export interface EarlyStep { id: EarlyId; done: boolean; facts: string; row: EarlyDo; act?: { label: string; do: EarlyDo } }
+/** `wait`: the step's button cannot really start what it starts yet; the one quiet line said in its place, what is
+ *  missing first ("Not ready: no scene has a prompt yet; …"), and `waitFull` all of it. */
+export interface EarlyStep { id: EarlyId; done: boolean; facts: string; row: EarlyDo; act?: { label: string; do: EarlyDo }; wait?: string; waitFull?: string }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
@@ -88,10 +91,13 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
   const kinds = tl ? sceneKinds(tl) : new Map<string, string>();
   const ids = scenes.length ? scenes.map((x) => x.id) : [...kinds.keys()];
   const boarded = ids.filter((id) => kinds.get(id) === 'boards' || kinds.get(id) === 'take');
-  const boards = tl ? plannedCounts(tl).boards : 0;
+  // a shot's storyboard panels are boards of their own: said as shots and boards, "41 shots, 107 boards"
+  const pcb = tl ? plannedCounts(tl) : undefined;
+  const boards = pcb?.boards ?? 0;
+  const boardShots = pcb?.boardShots ?? 0;
   const boardsDone = ids.length > 0 && boarded.length === ids.length;
   steps.push({ id: 'boards', done: boardsDone, row: { kind: 'planned' },
-    facts: boardsDone ? `${boards ? `${plural(boards, 'board')}, ` : ''}${boarded.length} of ${plural(ids.length, 'scene')}` : !shotsDone ? after('the shot lists') : boarded.length ? `${boarded.length} of ${plural(ids.length, 'scene')} have their boards` : 'Alma makes them from the shot lists' });
+    facts: boardsDone ? `${boards ? `${boards > boardShots ? `${plural(boardShots, 'shot')}, ` : ''}${plural(boards, 'board')}, ` : ''}${boarded.length} of ${plural(ids.length, 'scene')}` : !shotsDone ? after('the shot lists') : boarded.length ? `${boarded.length} of ${plural(ids.length, 'scene')} have their boards` : 'Alma makes them from the shot lists' });
 
   // 6. the first takes: every scene's take in the film
   const inFilm = ids.filter((id) => kinds.get(id) === 'take');
@@ -103,9 +109,12 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
   if (takesDone) steps.push({ id: 'takes', done: true, facts: `${plural(inFilm.length, 'take')} in the film`, row: { kind: 'takes-tab' } });
   else if (!boardsDone) steps.push({ id: 'takes', done: false, facts: after('the boards'), row: { kind: 'takes-tab' } });
   else if (!inFilm.length && !making.length) {
+    // the go only when every scene it covers can really be taken: boards checked and approved, every reference made
+    // and approved, the prompt written and checked (takesReady.ts); else no button, and what is missing in its place
+    const r = takesReady(s, waiting);
     steps.push({ id: 'takes', done: false, row: { kind: 'takes-tab' },
       facts: `${plural(waiting.length, 'take')}, one for each scene${planned ? ` · ${mmss(planned)} of film` : ''}${go?.ask?.cost ? ` · ${go.ask.cost}` : ''}`,
-      act: { label: `Go for the ${plural(waiting.length, 'take')}`, do: { kind: 'go-takes', n: waiting.length, scenes: waiting } } });
+      ...(r.ready ? { act: { label: `Go for the ${plural(waiting.length, 'take')}`, do: { kind: 'go-takes', n: waiting.length, scenes: waiting } } } : { wait: r.line, waitFull: r.full }) });
   } else steps.push({ id: 'takes', done: false, row: { kind: 'takes-tab' }, facts: `${inFilm.length} of ${ids.length} in the film${making.length ? ` · ${making.length} being made` : ''}` });
 
   // a cut of takes (nothing planned in it), or a delivered film: the early steps are behind it
@@ -123,8 +132,9 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
   return steps.map((x, i) => (i <= lastDone && !x.done ? { id: x.id, done: true, facts: doneWords[x.id](), row: x.row } : x));
 }
 
-/** The words Alma gets when the user presses "Go for the n takes": the ask, as the user's own message. What she does
- *  with it (her asking card, its quote) is the flow's; the page sends nothing else and states no cost. */
+/** The words Alma gets when the user presses "Go for the n takes": the ask, as the user's own message, saying what is
+ *  ready, which the press can only be when it is (takesReady.ts). What she does with it (her asking card, its
+ *  quote) is the flow's; the page sends nothing else and states no cost. */
 export function goTakesAsk(n: number, scenes: string[]): string {
-  return `Go for the first takes: ${plural(n, 'take')}, one for each scene (${scenes.join(', ')}). Every scene has its boards.`;
+  return `Go for the first takes: ${plural(n, 'take')}, one for each scene (${scenes.join(', ')}). ${scenes.length === 1 ? 'The scene\'s' : 'Every scene\'s'} boards passed their check and have your yes, its prompt passed its check, and every sheet, video element, view and prop is made and approved.`;
 }

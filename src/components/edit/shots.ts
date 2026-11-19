@@ -127,7 +127,9 @@ export function sceneRuns(tl: Timeline, by: BySrc): SceneRun[] {
     const scene = sceneOf(c, by);
     const s = startF(c, fps), e = endF(c, fps);
     const last = runs[runs.length - 1];
-    if (last && scene && last.scene === scene && (s - last.to <= 1 || c.plan === 'line')) { if (c.plan !== 'line') last.cuts.push(s); last.to = Math.max(last.to, e); continue; }
+    // the panels of one shot (each a board of its own) are one shot: no cut between them
+    const samePanelShot = c.plan === 'board' && !!c.panel && c.panel.k > 1;
+    if (last && scene && last.scene === scene && (s - last.to <= 1 || c.plan === 'line')) { if (c.plan !== 'line' && !samePanelShot) last.cuts.push(s); last.to = Math.max(last.to, e); continue; }
     runs.push({ scene, label: scene ?? (/title card/i.test(c.label ?? '') ? 'Card' : (c.label ?? '').split('·')[0].trim() || 'Clip'), from: s, to: e, cuts: [] });
   }
   return runs;

@@ -20,12 +20,13 @@ import { cn } from '@/lib/utils';
 import { AskCard } from '@/components/feed/Feed';
 import { Who } from '@/components/feed/Who';
 import { castBoxLines } from '@/components/characters/Cards';
+import { VoiceRounds } from './VoiceOptions';
 
 function stateDot(st: GateItem['state']): DotState {
   return st === 'running' ? 'running' : st === 'ready' ? 'done' : st === 'queued' ? 'queued' : 'waiting';
 }
 
-function PickCard({ p, onChip, onPrefill }: { p: GateItem; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void }) {
+export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices }: { p: GateItem; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void; from?: string; voices?: string[] }) {
   const [sel, setSel] = useState<string | undefined>(p.prediction);
   const state = useFilm().state;
   const film = state?.film;
@@ -79,7 +80,7 @@ function PickCard({ p, onChip, onPrefill }: { p: GateItem; onChip: (id: string, 
         </div>
       )}
       {tabs && tab === 'lib' && film && libKind && (
-        <div className="pl-3.5"><FromLibrary film={film.slug} kind={libKind} target={target} from="the gate page" /></div>
+        <div className="pl-3.5"><FromLibrary film={film.slug} kind={libKind} target={target} from={from} /></div>
       )}
       {tabs && tab === 'lib' && p.kind === 'voices' && film && (
         <span className="pl-3.5 text-[12.5px] text-ink-3">A library voice is chosen per character: <Link href={`/films/${film.slug}/character/voices`} className="text-ink">open Voices</Link>, pick the character, then its “From the library” tab.</span>
@@ -96,6 +97,8 @@ function PickCard({ p, onChip, onPrefill }: { p: GateItem; onChip: (id: string, 
           </div>
         </div>
       )}
+      {/* each voice heard and picked in the card itself */}
+      {p.kind === 'voices' && ready && tab === 'round' && state && <div className="pl-3.5"><VoiceRounds s={state} from={from} only={voices} /></div>}
       {p.kind === 'voices' && film && tab === 'round' && (
         <div className="pl-3.5"><Link href={`/films/${film.slug}/character/voices`} className="inline-flex h-8 items-center rounded-lg border border-edge-strong px-3 text-[13px] font-medium text-ink no-underline hover:bg-raised">Open Voices</Link></div>
       )}
@@ -123,7 +126,7 @@ function PickCard({ p, onChip, onPrefill }: { p: GateItem; onChip: (id: string, 
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-3.5">
             {film && pickKind && sel ? (
-              <PickButton key={sel} film={film.slug} body={{ kind: pickKind, target, round: p.round?.id, candidate: sel, prediction: p.prediction, from: 'the gate page' }}
+              <PickButton key={sel} film={film.slug} body={{ kind: pickKind, target, round: p.round?.id, candidate: sel, prediction: p.prediction, from }}
                 label={<>Pick <span className="font-mono text-[12.5px]">{sel}</span></>} what={`${sel} for ${target}`} />
             ) : (
               <Btn disabled={!sel} onClick={() => sel && onPrefill(`Pick ${sel} for ${target}`, `pick:${target}`, p.chip)}>Pick <span className="font-mono text-[12.5px]">{sel ?? '…'}</span></Btn>
@@ -140,7 +143,7 @@ function PickCard({ p, onChip, onPrefill }: { p: GateItem; onChip: (id: string, 
 
 /** The one hard spend gate: every remaining scene has a checked prompt and no take yet (SPEC principle 7).
  *  Its button opens the review (/films/[film]/go), where the go is sent from. */
-function GoCard({ p, base, onChip, onPrefill }: { p: GateItem; base: string; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void }) {
+export function GoCard({ p, base, onChip, onPrefill }: { p: GateItem; base: string; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void }) {
   return (
     <article className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
       <button type="button" onClick={() => onChip(p.key, p.chip)} aria-label={`Add ${p.chip} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">

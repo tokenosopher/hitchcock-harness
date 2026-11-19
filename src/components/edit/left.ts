@@ -259,6 +259,10 @@ export interface LeftStep {
   action?: { label: string; do: LeftDo };
   /** A quiet second way for the current step (a tick where the app cannot know). */
   also?: { label: string; do: LeftDo };
+  /** The current step's button cannot really start what it starts yet: no button, and this one quiet line in its place
+   *  ("Not ready: …", what is missing first); `waitFull` all of it. */
+  wait?: string;
+  waitFull?: string;
   /** What a press on the row does. */
   row: LeftDo;
 }
@@ -326,10 +330,13 @@ const lower1 = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 const upper1 = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 /** "5 steps left", "1 step left", "Nothing left". */
 export const leftWords = (n: number): string => (n > 0 ? `${plural(n, 'step')} left` : 'Nothing left');
+/** "1 waits for you", "4 wait for you": what waits for the user, as What's next counts it. */
+export const waitWords = (n: number): string => `${n} ${n === 1 ? 'waits' : 'wait'} for you`;
 /** Alma's chip while the tab is open: "What's next · 5 steps left · the 1080p", "What's next · nothing left", or
- *  "What's next · the 1080p" before the route answered. */
-export const leftChip = (v: LeftView): string =>
-  [NEXT_TAB, v.current && v.count ? v.count : '', v.current ? v.next : 'nothing left'].filter(Boolean).join(' · ');
+ *  "What's next · the 1080p" before the route answered; with what waits for the user first when anything does ("What's
+ *  next · 4 wait for you · 5 steps left · the 1080p"). */
+export const leftChip = (v: LeftView, waiting = 0): string =>
+  [NEXT_TAB, waiting > 0 ? waitWords(waiting) : '', v.current && v.count ? v.count : '', v.current ? v.next : 'nothing left'].filter(Boolean).join(' · ');
 
 export function whatIsLeft(i: LeftInput): LeftView {
   // the steps since (stage 3b), "nothing changed since" when steps were taken and the content is the same again, and
@@ -340,11 +347,11 @@ export function whatIsLeft(i: LeftInput): LeftView {
   };
   const at = (x: Tick) => (x.edited ? `with edits since ${x.cut}` : `at ${x.cut}`);
   const t = i.ticks;
-  type Draft = Omit<LeftStep, 'n' | 'name' | 'current' | 'action' | 'also'> & { act?: LeftStep['action']; also?: LeftStep['also'] };
+  type Draft = Omit<LeftStep, 'n' | 'name' | 'current' | 'action' | 'also' | 'wait' | 'waitFull'> & { act?: LeftStep['action']; also?: LeftStep['also']; wait?: string; waitFull?: string };
   const drafts: Draft[] = [];
   // the six early steps first (15 Nov): while any is not done, the later ones only say what they wait for
   const early = i.early ?? [];
-  for (const e of early) drafts.push({ id: e.id, done: e.done, facts: e.facts, row: e.row, ...(e.act ? { act: e.act } : {}) });
+  for (const e of early) drafts.push({ id: e.id, done: e.done, facts: e.facts, row: e.row, ...(e.act ? { act: e.act } : {}), ...(e.wait ? { wait: e.wait, waitFull: e.waitFull } : {}) });
   const before = early.length > 0 && early.some((e) => !e.done);
 
   // 1. the cut approved at 480p: the record's yes, else the user's tick
@@ -420,9 +427,9 @@ export function whatIsLeft(i: LeftInput): LeftView {
   }
   const cur = drafts.find((d) => !d.done)?.id;
   const steps: LeftStep[] = drafts.map((d, k) => {
-    const { act, also, ...rest } = d;
+    const { act, also, wait, waitFull, ...rest } = d;
     const on = d.id === cur;
-    return { ...rest, n: k + 1, name: STEP_NAME[d.id], current: on, ...(on && act ? { action: act } : {}), ...(on && also ? { also } : {}) };
+    return { ...rest, n: k + 1, name: STEP_NAME[d.id], current: on, ...(on && act ? { action: act } : {}), ...(on && also ? { also } : {}), ...(on && wait ? { wait, ...(waitFull ? { waitFull } : {}) } : {}) };
   });
   const done = steps.filter((x) => x.done).length;
   return {

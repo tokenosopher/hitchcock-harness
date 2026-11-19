@@ -82,7 +82,7 @@ export async function readLocations(
     const top = all.filter((p) => /-top(-v\d+)?\.(png|jpe?g)$/i.test(p)).sort(natCmp).pop();
 
     // the views: newest version per camera
-    const views: { camera: string; path: string }[] = [];
+    const views: { camera: string; path: string; measured?: boolean }[] = [];
     const viewDirs = entries.filter((e) => e.dir && e.name === 'views').map((e) => `${folder}/${e.name}`);
     const best = new Map<string, { v: number; path: string }>();
     for (const vd of viewDirs)
@@ -100,14 +100,22 @@ export async function readLocations(
       }
     for (const [camera, b] of [...best].sort((a, b) => natCmp(a[0], b[0]))) views.push({ camera, path: b.path });
 
+    // the measures of the paintings against their colour plates, and the view cameras that have a colour plate
+    const measures = (await list(abs(ctx, `previz/${lid}/check`))).filter((e) => !e.dir && /-vs-.*-measure\.txt$/.test(e.name)).map((e) => e.name);
+    const measured = (p?: string): boolean => { const b = p?.split('/').pop()?.replace(/\.[^.]+$/, ''); return !!b && measures.some((m) => m.startsWith(`${b}-vs-`)); };
+    const plateFiles = (await list(abs(ctx, `previz/${lid}/plates-colour`))).filter((e) => !e.dir && /^cam[A-Za-z0-9]+-colour\.png$/i.test(e.name));
+    const plates = plateFiles.map((e) => /^cam([A-Za-z0-9]+)-colour/i.exec(e.name)![1].toLowerCase()).filter((c) => c !== 'top').sort(natCmp);
+    for (const v of views) if (measured(v.path)) v.measured = true;
+
     const lighting = entries.find((e) => !e.dir && /-lighting\.md$/.test(e.name));
     out.push({
       id: lid,
       name: sceneLocations.get(lid) ?? names.get(lid) ?? titleCase(slug),
       folder,
       styleImages: styleImages.length ? styleImages : undefined,
-      master: masterPath ? { path: masterPath, picked: !!rootMaster || approvedInTaste } : undefined,
+      master: masterPath ? { path: masterPath, picked: !!rootMaster || approvedInTaste, ...(measured(masterPath) ? { measured: true } : {}) } : undefined,
       views: views.length ? views : undefined,
+      ...(plates.length ? { plates } : {}),
       props: [],
       more: { picks, masterVersions: masters, top, lighting: lighting ? `${folder}/${lighting.name}` : undefined },
     });

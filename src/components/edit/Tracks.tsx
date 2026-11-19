@@ -1081,6 +1081,21 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                       </div>
                     );
                   })}
+                  {t.kind === 'video' && (() => {
+                    // a shot made of its storyboard panels: each panel is a board clip of its own, and a
+                    // thin line over them, from the shot's first panel to its last, says they are one shot
+                    const groups = new Map<string, { a: number; b: number; n: number }>();
+                    for (const c of t.clips) {
+                      if (c.plan !== 'board' || !c.panel || c.panel.of < 2) continue;
+                      const k = `${c.scene}:${c.shot}`, a = startF(c, fps), b = a + lenF(c, fps);
+                      const g = groups.get(k);
+                      if (g) { g.a = Math.min(g.a, a); g.b = Math.max(g.b, b); g.n++; } else groups.set(k, { a, b, n: 1 });
+                    }
+                    return [...groups.entries()].filter(([, g]) => g.n > 1).map(([k, g]) => (
+                      <span key={k} data-shot-group={k} aria-hidden="true" className="pointer-events-none absolute top-0 z-[2] h-[2px] rounded-full bg-white/45 transition-[left,width] duration-200 ease-out"
+                        style={{ left: g.a * z + 2, width: Math.max(2, (g.b - g.a) * z - 4) }} />
+                    ));
+                  })()}
                   {editing && editing.trackId === t.id && (() => {
                     const c = t.clips.find((x) => x.id === editing.clipId);
                     if (!c || !isLine(c)) return null;

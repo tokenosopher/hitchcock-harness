@@ -388,7 +388,7 @@ export function useCut(film: string) {
   /** One finished gesture = one step of the history (no version is written). The page shows it at once, predicted
   *  with history.ts's own moves; the server's answer draws nothing more when it agrees. `saved` runs with the step, in
   *  the same draw (a line for the status bar, say). */
-  const commit = useCallback(async (edit: { tracks: TimelineTrack[]; markers: TimelineMarker[] }, note: string, saved?: () => void): Promise<boolean> => {
+  const commit = useCallback(async (edit: { tracks: TimelineTrack[]; markers: TimelineMarker[]; base?: string }, note: string, saved?: () => void): Promise<boolean> => {
     const w0 = workingRef.current, h0 = historyRef.current;
     if (!current || busyRef.current || savingRef.current || !w0 || !h0) return false;
     const before = current;
@@ -400,7 +400,12 @@ export function useCut(film: string) {
     saved?.();
     return inChain(async () => {
       try {
-        const { ok, status, j } = await send('working', { words: note, by: 'user', tracks: edit.tracks, markers: edit.markers });
+        // the step is sent with the rev of the cut the edit was made on: a drop of Alma's taken in while
+        // the gesture was under way moved the page's rev on before the timeline it was made on was drawn again, so the
+        // edit, made on the cut from before the drop, went in as the newer rev and the drop's change was lost without a
+        // word. Made on an older rev, it is refused as stale, as a late drop is, and the page says the cut changed.
+        const made = /^w(\d+)$/.exec(edit.base ?? '');
+        const { ok, status, j } = await send('working', { words: note, by: 'user', tracks: edit.tracks, markers: edit.markers, ...(made ? { rev: Number(made[1]) } : {}) });
         if (!ok) {
           predicted.current = undefined;
           if (!(status === 409 && j.code === 'stale')) { show(workingRef.current ?? w0, historyRef.current ?? h0); setCurrent(before); }
