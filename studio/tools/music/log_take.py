@@ -1,8 +1,8 @@
-"""Log a composed score take that Alma landed from Higgsfield (generate_audio, elevenlabs_music_v2_5) into
+"""Log a composed score take that Alma landed from Higgsfield (generate_audio, elevenlabs_music_v2) into
 audio/score/score-log.json: the job, the credits, the prompt it was sent with, its length, loudness and the level of each
 planned section. Calls no service.
     .venv/bin/python tools/music/log_take.py --film "$FILM" <CUE> <N> --job <job id> --credits <cr> [--file <path>]
-        [--model elevenlabs_music_v2_5] [--verdict '...']
+        [--model elevenlabs_music_v2] [--verdict '...']
 The take is audio/score/<CUE>-take<N>.mp3 (or .wav) unless --file names it. The prompt, duration and sections come from
 the cue's entry in audio/score/cues.json. The entry is keyed "<CUE>-take<N>" (mix_score.py reads its "file"); an
 existing entry is replaced only with --again. --verdict alone (with <CUE> <N>) updates the verdict of a logged take."""
@@ -14,7 +14,7 @@ ap = argparse.ArgumentParser(description=__doc__.split('\n')[0], formatter_class
 ap.add_argument('cue'); ap.add_argument('take', type=int)
 ap.add_argument('--film', default=os.environ.get('FILM'))
 ap.add_argument('--job'); ap.add_argument('--credits', type=float)
-ap.add_argument('--file'); ap.add_argument('--model', default='elevenlabs_music_v2_5')
+ap.add_argument('--file'); ap.add_argument('--model', default='elevenlabs_music_v2')
 ap.add_argument('--verdict'); ap.add_argument('--again', action='store_true')
 A = ap.parse_args()
 if not A.film: sys.exit('give --film (or set FILM)')

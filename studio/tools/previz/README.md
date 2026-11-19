@@ -15,7 +15,7 @@ board, and the generation's shots file for the pre-submit check.
   Eight is the ceiling, not a promise: a render also waits while the Mac has no room for one more
   (the first four always start; a further one needs normal memory pressure and about 3 GB free, `MEM_NEED_GB`). A waiting
   run says `waiting for memory...`; that is the wrapper doing its job, not a hang. Each render prints the memory free at
-  its start and its peak, and every run is logged in `~/Library/Logs/previz/blender-runs.log`.
+  its start and its peak, and every run is logged in `scratch.nosync/previz-blender/blender-runs.log` in the studio folder.
 - A scene in a location that has a people file starts with `R = location('<LID>')`, not `room(...)`, and builds no one
   the file already holds (below). Write new scene scripts with `setup(..., reuse=True)`.
 - Use `--res 540 --samples 16` for everything until told otherwise.

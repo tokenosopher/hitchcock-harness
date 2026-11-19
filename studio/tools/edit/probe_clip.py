@@ -3,7 +3,8 @@ between the words: where its dead head and tail are, and the frames where the sp
     .venv/bin/python tools/edit/probe_clip.py --film PATH video/raw/G05-draft.mp4 [--thresh 18] [--no-words]
 Shot changes: mean absolute difference between consecutive frames of a 96x170 grey decode above THRESH (18 finds every cut in
 Seedance generations). The decode uses -fps_mode passthrough and counts frames from the start, never -ss.
-Words: Whisper on this Mac (tools/lib/stt.py); --no-words skips it. The clip is any
+Words: Whisper on this Mac (tools/lib/stt.py); --no-words skips it. Its working sound file goes in
+<film>/scratch.nosync/probe/ (--scratch to choose another folder). The clip is any
 path relative to the film root, e.g. generations/S4/takes/take2/S4-take2-480p.mp4."""
 import argparse, os, subprocess, sys
 import numpy as np
@@ -16,6 +17,7 @@ ap.add_argument('--film', default=os.environ.get('FILM'), help='film project roo
 ap.add_argument('--thresh', type=float, default=18.0)
 ap.add_argument('--fps', type=float, default=24.0)
 ap.add_argument('--no-words', action='store_true')
+ap.add_argument('--scratch', help='folder for the working sound file (default: <film>/scratch.nosync/probe)')
 a = ap.parse_args()
 F = os.path.abspath(a.film) if a.film else os.getcwd(); os.environ['FILM'] = F
 path = os.path.join(F, a.clip)
@@ -33,7 +35,9 @@ if short: print('WARNING shots under 3 frames (flash risk):', short)
 
 if not a.no_words:
     import stt
-    wav = f'/tmp/probe-{os.path.basename(path)}.wav'
+    scratch = os.path.abspath(a.scratch) if a.scratch else os.path.join(F, 'scratch.nosync', 'probe')
+    os.makedirs(scratch, exist_ok=True)
+    wav = os.path.join(scratch, f'probe-{os.path.basename(path)}.wav')
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', path, '-vn', '-ac', '1', '-ar', '16000', wav], check=True)
     W = stt.stt_words(wav)
     out, ci = [], 0

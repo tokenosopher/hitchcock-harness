@@ -37,6 +37,7 @@
     "waitlist:test": "tsx scripts/waitlist-test.ts",
     "phonefull:test": "tsx scripts/phonefull-test.ts",
     "refs:test": "tsx scripts/refs-test.ts",
+    "port:test": "tsx scripts/port-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

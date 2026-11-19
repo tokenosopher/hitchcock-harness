@@ -68,11 +68,25 @@ export function harnessConfig(): HarnessConfig {
     otherRepos: split(env.HARNESS_OTHER_REPOS),
     finalCuts: env.HARNESS_FINAL_CUTS ? split(env.HARNESS_FINAL_CUTS) : [path.join(/*turbopackIgnore: true*/ assets, 'final-cuts')],
     library: env.HARNESS_LIBRARY || path.join(/*turbopackIgnore: true*/ assets, 'library'),
-    port: Number(env.HARNESS_PORT || 8800),
+    port: harnessPort(),
     harnessDir: path.join(process.cwd(), 'harness'),
     driveRoot: assets,
     auto480p: env.HARNESS_AUTO_480P === '1',
   };
+}
+
+/** The port this app really listens on. Next sets PORT in the server's own process once it is listening (the port
+ *  of `-p` in package.json, or one given by hand: `npm run dev -- -p 8810`), so that comes first; HARNESS_PORT in
+ *  .env.local, then 8800, only for a process that is not the server (a tsx script, a test). */
+export function harnessPort(): number {
+  loadEnvLocal();
+  const n = Number(process.env.PORT || process.env.HARNESS_PORT || 8800);
+  return Number.isInteger(n) && n > 0 ? n : 8800;
+}
+
+/** The address Alma is given for the harness's API: this app on this Mac, at the port it really listens on. */
+export function harnessUrl(): string {
+  return `http://localhost:${harnessPort()}`;
 }
 
 /** A program by name, looked up on the PATH as a shell would; the bare name when it is not found there

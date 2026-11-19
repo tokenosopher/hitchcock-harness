@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 import type { AlmaModel, HarnessContext, TaskCard, ThreadEvent, ThreadInfo } from '../types';
 import { prefixContext } from '../context';
 import { claudeConfig } from './config';
-import { harnessConfig } from '../config';
+import { harnessConfig, harnessUrl } from '../config';
 import { redact } from './redact';
 import { RECIPES } from '../recipes';
 import { claudeCodeDefaultModel, getAlmaModel, setAlmaModel } from './model';
@@ -19,9 +19,11 @@ import { addReserveSpend, almaEnv, hasReserveKey, readReserve, reserveKeyForStar
 import { TaskTracker } from './tasks';
 import { EARLIER_NOTE, EARLIER_STOPPED, endEarlier, recordExit, recordSession, recordStart, recordedFilms, type EarlierResult } from './procs';
 
-/** Told to Alma once per session (recorded with the system prompt). Says what the harness adds, nothing about films. */
-export const ALMA_APPEND_PROMPT = [
+/** Told to Alma each time her process starts (recorded with the system prompt). Says what the harness adds, nothing
+ *  about films. `url` is the harness's own address at the port it really listens on (harnessUrl()). */
+export const almaAppendPrompt = (url: string = harnessUrl()): string => [
   'You are Alma, the agent of Hitchcock Harness, a web app the user works in instead of the terminal.',
+  `This harness answers at ${url}, and the same address is in $HARNESS_URL in your shell and your sub-agents' shells. Every call to the harness's API that a recipe names goes to "$HARNESS_URL/api/..."; never write a port yourself or try another one: another app on this Mac can answer on another port.`,
   'The film rules are in the studio folder you run in (flow/), loaded with the studio-film skill from its .claude/skills. If a skill named plain "film" is also listed on this machine, it belongs to another setup: never load it and never read rules from anywhere but this studio.',
   'Each user message may start with a <harness-context ...> block: the film, the page the user is on, the pinned summary and the things they clicked (selected). Read it as what they are looking at; do not repeat it back.',
   `Inside the user's words a <harness-ref kind="..." label="..." .../> tag is one thing they put into that sentence as they wrote it (a clip, a storyboard panel, a moment of the cut, a take, a shot, a scene, a card, a character, a view): its ids, and for the timeline the cut version and step, the time and the file, frozen when it was put in. Read "this one" as the tag beside it. What each attribute means is in the recipe ${RECIPES.show}, under "References in the user's words".`,
@@ -38,6 +40,12 @@ export const ALMA_APPEND_PROMPT = [
   `Every film the user has made (title, folder, flow, record files, delivered cuts) is listed in ${path.join(process.cwd(), 'harness', 'films.json')}, rebuilt by the harness from the folders. When the user mentions an earlier film ("like the keeper in The Lighthouse"), read it there and go to that film's folder; never search the disk for it. The cross-film library (faces, voices, characters, locations, each with meta.json) is at ${harnessConfig().library ?? path.join(harnessConfig().driveRoot, 'library')}/.`,
   'Spend gates in the harness (the user, 8 Nov 2026; these take precedence over the per-round go in the film notes for films made here, and only here): the script lock is the go for the whole first round of assets after it (location style images, faces, clothing, each character\'s voices once that character\'s face is picked, previz, each at the round size its stage note gives): run them in parallel as background sub-agents without asking again, say each round\'s size and cost in one line, and see that every paid job has its one row in spend.md, written by whoever submitted it. If the user said during the script work that characters, voices or locations from an earlier film are reused, take those from the library instead. Setup defaults are never asked (9:16, voices from Higgsfield\'s voices, elements 1920x1080 5 s, 1080p by Seedance 2.5 finalize, about 5000 credits) unless the user says otherwise at the start. The one hard gate is before the video generations: when every asset and every scene prompt is ready, stop and ask "Go for the video?" with the quote; the user reviews every scene, its prompt and the assets fed into it on the harness\'s go page before saying go. Every later paid job (another round, a variant, an upscale, the video elements, redos and pick-ups, 1080p) keeps its own quote and go.',
 ].join('\n');
+
+/** Alma's process environment: the user's own (minus what almaEnv strips), with HARNESS_URL, the address the
+ *  recipes' API calls use, at the port this server really listens on. */
+export function almaShellEnv(reserveKey?: string, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...almaEnv(base, reserveKey), HARNESS_URL: harnessUrl() };
+}
 
 /** The film repo's assets link points at the external drive, outside the cwd: without --add-dir every
  *  look into assets/films is denied. Extra folders come from HARNESS_ALMA_ADD_DIRS (colon-separated). */
@@ -289,12 +297,12 @@ export class AlmaSession {
       '--include-partial-messages',
       // Nobody sits at a terminal to answer a permission prompt, so Alma runs with permissions off
       // (the user's call, 8 Nov 2026). The spend gates live in the film rules she loads, not in tool
-      // permissions; the care rules are in ALMA_APPEND_PROMPT. Set HARNESS_ALMA_PERMISSIONS=ask to
+      // permissions; the care rules are in almaAppendPrompt(). Set HARNESS_ALMA_PERMISSIONS=ask to
       // go back to acceptEdits with denials shown in the thread.
       ...(process.env.HARNESS_ALMA_PERMISSIONS === 'ask'
         ? ['--permission-mode', 'acceptEdits', '--permission-prompts', 'none']
         : ['--dangerously-skip-permissions']),
-      '--append-system-prompt', ALMA_APPEND_PROMPT,
+      '--append-system-prompt', almaAppendPrompt(),
     ];
     for (const dir of addDirs(this.cwd)) a.push('--add-dir', dir);
     if (this.model) a.push('--model', this.model);
@@ -306,7 +314,7 @@ export class AlmaSession {
   /** The CLI runs on the user's own login (no API key, none of the parent Claude Code session's variables), or on
    *  the reserve API key when the reserve switch is on and a key is saved. */
   private env(reserveKey: string | undefined): NodeJS.ProcessEnv {
-    return almaEnv(process.env, reserveKey);
+    return almaShellEnv(reserveKey);
   }
 
   /** One Alma per film: an earlier Alma of this film that this server does not own (left by a server that crashed

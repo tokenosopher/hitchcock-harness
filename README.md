@@ -104,9 +104,9 @@ Every paid job goes to Higgsfield, through Claude. Alma checks the model list an
 | Every change to an existing picture (clothes, character sheets, fixes) | Seedream 5.5 |
 | Each character's short reference clip, and every scene | Seedance 2.5, first as a 480p draft |
 | 1080p | Seedance 2.5 again: each take the cut uses is rendered at full quality. Higgsfield's upscaler is a cheaper second route, only if you ask for it |
-| Voices | Three kinds of candidate to pick from: Higgsfield's ready-made voices, a voice made to fit the character's face (Seed Audio), and style variations of a ready-made voice. The one you pick is saved as a voice on your Higgsfield account |
+| Voices | Three kinds of candidate to pick from: Higgsfield's ready-made voices (free), a voice made to fit the character's face (Seed Audio, about 0.3 to 1.1 credits), and style variations of a ready-made voice (about 0.07 credits each). The one you pick is written into the film. A ready-made voice is used as it is. A voice from the face or a variation is used through its own sample: the line the character speaks in their short reference clip is cut from it, and that clip carries the voice into every scene. It is saved as a voice on your Higgsfield account only when lines must be spoken in it apart from the video (the film's lines as references for the scenes, a word fixed in the edit), and each save waits for its own price and your go |
 | Spoken lines outside the video | Eleven v4, on Higgsfield |
-| Music | ElevenLabs Music v2.5, on Higgsfield, from a written description of each cue |
+| Music | ElevenLabs Music v2 (`elevenlabs_music_v2`), on Higgsfield, from a written description of each cue: about 0.064 credits a second (1.35 for 21 s) |
 | Sound effects | Higgsfield's sound-effects model; where it will not do, the sound Seedance makes with the take |
 
 Four things run on your Mac and cost nothing: laying out each scene's rough preview (Blender), removing music from a take (Demucs), timing each spoken word for checks and subtitles (Whisper), and cutting and rendering the film (ffmpeg).

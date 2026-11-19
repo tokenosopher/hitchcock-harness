@@ -26,6 +26,7 @@ export default [
   { file: 'scripts/ondemand-test.ts', tier: 'slow', covers: ['src/server/edit/render*.ts', 'src/server/edit/watch.ts', 'src/server/edit/working*.ts', 'src/server/edit/alma-drop.ts'], secs: 11 },
   { file: 'scripts/one-alma-test.ts', tier: 'quick', covers: ['src/server/claude/procs.ts', 'src/server/claude/process.ts', 'src/server/context.ts'], secs: 4 },
   { file: 'scripts/phonefull-test.ts', tier: 'quick', covers: ['src/components/edit/phoneFull.ts'], secs: 1 },
+  { file: 'scripts/port-test.ts', tier: 'quick', covers: ['recipes/**', 'studio/flow/**', 'studio/CLAUDE.md', 'studio/.claude/**', 'studio/tools/**', 'src/server/config.ts', 'src/server/claude/process.ts'], secs: 2 },
   { file: 'scripts/recipes-test.ts', tier: 'quick', covers: ['recipes/**', 'src/components/lib/derive.ts', 'src/components/lib/qc.ts', 'src/components/release/**', 'src/server/recipes.ts', 'src/server/claude/process.ts', 'src/server/films/read/release.ts', 'src/server/edit/alma-drop.ts', 'src/lib/script-edit.ts'], secs: 1 },
   { file: 'scripts/refs-test.ts', tier: 'quick', covers: ['src/lib/refs.ts', 'src/components/lib/refPick.ts', 'src/components/shell/refItems.ts', 'src/components/shell/refPicking.ts'], secs: 1 },
   { file: 'scripts/render-test.ts', tier: 'slow', covers: ['src/server/edit/render*.ts', 'src/server/edit/timeline.ts', 'src/server/edit/probe.ts', 'src/components/edit/fullsize.ts', 'src/components/edit/renderAsk.ts', 'src/components/edit/masters.ts'], secs: 70 },

@@ -64,9 +64,8 @@ status: live
      video/1080/            the upscale route's segments and upscaled cut, used only when the user asks (the finish stage)
      review/                the cards the app shows (the show recipe)
    ```
-   - Put scratch in `*.nosync` folders (`cut/segs.nosync/`), as the tools do.
+   - Put scratch in `*.nosync` folders inside the film folder: the tools' own (`cut/segs.nosync/`) and `$FILM/scratch.nosync/` for everything else, never `/tmp` ([[Flow v3.2 - 0 Standing rules#Keeping things]]).
    - Check free space on the Mac before any render: a finished film takes 10 to 15 GB, a 1080p cut about 150 MB plus about 160 MB of intermediates. `disk_report.py` reports; `--prune` lists what could go, and considers only older versioned renders (`v<N>-*` video files in `cut/renders/`, and in `cut/` itself; the newest of each kind is kept) and the scratch folders `cut/*.nosync`, never takes, elements, cut files or deliveries. Delete only when the user asks, with `--keep` naming the approved cut.
-   - Clear your own scratch in `/tmp` when done; never another session's. Logs and lists a later session needs go in the film folder or `~/Library/Logs/`, never in `/tmp`.
 4. Give every character, location, prop, generation and shot an ID that never changes.
    - Characters C01, C02…; locations L01…; props P01…; spoken lines V01, V02… (never L, which is for locations); generations S1, S2…; shots inside a generation 1, 2, 5A, 5B…; pick-ups FIX-<what>.
    - One character in two forms keeps its number with a letter (C03a, C03b). Element clips are `E-C01`. Takes are numbered per generation (S1 take 3). Cut versions are numbered.

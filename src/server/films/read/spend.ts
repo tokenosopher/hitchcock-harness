@@ -1,7 +1,7 @@
 // spend.md → SpendLine[]: one row per paid job. Costs keep their units: Higgsfield credits ("cr"),
 // dollars with the service that charged them, never a bare number. In this copy every paid job runs on Higgsfield,
 // so every row counts as Higgsfield, whatever model it names (a Higgsfield voice or music model such as
-// elevenlabs_v4 or elevenlabs_music_v2_5 included).
+// elevenlabs_v4 or elevenlabs_music_v2 included).
 import type { Cost, SpendLine } from '../../types';
 import { abs, readText, redact, stripMd, tables, type FilmCtx } from '../util';
 

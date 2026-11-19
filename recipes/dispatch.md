@@ -78,7 +78,7 @@ Parallel writers on one file lose each other's work. So:
 
 Write it as the standing rules ask (the intent and the hard constraints; creative judgement stays with the model), and always include:
 
-1. The film folder and the unit's own folder, and that it writes nowhere else except its one `spend.md` line per paid job.
+1. The film folder and the unit's own folder, and that it writes nowhere else except its one `spend.md` line per paid job and its scratch (viewing copies, crops, downloaded previews), which goes in `$FILM/scratch.nosync/<job>/`, never `/tmp`.
 2. The stage note to read for the job, by name. Do not paste rules into the brief.
 3. What it may spend: the round the script lock or the user's go covers, in the words of that go, and that it stops there.
 4. What to send back: the files it made (paths relative to the film folder), what it checked and what it found, each job's id and cost, and anything it could not do. No keys and no signed URLs: a result still to be landed is handed over as its job id and the path of the URL file it left in its unit's folder, never the link itself.
