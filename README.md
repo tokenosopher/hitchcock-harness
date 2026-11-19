@@ -1,10 +1,10 @@
 # Hitchcock Harness
 
-> "I wish I didn't have to shoot the picture."
+> "Once the screenplay is finished, I'd just as soon not make the film at all. … When you finish the script, the film is perfect. But in shooting it you lose perhaps 40 per cent of your original conception."
 >
-> Alfred Hitchcock, 1966, in the interview ["I Wish I Didn't Have to Shoot the Picture"](https://hitchcock.zone/wiki/I_wish_I_didn%27t_have_to_shoot_the_picture) (*Take One*, vol. 1, no. 1)
+> [Alfred Hitchcock, to Roger Ebert, 1969](https://www.rogerebert.com/interviews/hitchcock-never-mess-about-with-a-dead-body-you-may-be-one)
 
-For Hitchcock a film was made once it existed on paper, and the shoot was the part left over. Hitchcock Harness takes him at his word: you get the film right on paper, and the app does the shooting.
+Hitchcock Harness takes him at his word: you get the film right on paper, and the app does the shooting.
 
 Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below): both sign-ins stay with Claude Code.
 
