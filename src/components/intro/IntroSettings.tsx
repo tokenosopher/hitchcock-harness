@@ -1,19 +1,27 @@
 'use client';
 // Settings: the switch "Step intros", on by default. Off hides Alma's word at the top of every step; on brings every
 // one back, the ones hidden one by one included. Drawn like the page's other sections.
+import { useEffect, useRef } from 'react';
 import { Card } from '@/components/shell/atoms';
 import { cn } from '@/lib/utils';
 import { introActions, useIntroPrefs } from './useIntros';
 
 export function IntroSettings() {
   const p = useIntroPrefs();
+  // opened from an intro's "All intros: Settings" (/settings#step-intros): the card comes into view once it is drawn
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (scrolled.current || window.location.hash !== '#step-intros') return;
+    scrolled.current = true;
+    document.getElementById('step-intros')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
   const on = p ? !p.off : true;
   const some = p ? (p.off ? p.shown.length : p.hidden.length) : 0;
   const note = !p ? '' : !p.off
     ? (some ? `On: shown at the top of every step but ${some === 1 ? 'one you hid' : `${some} you hid`}. Switching off and on again brings those back.` : 'On: shown at the top of every step.')
-    : (some ? `Off: shown only on the ${some === 1 ? 'step' : `${some} steps`} you brought back. Bring one back with the small A on its page.` : 'Off: bring one back with the small A on its page.');
+    : (some ? `Off: shown only on the ${some === 1 ? 'step' : `${some} steps`} you brought back. Bring one back with Show intro on its page.` : 'Off: bring one back with Show intro on its page.');
   return (
-    <Card data-intro-settings>
+    <Card id="step-intros" data-intro-settings className="scroll-mt-20">
       <div className="flex flex-col gap-1 px-4 py-3">
         <span className="lbl">Alma’s step intros</span>
         <span className="text-[12.5px] leading-normal text-sub">A few words from Alma at the top of every step: what you do there, and why it comes at that point of the film.</span>

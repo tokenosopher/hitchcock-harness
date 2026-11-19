@@ -25,6 +25,7 @@ import { Mono, NowText, Pill, StateWords, TagPill, useNameFinal, type useRelease
 import { useIsPhone } from '@/components/shell/useIsPhone';
 import { PhoneReleaseList } from './PhoneRelease';
 import { NoTexts } from './AskAlma';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 type Rel = ReturnType<typeof useRelease>;
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -60,6 +61,7 @@ export function ClosedRelease({ rel }: { rel: Rel }) {
           <h1 className="m-0 text-[20px] font-semibold tracking-[-0.02em]">No final video yet</h1>
           <p className="m-0 text-[13px] text-sub">Release opens when you name the video that goes out.</p>
         </div>
+        <StepIntro step="release" width="full" />
         {rel.view.problems && <p role="alert" className="m-0 text-[12.5px] text-warn">social/release.json does not check out, so nothing can be changed here: {rel.view.problems.slice(0, 2).join(' ')}</p>}
         {masters.length ? (
           <MasterList masters={masters} media={(r) => filmPath(state, r)} goesOutAs={finalNames(state.film.title).final} editHref={`${base}/edit`}
@@ -103,6 +105,7 @@ export function OpenRelease({ rel }: { rel: Rel }) {
       <div data-release-open className="flex w-full flex-1 @max-[759px]/rel:flex-col">
         <FinalColumn rel={rel} file={file} />
         <div data-where className="@container/list flex min-w-0 flex-1 flex-col gap-4 px-5 pb-12 pt-4 @max-[759px]/rel:px-4">
+          <StepIntro step="release" />
           {rel.view.problems && <p role="alert" className="m-0 text-[12.5px] text-warn">social/release.json does not check out, so nothing can be changed here: {rel.view.problems.slice(0, 2).join(' ')}</p>}
           <div className="flex min-h-[30px] flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
             <h2 className="m-0 text-[14px] font-medium">Where it goes</h2>

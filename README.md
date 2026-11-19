@@ -60,7 +60,7 @@ Then open **http://localhost:8800** in your browser. Leave the Terminal window o
 3. Press **Start the film**. Alma makes the film's folder and writes a first story. Read it on the Story page, change it yourself or ask her to, and tell her when it is settled. Then she writes the script.
 4. From then on, Alma puts every choice in front of you as a card under **Waiting for you**: pick a face, a voice, a place, say yes to a script. Answer with the buttons, or just write to her.
 
-Every step of a film opens with a few words from Alma: what you do there and why it comes at that point. Hide one with **Hide** (the small **A** left in its place brings it back) or all of them with **Hide all intros**; the **Step intros** switch in Settings turns them all back on.
+Every step of a film opens with a few words from Alma: what you do there and why it comes at that point. **Hide**, after her last word, hides that step's intro, and **Show intro**, left in its place, brings it back. The **Step intros** switch in Settings turns all of them off, or back on.
 
 ## How spending works
 
@@ -121,4 +121,4 @@ Four things run on your Mac and cost nothing: laying out each scene's rough prev
 
 ---
 
-v0.2.0 (19 Nov 2026). v0.1.0 was made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026); v0.2.0 adds the changes of Hitchcock Harness up to 66f9435 and a word from Alma at the top of every step.
+v0.2.0 (19 Nov 2026). v0.1.0 was made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026); v0.2.0 adds the changes of Hitchcock Harness up to 66f9435, its unit checks as of 0dab272, and a word from Alma at the top of every step.

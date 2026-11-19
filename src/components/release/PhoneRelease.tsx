@@ -22,6 +22,7 @@ import { NoTexts } from './AskAlma';
 import { useState } from 'react';
 import { PhoneBar, phoneMain } from './PhoneBar';
 import { Mono, StateWords, type useRelease } from './ui';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 type Rel = ReturnType<typeof useRelease>;
 
@@ -35,6 +36,7 @@ export function PhoneReleaseList({ rel, file, now, state, base }: { rel: Rel; fi
         <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">Release</h1>
         <span className="text-[13px] text-sub">{state.film.title}{secs ? `, ${clockOf(secs)}` : ''}</span>
       </div>
+      <StepIntro step="release" className="px-4 pt-4" />
       <div className="flex flex-col gap-4 px-4 pt-3">
         {waves(file, now).map((w) => (
           <section key={w.key} className="flex flex-col gap-2">
@@ -84,6 +86,7 @@ export function PhonePlatform({ rel, file, p, now, state, base }: { rel: Rel; fi
         <span className="text-[13px] text-sub">from {p.account}</span>
         <div data-state-line className="pt-1"><StateWords st={st} big className="flex-wrap whitespace-normal" /></div>
       </div>
+      <StepIntro step="platform" className="px-4 pt-4" />
       <DockProvider value={dock}>
         {/* the whole text, editable as on the Mac: one box per platform part, full width */}
         <PlatformText film={rel.view?.film ?? ''} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout="one" phone

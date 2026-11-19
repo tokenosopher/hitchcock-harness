@@ -102,10 +102,10 @@ export function MainPage() {
       )}
       {!place && <div className="duration-200 animate-in fade-in-0"><FlowBoard flow={flow} open={open} onOpen={onOpen} lines={lines} /></div>}
       <PageBody>
-        <StepIntro key={open} step={open} className="duration-200 animate-in fade-in-0 motion-reduce:animate-none" />
         <StepBar waiting={flow.waiting} step={open === 'gate' ? undefined : n.name} line={place ? undefined : stepLine(state, flow, open, wn)} deep={!!place}
           right={place || open === 'gate' ? undefined : <NodeRight s={state} n={n} base={base} />}
           back={place ? `Back to ${n.name}` : undefined} backPhoneOnly onBack={() => onOpen(open)} onWaiting={() => onOpen('gate')} />
+        {open !== 'gate' && <StepIntro key={open} step={open} className="duration-200 animate-in fade-in-0 motion-reduce:animate-none" />}
         {/* a new step or place fades in; the flow above stays where it is */}
         <div key={`${open}:${place?.id ?? ''}`} data-step-view={open} aria-label={open === 'gate' ? 'Your picks' : n.name} role="region"
           className="flex flex-col gap-5 duration-200 ease-out animate-in fade-in-0 motion-reduce:animate-none">

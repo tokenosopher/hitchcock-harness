@@ -21,6 +21,7 @@ import { AskCard } from '@/components/feed/Feed';
 import { Who } from '@/components/feed/Who';
 import { castBoxLines } from '@/components/characters/Cards';
 import { VoiceRounds } from './VoiceOptions';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 function stateDot(st: GateItem['state']): DotState {
   return st === 'running' ? 'running' : st === 'ready' ? 'done' : st === 'queued' ? 'queued' : 'waiting';
@@ -219,6 +220,7 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
               : `Faces and the master are picked inside the chains as they land; the gate holds the voices and anything still unpicked. ${ready.length ? `${capital(word(ready.length))} ${ready.length === 1 ? 'is' : 'are'} ready now.` : 'None is ready yet.'}`}
         </span>
       </div>
+      <StepIntro step="gate" width="full" />
       {flow.done && idle && (
         <div className="flex max-w-[560px] flex-col overflow-hidden rounded-[10px] border border-edge bg-well">
           {GATE_INPUTS.map((k, i) => (
