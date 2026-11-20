@@ -163,4 +163,4 @@ Hitchcock Harness is open source under the MIT licence: see `LICENSE`. The Poppi
 
 ---
 
-v0.2.0 (19 Nov 2026). v0.1.0 was made from Hitchcock Harness 24d334c and Film Flow v3.2 (16 Nov 2026); v0.2.0 adds the changes of Hitchcock Harness up to 66f9435, its unit checks as of 0dab272, and a word from Alma at the top of every step.
+Version 0.2.0. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
