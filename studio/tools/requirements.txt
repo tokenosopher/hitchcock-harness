@@ -1,7 +1,13 @@
 # The studio's Python packages, at exact versions; setup.sh installs them into studio/.venv.
-# numpy and scipy dropped Python 3.11 in their newest releases: a 3.11 Python gets the last versions that support it.
-pillow==13.0.0
+# Each Python gets the newest versions that still support it (a Mac's built-in python3 is often 3.9).
+pillow==13.0.0; python_version >= "3.11"
+pillow==12.3.0; python_version == "3.10"
+pillow==11.3.0; python_version < "3.10"
 numpy==2.5.5; python_version >= "3.12"
-numpy==2.4.6; python_version < "3.12"
+numpy==2.4.6; python_version == "3.11"
+numpy==2.2.6; python_version == "3.10"
+numpy==2.0.2; python_version < "3.10"
 scipy==1.18.1; python_version >= "3.12"
-scipy==1.17.1; python_version < "3.12"
+scipy==1.17.1; python_version == "3.11"
+scipy==1.15.3; python_version == "3.10"
+scipy==1.13.1; python_version < "3.10"
