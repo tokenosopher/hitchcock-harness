@@ -35,6 +35,7 @@ export default [
   { file: 'scripts/reserve-test.ts', tier: 'quick', covers: ['src/server/claude/reserve.ts', 'src/server/claude/limit.ts', 'src/server/claude/process.ts'], secs: 2 },
   { file: 'scripts/resumed-test.ts', tier: 'quick', covers: ['src/server/claude/stream.ts', 'src/server/claude/tasks.ts', 'src/server/claude/transcript.ts'], secs: 1 },
   { file: 'scripts/samecut-test.ts', tier: 'quick', covers: ['src/components/edit/sameCut.ts'], secs: 1 },
+  { file: 'scripts/security-test.ts', tier: 'quick', covers: ['src/proxy.ts', 'src/server/claude/typed.ts', 'src/server/claude/thread.ts', 'src/server/claude/reserve.ts', 'src/server/claude/redact.ts', 'src/server/env.ts', 'src/server/uploads.ts', 'src/server/actions/progress.ts', 'src/app/api/films/*/progress/route.ts', 'src/server/edit/timeline.ts', 'src/server/library/sources.ts', 'src/server/library/store.ts'], secs: 2 },
   { file: 'scripts/shots-out-test.ts', tier: 'quick', covers: [...TAKES, 'src/components/edit/model.ts'], secs: 1 },
   { file: 'scripts/sound-test.ts', tier: 'quick', covers: ['src/components/edit/model.ts'], secs: 1 },
   { file: 'scripts/story-test.ts', tier: 'quick', covers: ['src/server/films/read/story.ts', 'src/server/actions/story.ts'], secs: 1 },

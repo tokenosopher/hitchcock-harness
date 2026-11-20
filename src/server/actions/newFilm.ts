@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { harnessConfig, pythonBin } from '../config';
+import { helperEnv } from '../env';
 import { getRegistry, invalidateRegistry, type FilmRefX } from '../films/registry';
 import type { AlmaModel } from '../types';
 import { isAlmaModel, setAlmaModel } from '../claude/model';
@@ -112,7 +113,7 @@ export function parseNewFilm(body: Record<string, unknown>): NewFilmInput {
 
 function run(cmd: string, args: string[], cwd: string): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' }, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env: helperEnv({ PYTHONDONTWRITEBYTECODE: '1' }), maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
       const e = err as (Error & { code?: unknown; signal?: NodeJS.Signals | null }) | null;
       resolve({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, signal: e?.signal ?? null, stdout: String(stdout), stderr: String(stderr) });
     });

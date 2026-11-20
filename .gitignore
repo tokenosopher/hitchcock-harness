@@ -41,19 +41,15 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# harness
+# harness: the app's own working files (sessions, uploads, backups, logs), made at run time
 .env.local
-harness/*.json
-harness/published-links.md
-harness/snapshots/
-harness/thumbs/
-harness/writes.log
-harness/backups/
-harness/uploads/
-harness/render-tmp/
-harness/*.jsonl
+/harness/
 
-# studio: made by setup.sh and by the films themselves
+# studio: made by setup.sh and by the films themselves (a fork that is pushed must not publish your films' scripts,
+# records or local settings; scratch.nosync folders are ignored by studio/.gitignore's *.nosync)
 studio/assets/
 studio/.venv/
+studio/film-records/
+studio/finished-scripts/
+studio/.claude/settings.local.json
 __pycache__/

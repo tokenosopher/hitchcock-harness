@@ -1,6 +1,6 @@
 // Library entries made from a video-driven film folder (cast/, voices/, elements.json, locations/): one builder
 // per kind, shared by the pick (every pick saves itself), "Save to library" and the import.
-import { promises as fs } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { natCmp, titleCase } from '../films/util';
 import { isDir, isFile } from '../actions/writes';
@@ -27,6 +27,25 @@ async function names(dir: string): Promise<string[]> {
 async function mtimeDay(p: string): Promise<string | undefined> {
   try {
     return (await fs.stat(p)).mtime.toISOString().slice(0, 10);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A path a film's own JSON names (voices/options.json, voices/element-lines-5s.json, elements.json), as a full path
+ *  inside the film folder; undefined for an absolute path, a ".." step, or a file whose real location (links resolved)
+ *  is outside the film. A file that is not there comes back as its path: nothing is copied from it. */
+export function inFilm(film: Pick<FilmInfo, 'dir'>, rel: string): string | undefined {
+  if (!rel || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) return undefined;
+  const abs = path.join(film.dir, rel);
+  let real: string;
+  try {
+    real = realpathSync(abs);
+  } catch {
+    return abs;
+  }
+  try {
+    return real.startsWith(realpathSync(film.dir) + path.sep) ? abs : undefined;
   } catch {
     return undefined;
   }
@@ -113,7 +132,8 @@ async function elementFile(film: FilmInfo, cid: string): Promise<string | undefi
   const ve = rec(rec(rec((await readJson(path.join(film.dir, 'elements.json'))))?.[cid])?.video_element);
   for (const k of ['muted_file', 'final_file', 'draft_file']) {
     const f = str(ve?.[k]);
-    if (f && (await isFile(path.join(film.dir, f)))) return path.join(film.dir, f);
+    const abs = f ? inFilm(film, f) : undefined;
+    if (abs && (await isFile(abs))) return abs;
   }
   const found: string[] = [];
   const walk = async (d: string, depth: number): Promise<void> => {
@@ -169,10 +189,12 @@ export async function voiceDraft(film: FilmInfo, cid: string, option: number | u
   if (!opt && !isPick) return undefined;
   const name = str(C?.name) ?? str(el?.name) ?? str(O?.name) ?? (folder ? titleCase(folder.slug) : cid);
   const files: LibraryDraft['files'] = [];
-  const preview = str(opt?.file);
-  if (preview) files.push({ abs: path.join(film.dir, preview), role: 'preview', label: `option ${want}` });
-  const elFile = isPick ? str(el?.file) : undefined;
-  if (elFile) files.push({ abs: path.join(film.dir, elFile), role: 'element line' });
+  const previewRel = str(opt?.file);
+  const preview = previewRel ? inFilm(film, previewRel) : undefined;
+  if (preview) files.push({ abs: preview, role: 'preview', label: `option ${want}` });
+  const elRel = isPick ? str(el?.file) : undefined;
+  const elFile = elRel ? inFilm(film, elRel) : undefined;
+  if (elFile) files.push({ abs: elFile, role: 'element line' });
   if (!files.length) return undefined;
   const voiceId = isPick ? pickedId : str(opt?.voice_id) ?? str(opt?.gid);
   const prompt = str(rec(rec(O?.rounds)?.[str(opt?.round) ?? ''])?.design_prompt) ?? str(O?.design_prompt) ?? str(opt?.desc) ?? str(opt?.brief);
@@ -189,7 +211,7 @@ export async function voiceDraft(film: FilmInfo, cid: string, option: number | u
         source: isPick ? str(C?.source) ?? (want !== undefined ? `design option ${want}` : undefined) : `design option ${want}${opt?.round ? ` (${str(opt.round)} round)` : ''}`,
         note: isPick ? str(C?.note) ?? str(rec(O?.chosen)?.note) ?? str(el?.note) : undefined,
       },
-      dates: { made: preview ? await mtimeDay(path.join(film.dir, preview)) : undefined, ...(status === 'picked' ? { picked: new Date().toISOString().slice(0, 10) } : {}) },
+      dates: { made: preview ? await mtimeDay(preview) : undefined, ...(status === 'picked' ? { picked: new Date().toISOString().slice(0, 10) } : {}) },
       tags: [film.title, cid, name, ...(opts.role ? [opts.role] : [])],
     },
     files,

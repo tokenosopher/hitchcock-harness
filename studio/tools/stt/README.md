@@ -32,5 +32,5 @@ Read by `tools/takes/verify_clip.py` (a take's `stt.json`), `tools/release/make_
 
 - `transcribe.py`: the command above.
 - `whisper_words.py`: runs Whisper on one file; started by `tools/lib/stt.py` as
-  `uv run --quiet --no-project --python 3.12 --with faster-whisper python tools/stt/whisper_words.py IN OUT.json --model small.en`.
+  `uv run --quiet --no-project --python 3.12 --with faster-whisper==1.2.1 python tools/stt/whisper_words.py IN OUT.json --model small.en`.
   Another model: set `HARNESS_WHISPER_MODEL` (for example `medium.en`, slower and about 1.5 GB).

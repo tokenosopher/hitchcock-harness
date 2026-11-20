@@ -1,7 +1,7 @@
 """Word-level transcript of one audio or video file with Whisper (faster-whisper), run on this Mac, free.
 
 Not run on the studio's own Python: transcribe.py starts it through uv, which brings its own Python and packages:
-    uv run --quiet --no-project --python 3.12 --with faster-whisper python tools/stt/whisper_words.py IN OUT.json [--model small.en]
+    uv run --quiet --no-project --python 3.12 --with faster-whisper==1.2.1 python tools/stt/whisper_words.py IN OUT.json [--model small.en]
 Writes OUT.json: a list of {"text", "start", "end", "type": "word", "probability"}, in seconds, in the order spoken.
 The first run downloads the model (small.en, about 480 MB) into the Hugging Face cache; later runs reuse it."""
 import argparse, json, os, subprocess, sys

@@ -19,6 +19,11 @@ FFMPEG = os.environ.get('HARNESS_FFMPEG') or 'ffmpeg'
 FFPROBE = os.environ.get('HARNESS_FFPROBE') or 'ffprobe'
 
 
+def listed(p):
+    """A line of an ffmpeg concat list: the path in single quotes, a quote inside it written '\\''."""
+    return "file '%s'\n" % p.replace("'", "'\\''")
+
+
 def probe_frames(p):
     o = subprocess.run([FFPROBE, '-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries',
                         'stream=nb_read_packets,r_frame_rate,width,height', '-of', 'json', p], capture_output=True, text=True).stdout
@@ -81,7 +86,7 @@ def join(segdir, updir, render, out):
                 sys.exit(f'{fixed}: frame count changed in the fill and crop')
         parts.append(fixed)
     lst = os.path.join(updir, 'concat.txt')
-    open(lst, 'w').write(''.join(f"file '{os.path.abspath(p)}'\n" for p in parts))
+    open(lst, 'w').write(''.join(listed(os.path.abspath(p)) for p in parts))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     subprocess.run([FFMPEG, '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', lst, '-i', render, '-map', '0:v:0',
                     '-map', '1:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', out], check=True)

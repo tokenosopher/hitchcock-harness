@@ -161,7 +161,8 @@ def silence(sec, dst):
 
 
 def concat(files, dst):
-    lst = dst + '.concat.txt'; open(lst, 'w').write(''.join(f"file '{os.path.abspath(f)}'\n" for f in files))
+    # a quote in a path is written '\'' (ffmpeg's concat list)
+    lst = dst + '.concat.txt'; open(lst, 'w').write(''.join("file '%s'\n" % os.path.abspath(f).replace("'", "'\\''") for f in files))
     ff('-f', 'concat', '-safe', '0', '-i', lst, '-ar', '44100', '-ac', '1', dst); os.remove(lst)
 
 

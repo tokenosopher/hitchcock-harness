@@ -7,7 +7,7 @@
 // (13 Nov 2026). The parts are appended under uploads/.incoming/ and the whole is kept only when its size, and its
 // SHA-256 when the browser sent one, match what was declared.
 import { createHash } from 'node:crypto';
-import { createReadStream, promises as fs } from 'node:fs';
+import { createReadStream, promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { claudeConfig } from './claude/config';
 
@@ -56,6 +56,17 @@ async function place(thread: string, name: string, type: string, size: number, p
     }
   }
   throw new Error('could not find a free name for the file');
+}
+
+/** True when `file` (a chip's full path) really lies in this thread's uploads folder, links resolved: a chip the page
+ *  sends with any other path is not a file the user attached, and Alma is never told to open it. */
+export function isOwnUpload(thread: string, file: string): boolean {
+  if (!path.isAbsolute(file)) return false;
+  try {
+    return realpathSync(file).startsWith(realpathSync(dirOf(thread)) + path.sep);
+  } catch {
+    return false;
+  }
 }
 
 /** The full path of an uploaded file of this thread; undefined for anything that is not a plain name in its folder. */

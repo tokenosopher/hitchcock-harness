@@ -14,6 +14,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { claudeConfig } from '../claude/config';
 import { pythonBin } from '../config';
+import { helperEnv } from '../env';
 import { natCmp, titleCase } from '../films/util';
 import { invalidateFilmState } from '../films/state';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
@@ -130,7 +131,7 @@ async function runVoicePick(film: FilmTarget, w: Writer, args: string[]): Promis
   await backupVoiceFiles(film, w);
   await w.ran(shown, film.show(path.join(film.dir, 'voices', 'cast.json')), 'pick.py writes cast.json and options.json "chosen"');
   if (w.dryRun) return { cmd: shown, out: '(dry run: not run)' };
-  const env: NodeJS.ProcessEnv = { ...process.env, FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' };
+  const env = helperEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
   const r = await run(py, [script, ...args], env, film.repo);
   if (r.code !== 0) throw new PickError(`pick.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
   return { cmd: shown, out: r.out };

@@ -176,6 +176,8 @@ export async function getEntry(kind: LibraryKind, id: string): Promise<{ meta: L
 
 /** A file of an entry, for the page's thumbnails and players; only names listed in meta.json (or thumb.jpg). */
 export async function entryFile(kind: LibraryKind, id: string, file: string): Promise<string | undefined> {
+  // a plain name in the entry's folder: a meta.json (a library from elsewhere) may name "../" or a full path
+  if (!file || path.basename(file) !== file) return undefined;
   const e = await getEntry(kind, id);
   if (!e) return undefined;
   if (file !== e.meta.thumb && !e.meta.files.some((f) => f.file === file)) return undefined;

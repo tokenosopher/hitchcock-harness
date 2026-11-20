@@ -28,7 +28,7 @@ def uv_bin():
 
 def whisper_cmd(audio, out_json, model=None):
     """The exact command that runs Whisper on one file and writes the words to out_json."""
-    return [uv_bin(), 'run', '--quiet', '--no-project', '--python', PYTHON, '--with', 'faster-whisper',
+    return [uv_bin(), 'run', '--quiet', '--no-project', '--python', PYTHON, '--with', 'faster-whisper==1.2.1',
             'python', HELPER, audio, out_json, '--model', model or MODEL]
 
 
