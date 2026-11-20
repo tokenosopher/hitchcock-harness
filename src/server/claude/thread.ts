@@ -10,6 +10,11 @@ export function validFilm(film: string): boolean {
   return FILM_SLUG.test(film);
 }
 
+export { asTyped } from './typed';
+
+/** The chats that belong to no film. */
+export const NON_FILM_THREADS = new Set(['library', 'settings']);
+
 export async function threadHistory(film: string): Promise<{ events: ThreadEvent[]; warnings: string[] }> {
   const alma = getAlma(film);
   const sessionId = await alma.currentSessionId();

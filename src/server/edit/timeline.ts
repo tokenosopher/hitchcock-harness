@@ -93,6 +93,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
   for (const [ti, tr] of t.tracks!.entries()) {
     const where = `track ${tr?.id ?? ti + 1}`;
     if (!tr || typeof tr.id !== 'string' || !tr.id) { problems.push(`${where}: id missing`); continue; }
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(tr.id)) { problems.push(`${where}: id must be letters, digits, - or _ (it names files)`); continue; }
     if (ids.has(tr.id)) problems.push(`${where}: id used twice`);
     ids.add(tr.id);
     if (!KINDS.includes(tr.kind)) problems.push(`${where}: kind must be video, audio or captions`);

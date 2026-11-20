@@ -21,6 +21,7 @@ import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, loca
 import { filmTarget, type FilmTarget } from './film';
 import { appendTasteRow, candidatesCell, pickedWhere, type TasteRow } from './taste';
 import { isFile, nextVersion, Writer, type WriteRecord } from './writes';
+import { asTyped } from '../claude/typed';
 
 export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take';
 export const PICK_KINDS: PickKind[] = ['face', 'wardrobe', 'sheet', 'voice', 'location', 'prop', 'take'];
@@ -168,7 +169,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   const w = new Writer(`pick ${kind} ${target} ${fromLibrary ? `library:${input.libraryId}` : input.candidate}`, ft.show, !!opts.dryRun);
   const info: FilmInfo = { slug: ft.slug, title: ft.title, dir: ft.dir };
   const date = today();
-  const where = input.from ?? 'the gate page';
+  const where = asTyped(input.from ?? 'the gate page');
   let candidate = input.candidate ?? '';
   let choice = target;
   let candidatesText = '–';
@@ -335,7 +336,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   ].map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`).join(' ');
   const whose = kind === 'take' ? `${target}` : `${target}'s ${kind === 'location' ? 'master' : kind}`;
   const message = [
-    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : candidate} for ${whose} on ${where}. Continue the flow from there.`,
+    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : asTyped(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
     '',
     `The harness already wrote: ${[...wrote, 'the taste.md row', ...(lib ? [`the library entry ${lib.kind}s/${lib.id}`] : [])].join('; ')}.`,
     `Yours: the review card for this pick, the row's "What it says" cell and the score in taste.md${next.length ? `; ${next.join('; ')}` : ''}.`,

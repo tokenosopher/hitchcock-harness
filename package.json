@@ -4,9 +4,9 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "dev": "next dev -p 8800",
+    "dev": "next dev -H 127.0.0.1 -p 8800",
     "build": "next build",
-    "start": "next start -p 8800",
+    "start": "next start -H 127.0.0.1 -p 8800",
     "lint": "eslint",
     "smoke:thread": "tsx scripts/smoke-thread.ts",
     "films:check": "tsx src/server/films/check.ts",

@@ -12,6 +12,7 @@ import { filmTarget } from './film';
 import { makePick, PickError, type PickInput, type PickResult } from './pick';
 import { appendTasteRow, pickedWhere, type TasteRow } from './taste';
 import { Writer, type WriteRecord } from './writes';
+import { asTyped } from '../claude/typed';
 
 export interface AnswerInput {
   card: string;                 // the card's key (its id)
@@ -50,7 +51,7 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
   // a yes or a go with a no button of its own ("Cancel the ask"): option "no" is that button (Release, stage 3)
   const saidNo = kind !== 'pick' && input.option === 'no' && !!card.ask.noLabel;
 
-  const where = input.from ?? 'Hitchcock Harness';
+  const where = asTyped(input.from ?? 'Hitchcock Harness');
   const w = new Writer(`answer ${kind} ${card.key}${opt ? ` ${opt.id}` : ''}`, ft.show, !!opts.dryRun);
   let tasteRow: string | undefined;
   if (kind === 'pick' && opt) {
@@ -74,7 +75,7 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
 
   const attrs = [['kind', 'answer'], ['ask', kind], ['card', card.id ?? card.key], ...(opt ? [['option', opt.id]] : saidNo ? [['option', 'no']] : []), ...(card.ask.prediction ? [['prediction', card.ask.prediction]] : [])]
     .map(([k, v]) => `${k}="${attr(v)}"`).join(' ');
-  const said = input.note ? ` Their words: "${input.note}".` : '';
+  const said = input.note ? ` Their words: "${asTyped(input.note)}".` : '';
   const what =
     saidNo ? `The user pressed “${card.ask.noLabel}” (no) on the card “${card.title}”`
     : kind !== 'pick' && card.ask.yesLabel ? `The user pressed “${card.ask.yesLabel}” on the card “${card.title}”`
@@ -152,7 +153,7 @@ export async function answerCards(inputs: AnswerInput[], film: string, opts: { d
   for (const i of inputs) await answerCard(i, film, { dryRun: true, repo: opts.repo });
   const done: AnswerResult[] = [];
   for (const i of inputs) done.push(await answerCard(i, film, { dryRun: opts.dryRun, notify: false, repo: opts.repo }));
-  const where = inputs[0].from ?? 'Hitchcock Harness';
+  const where = asTyped(inputs[0].from ?? 'Hitchcock Harness');
   const ft = (await filmTarget(film, opts.repo))!;
   const feed = await readFeed({ dir: ft.dir, warn: new Warnings() }, ft.slug);
   const lines = done.map((r) => {

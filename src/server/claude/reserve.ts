@@ -116,13 +116,14 @@ export async function addReserveSpend(usd: number, at: Date = new Date()): Promi
   await write((s) => ({ ...s, spent: { ...s.spent, [month]: Math.round(((s.spent[month] ?? 0) + usd) * 10000) / 10000 } })).catch(() => undefined);
 }
 
-/** Alma's environment: the server's, without any API key or login token and without the parent Claude Code
+/** Alma's environment: the server's, without any API key or login token, without the remote-access key
+ *  (HARNESS_TUNNEL_TOKEN) and without the parent Claude Code
  *  session's variables; with ANTHROPIC_API_KEY only when a reserve key is given. The reserve key's own name
  *  never passes through. */
 export function almaEnv(base: NodeJS.ProcessEnv, reserveKey?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };
   for (const k of Object.keys(env)) {
-    if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === RESERVE_KEY_NAME || k === 'CLAUDECODE' || k === 'CLAUDE_PID' || k === 'CLAUDE_EFFORT' || (k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS')) delete env[k];
+    if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === RESERVE_KEY_NAME || k === 'HARNESS_TUNNEL_TOKEN' || k === 'CLAUDECODE' || k === 'CLAUDE_PID' || k === 'CLAUDE_EFFORT' || (k.startsWith('CLAUDE_CODE_') && k !== 'CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS')) delete env[k];
   }
   if (reserveKey) env.ANTHROPIC_API_KEY = reserveKey;
   env.PYTHONDONTWRITEBYTECODE = '1';

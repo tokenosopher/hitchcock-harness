@@ -37,6 +37,9 @@ let chain: Promise<unknown> = Promise.resolve();
 export function setProgress(film: string, keys: string[], on: boolean): Promise<void> {
   const run = chain.then(async () => {
     if (!keys.length) return;
+    // names that would reach every object's shared template are never keys here
+    if (['__proto__', 'constructor', 'prototype'].includes(film)) return;
+    keys = keys.filter((k) => !['__proto__', 'constructor', 'prototype'].includes(k));
     const store = await readStore();
     const mine = (store[film] ??= {});
     const at = new Date().toISOString();

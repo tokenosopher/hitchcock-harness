@@ -11,6 +11,7 @@ import { isAlmaModel, setAlmaModel } from '../claude/model';
 import { CODE_RE, RATIOS, RESERVED_SLUGS, setupLine, slugOf, SETUP_DEFAULTS, type NewFilmSetup, type Ratio } from '@/lib/newFilm';
 import { DRIVE_MISSING, driveConnected, showPathFor } from './film';
 import { Writer } from './writes';
+import { asTyped } from '../claude/typed';
 
 export class NewFilmError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -187,9 +188,9 @@ export async function startFilm(input: NewFilmInput, opts: { repo?: string } = {
     };
     const message =
       `<harness-action kind="new-film" slug="${slug}"/> ` +
-      `A new film: ${input.title}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film); the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
+      `A new film: ${asTyped(input.title)}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film); the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
       `Setup defaults are taken at face value: ${setupLine(setup)}. The idea, in the user's words:\n\n` +
-      `${input.idea || '(the user gave no idea text yet)'}\n\n${output}`;
+      `${asTyped(input.idea || '(the user gave no idea text yet)')}\n\n${output}`;
     if (input.model) await setAlmaModel(slug, input.model);
     const { sendToAlma } = await import('../claude/thread');
     await sendToAlma(slug, message);
