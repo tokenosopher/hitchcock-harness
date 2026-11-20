@@ -169,6 +169,17 @@ def in_film(film, rel):
     return p if os.path.realpath(p).startswith(os.path.realpath(film) + os.sep) else None
 
 
+def may_upload(film, p):
+    """True when `p` (links resolved) sits in the studio's films and library: the folder that holds this film's
+    folder (assets/), or a library named by HARNESS_LIBRARY. A list that names any other file on the Mac uploads
+    nothing for it: a film folder from elsewhere, or a misled assistant, cannot send a private file to Higgsfield."""
+    rp = os.path.realpath(p)
+    roots = [os.path.dirname(os.path.dirname(os.path.realpath(film)))]
+    if os.environ.get('HARNESS_LIBRARY'):
+        roots.append(os.path.realpath(os.path.expanduser(os.environ['HARNESS_LIBRARY'])))
+    return any(rp.startswith(r + os.sep) for r in roots)
+
+
 def put_one(path, ct, url):
     if not isinstance(url, str) or re.search(r'\s', url):
         return 'refused'                        # a space or a line break would end the url line of curl's config
@@ -225,6 +236,10 @@ def cmd_put(A):
         p = it['path'] if os.path.isfile(it['path']) else os.path.join(film, it['file'])
         if not os.path.isfile(p):
             print(f'FAILED {it["file"]}: the file is gone')
+            failed += 1
+            continue
+        if not may_upload(film, p):
+            print(f'REFUSED {it["file"]}: it is outside the studio\'s films and library; not uploaded')
             failed += 1
             continue
         h, size = sha1(p), os.path.getsize(p)

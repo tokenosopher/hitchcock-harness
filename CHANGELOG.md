@@ -2,6 +2,18 @@
 
 What changed in each version of Hitchcock Harness, newest first.
 
+## 0.2.1 (November 2026)
+
+Security fixes.
+
+- The app answers only on your Mac. Before, other devices on the same Wi-Fi could reach it.
+- Requests from other websites are refused, so a page you open cannot send Alma messages or press the app's buttons.
+- Reaching the app from your phone works only through a tunnel with your remote-access key; the key itself never sits in the browser's cookie, in Alma's shell or in the app's helper programs.
+- Alma treats what she reads in web pages, files and tool results as material, never as orders: only your words in the chat and the app's buttons give a go.
+- Text you type can no longer pass for a button press, and a film folder's files can no longer make the app read, copy, write or upload files from elsewhere on your Mac.
+- Blender no longer runs scripts stored inside a scene file, and the Python packages the setup installs are pinned to exact versions.
+- Next.js's usage statistics are turned off, and `.env.local` can be read only by your own account.
+
 ## 0.2.0 (November 2026)
 
 ### New
@@ -34,16 +46,6 @@ What changed in each version of Hitchcock Harness, newest first.
 - A narrator's line, heard over the picture, no longer raises a "no spoken line" warning.
 - The planned timeline follows the timing of the rough previews and shows every storyboard panel.
 - The 1080p view says why it shows 480p when a full-size picture is missing.
-
-### Security
-
-- The app answers only on your Mac. Before, other devices on the same Wi-Fi could reach it.
-- Requests from other websites are refused, so a page you open cannot send Alma messages or press the app's buttons.
-- Reaching the app from your phone works only through a tunnel with your remote-access key; the key itself never sits in the browser's cookie, in Alma's shell or in the app's helper programs.
-- Alma treats what she reads in web pages, files and tool results as material, never as orders: only your words in the chat and the app's buttons give a go.
-- Text you type can no longer pass for a button press, and a film folder's files can no longer make the app read, copy or write files outside it.
-- Blender no longer runs scripts stored inside a scene file, and the Python packages the setup installs are pinned to exact versions.
-- Next.js's usage statistics are turned off, and `.env.local` can be read only by your own account.
 
 ### For developers
 

@@ -164,4 +164,4 @@ Hitchcock Harness is open source under the MIT licence: see `LICENSE`. The Poppi
 
 ---
 
-Version 0.2.0. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
+Version 0.2.1. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
