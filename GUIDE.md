@@ -61,7 +61,6 @@ No button in the app spends credits by itself. A button either records your choi
 
 - It cannot invent a voice from a written description. You choose from Higgsfield's voices, from voices made to fit a character's face, or from variations of those.
 - It does not post to social platforms for you.
-- It has been made from a working setup but changed to run on Higgsfield alone; see "What Higgsfield does in this version" in `README.md` for the parts that are new.
 
 ## Where things are
 
