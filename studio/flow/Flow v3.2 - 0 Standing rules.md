@@ -171,7 +171,7 @@ Where a correction goes:
 | captions, posting, film records, published links | [[Flow v3.2 - 12 Release]] |
 | services, prices, machines, keys | [[Flow v3.2 - 13 Services and costs]] |
 | anything that holds at every stage | this note |
-| not about filmmaking (another project, a machine or tool note) | that project's memory folder |
+| not about filmmaking (another project, a machine or tool note) | nowhere: tell the user instead |
 
 The brief:
 
@@ -179,8 +179,8 @@ The brief:
 You are saving the user's corrections from a live Claude Code session into Film Flow v3.2, in
 <the studio folder's full path>/flow/.
 Edit only the stage notes named below and "Film Flow v3.2 - record.md" in that folder. Never edit the method
-notes 6a-6d, tools/, templates/, the app, the film's folder, its prompts or git. Touch memory only for a correction
-that is not about filmmaking: it goes to that project's memory folder instead.
+notes 6a-6d, tools/, templates/, the app, the film's folder, its prompts or git. A correction that is not about
+filmmaking is saved nowhere (no memory folder, no other project): name it in your report, and the main thread tells the user.
 Never print an API key or a signed URL; never write the assistant's model name into a note. Use the studio's
 .venv/bin/python for scripts.
 

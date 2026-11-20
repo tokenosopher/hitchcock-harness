@@ -6,16 +6,18 @@ Higgsfield voice job is made by Alma through the MCP server, and this script onl
 With an option number: the option's voice_id and voice_type go into cast.json when it has one (a preset is reusable as it
 is); a voice from the face or a variant has none until it is saved with create_voice_from_confirmed_audio, and then
 --voice-id records the saved voice (its source keeps "option N"). cast.json per character: name, voice_id (only for a
-voice Higgsfield can reuse), voice_type, source, note, model. A changed voice keeps the old one under "history".
-  --test   prints how to hear the picked voice on the character's sample lines (no call is made here)"""
-import json, os, sys
+voice Higgsfield can reuse), voice_type, source, note, model. A changed voice keeps the old one under "history". The
+character's name comes from options.json, else cast.json, else its folder (cast/C01-agnes: Agnes).
+  --test   prints how to hear the picked voice on the character's sample lines, from voices/spec.py (no call is made
+           here); only --test loads spec.py, which is the film's own Python: a plain pick, which the harness runs on
+           every press, never runs it"""
+import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import film
 
 if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
     print(__doc__); sys.exit(0)
-F = film.film_root(); S_ = film.load_spec(F, required=False)
-SPEC = getattr(S_, 'SPEC', {}) if S_ else {}
+F = film.film_root()
 a = sys.argv[1:]
 def opt(name, default=None):
     if name in a:
@@ -23,6 +25,8 @@ def opt(name, default=None):
     return default
 note = opt('--note', ''); vid = opt('--voice-id'); vtype = opt('--voice-type'); source = opt('--source')
 test = '--test' in a; a = [x for x in a if x != '--test']
+S_ = film.load_spec(F, required=False) if test else None
+SPEC = getattr(S_, 'SPEC', {}) if S_ else {}
 if vtype and vtype not in ('preset', 'element'):
     sys.exit('--voice-type is preset or element')
 if not a:
@@ -31,7 +35,15 @@ cid = a[0]; num = int(a[1]) if len(a) > 1 else None
 H = os.path.join(F, 'voices'); os.makedirs(H, exist_ok=True)
 oj = os.path.join(H, 'options.json'); O = json.load(open(oj)) if os.path.exists(oj) else {}
 cj = os.path.join(H, 'cast.json'); C = json.load(open(cj)) if os.path.exists(cj) else {}
-name = (SPEC.get(cid) or O.get(cid) or C.get(cid) or {}).get('name', cid)
+def folder_name(cid):
+    """'Agnes' from the character's folder cast/C01-agnes, as the harness names it; None without one."""
+    d = os.path.join(F, 'cast')
+    for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if n.startswith(cid + '-') and os.path.isdir(os.path.join(d, n)):
+            return ' '.join(w[:1].upper() + w[1:] for w in re.split(r'[-_ ]+', n[len(cid) + 1:]) if w) or None
+    return None
+name = ((SPEC.get(cid) or {}).get('name') or (O.get(cid) or {}).get('name') or (C.get(cid) or {}).get('name')
+        or folder_name(cid) or cid)
 model = None
 
 if num is not None:

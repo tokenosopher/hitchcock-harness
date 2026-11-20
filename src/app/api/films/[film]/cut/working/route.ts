@@ -13,6 +13,7 @@ import { NO_STORE } from '@/server/edit/http';
 import { ensureWorking, forgetMock, step, WorkingError, type CutStore } from '@/server/edit/working';
 import { post, refusal, revOf, storeFor, type Ctx } from '@/server/edit/working-http';
 import type { Timeline } from '@/server/types';
+import { sizeArg } from '@/server/edit/timeline';
 
 export async function GET(_req: Request, ctx: Ctx): Promise<Response> {
   await connection();
@@ -39,8 +40,8 @@ export function POST(req: Request, ctx: Ctx): Promise<Response> {
       tracks: b.tracks as Timeline['tracks'],
       markers: b.markers as Timeline['markers'] | undefined,
       fps: typeof b.fps === 'number' ? (b.fps as Timeline['fps']) : undefined,
-      width: typeof b.width === 'number' ? b.width : undefined,
-      height: typeof b.height === 'number' ? b.height : undefined,
+      width: sizeArg(b.width),
+      height: sizeArg(b.height),
     });
     return { body: a, status: a.same ? 200 : 201 };
   });

@@ -3,7 +3,8 @@ It can be changed while renders wait: write a number into <studio>/scratch.nosyn
 run reads it on each try); remove the file to go back to SLOTS.
     .venv/bin/python tools/previz/blender_run.py <scene script>.py -- --film $FILM <script args>
 Blender is /Applications/Blender.app, or the program named in BLENDER_BIN. Waits for a free slot (an flock on
-<studio>/scratch.nosync/previz-blender/line-slot-N), runs `Blender -b -P <script> -- <args>`, streams its output minus the per-frame noise, and exits
+<studio>/scratch.nosync/previz-blender/line-slot-N), runs `Blender -b --disable-autoexec -P <script> -- <args>` (a .blend
+file's own scripts never run; the -P script does), streams its output minus the per-frame noise, and exits
 with Blender's return code. Set SLOTS=1 in the environment to serialise (SLOTS set in a run's environment beats the live file
 for that run).
 
@@ -199,7 +200,7 @@ def main():
     print(f'slot {n}: {os.path.basename(script)} {" ".join(rest)}' + (' (fast lane)' if lane == 'fast' else ''), flush=True)
     t1 = time.time(); rc = None
     try:
-        p = subprocess.Popen([BLENDER, '-b', '-P', script] + rest, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        p = subprocess.Popen([BLENDER, '-b', '--disable-autoexec', '-P', script] + rest, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                              env=dict(os.environ, PREVIZ_SLOT='%s%d' % ('fast-' if lane == 'fast' else '', n)))   # the kit (kit/core.py) refuses a headless run without it
         for line in p.stdout:
             if not line.strip() or any(k in line for k in NOISE): continue

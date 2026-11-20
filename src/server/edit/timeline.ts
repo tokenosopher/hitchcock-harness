@@ -69,6 +69,22 @@ export function timelineHash(t: Pick<Timeline, 'fps' | 'width' | 'height' | 'tra
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const KINDS: TrackKind[] = ['video', 'audio', 'captions'];
 const FPS = [24, 25, 30];
+/** The largest cut the harness renders: a side of 4096 pixels and two hours, so a request cannot ask for a render
+ *  that fills the disk or runs for days. */
+export const MAX_SIDE = 4096;
+export const MAX_SECONDS = 2 * 60 * 60;
+/** What is wrong with a cut's width and height, if anything (also used by the routes that take them). */
+export function sizeProblem(width: unknown, height: unknown): string | undefined {
+  if (!num(width) || !num(height) || width < 16 || height < 16) return 'width and height must be numbers';
+  if (width > MAX_SIDE || height > MAX_SIDE) return `width and height must be ${MAX_SIDE} pixels or less`;
+  return undefined;
+}
+/** A width or a height a route was sent: undefined when none was; refused (400) when it is not 16 to MAX_SIDE. */
+export function sizeArg(v: unknown): number | undefined {
+  if (typeof v !== 'number') return undefined;
+  if (!num(v) || v < 16 || v > MAX_SIDE) throw new CutError(`width and height must be 16 to ${MAX_SIDE} pixels`);
+  return v;
+}
 
 /** Checks a timeline's shape and its files; returns it normalised (clips in time order) or the problems.
  *  `files: false` skips the disk checks (a quick look before the full check). `base`, the version this one is
@@ -80,7 +96,8 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
   if (!t || typeof t !== 'object') return { problems: ['not an object'] };
   if (!isVersion(t.version)) problems.push('version must be "v<n>"');
   if (!FPS.includes(t.fps as number)) problems.push('fps must be 24, 25 or 30');
-  if (!num(t.width) || !num(t.height) || t.width! < 16 || t.height! < 16) problems.push('width and height must be numbers');
+  const size = sizeProblem(t.width, t.height);
+  if (size) problems.push(size);
   if (typeof t.at !== 'string') problems.push('at must be an ISO date');
   if (!Array.isArray(t.tracks) || !t.tracks.length) problems.push('tracks must be a non-empty list');
   if (t.markers !== undefined && !Array.isArray(t.markers)) problems.push('markers must be a list');
@@ -93,6 +110,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
   for (const [ti, tr] of t.tracks!.entries()) {
     const where = `track ${tr?.id ?? ti + 1}`;
     if (!tr || typeof tr.id !== 'string' || !tr.id) { problems.push(`${where}: id missing`); continue; }
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(tr.id)) { problems.push(`${where}: id must be letters, digits, - or _ (it names files)`); continue; }
     if (ids.has(tr.id)) problems.push(`${where}: id used twice`);
     ids.add(tr.id);
     if (!KINDS.includes(tr.kind)) problems.push(`${where}: kind must be video, audio or captions`);
@@ -152,6 +170,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
     if (!m || !num(m.at) || typeof m.text !== 'string') problems.push('a marker needs at (seconds) and text');
     else markers.push(m);
   }
+  if (!problems.length && timelineLength({ tracks }) > MAX_SECONDS) problems.push(`the cut is longer than ${MAX_SECONDS / 3600} hours`);
   if (opts.files !== false && !problems.length) problems.push(...(await checkFiles(film, tracks, fps, opts.base)));
   if (problems.length) return { problems };
   return { timeline: { ...(t as Timeline), tracks, markers }, problems };

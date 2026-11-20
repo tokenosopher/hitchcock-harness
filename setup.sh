@@ -4,13 +4,14 @@
 #
 # What it does:
 #   1. checks Node 20 or newer, npm, ffmpeg, ffprobe, python3, perl and uv (and stops with the install line if one is missing);
-#      checks Blender, which only the previz stage needs (a warning, not a stop)
-#   2. makes the Python environment for the studio's tools: studio/.venv (Pillow, numpy, scipy, requests),
+#      warns when ffmpeg is older than version 7; checks Blender, which only the previz stage needs (a warning, not a stop)
+#   2. makes the Python environment for the studio's tools: studio/.venv (Pillow, numpy and scipy, at the versions in
+#      studio/tools/requirements.txt),
 #      then installs the local tools that run free on this Mac (removing music, word timings) with
 #      studio/tools/setup/install_local.sh, when that file is there
 #   3. makes the folders the films live in: studio/assets/{films,library,final-cuts}
 #   4. installs the app's packages (npm ci)
-#   5. writes .env.local from .env.example, if there is none yet
+#   5. writes .env.local from .env.example, if there is none yet, readable by you only (mode 600)
 #   6. checks Claude Code is installed and signed in, and that the Higgsfield MCP server is set up
 #      (adds it for your user if it is missing; it changes nothing else in your Claude settings)
 set -euo pipefail
@@ -64,6 +65,13 @@ for tool in ffmpeg ffprobe; do
     [[ " ${missing_apt[*]-} " == *" ffmpeg "* ]] || missing_apt+=(ffmpeg)
   fi
 done
+# an older ffmpeg still runs; say so and keep going
+if command -v ffmpeg >/dev/null 2>&1; then
+  FF_MAJOR="$( (ffmpeg -version 2>/dev/null || true) | sed -nE '1s/^ffmpeg version n?([0-9]+)([^0-9].*)?$/\1/p')"
+  if [ -n "$FF_MAJOR" ] && [ "$FF_MAJOR" -lt 7 ]; then
+    say "  warn  ffmpeg $FF_MAJOR is older than version 7, which the app is made for: update it when you can (brew upgrade ffmpeg)"
+  fi
+fi
 if command -v python3 >/dev/null 2>&1; then ok "python3 $(python3 -c 'import platform; print(platform.python_version())')"; else
   say "  python3 is missing."; missing_brew+=(python); missing_apt+=(python3 python3-venv)
 fi
@@ -118,12 +126,13 @@ if [ ! -x "$VENV_PY" ]; then
 else
   ok "studio/.venv is there"
 fi
-if "$VENV_PY" -c 'import PIL, numpy, scipy, requests' >/dev/null 2>&1; then
-  ok "Pillow, numpy, scipy and requests are installed"
+if "$VENV_PY" -c 'import PIL, numpy, scipy' >/dev/null 2>&1; then
+  ok "Pillow, numpy and scipy are installed"
 else
-  say "  installing Pillow, numpy, scipy and requests …"
-  "$VENV_PY" -m pip install --quiet --disable-pip-version-check pillow numpy scipy requests
-  ok "Pillow, numpy, scipy and requests installed"
+  say "  installing Pillow, numpy and scipy …"
+  # exact versions, from studio/tools/requirements.txt
+  "$VENV_PY" -m pip install --quiet --disable-pip-version-check -r "$STUDIO/tools/requirements.txt"
+  ok "Pillow, numpy and scipy installed"
 fi
 
 # the local tools (removing music, word timings): installed by the studio's own script, when it is there
@@ -159,6 +168,8 @@ step "Settings (.env.local)"
 if [ -f .env.local ]; then ok ".env.local is there (left as it is)"; else
   cp .env.example .env.local; ok "made .env.local from .env.example (every line is a default; nothing to fill in)"
 fi
+# it can hold the reserve key and the remote-access key: readable by you only
+chmod 600 .env.local
 
 # ---- 6. Claude Code and Higgsfield
 step "Claude Code and Higgsfield"

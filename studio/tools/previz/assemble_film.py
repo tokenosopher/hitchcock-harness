@@ -97,7 +97,8 @@ for i, b in enumerate(BLOCKS):
     else:
         p = os.path.join(TMP, f'{i:02d}-{b}.mp4'); card(p, f'{b}: previz not built yet'); src = None
     d = dur(p); parts.append(p); index.append(dict(block=b, start=round(t, 2), end=round(t + d, 2), source=src)); t += d
-lst = os.path.join(TMP, 'list.txt'); open(lst, 'w').write(''.join(f"file '{p}'\n" for p in parts))
+lst = os.path.join(TMP, 'list.txt')   # a quote in a path is written '\'' (ffmpeg's concat list)
+open(lst, 'w').write(''.join("file '%s'\n" % p.replace("'", "'\\''") for p in parts))
 v = 1
 while os.path.exists(os.path.join(OUT, f'{PREFIX}-previz-film-v{v}.mp4')): v += 1
 film = os.path.join(OUT, f'{PREFIX}-previz-film-v{v}.mp4')

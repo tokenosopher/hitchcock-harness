@@ -14,6 +14,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { claudeConfig } from '../claude/config';
 import { pythonBin } from '../config';
+import { helperEnv } from '../env';
 import { natCmp, titleCase } from '../films/util';
 import { invalidateFilmState } from '../films/state';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
@@ -21,6 +22,7 @@ import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, loca
 import { filmTarget, type FilmTarget } from './film';
 import { appendTasteRow, candidatesCell, pickedWhere, type TasteRow } from './taste';
 import { isFile, nextVersion, Writer, type WriteRecord } from './writes';
+import { asTyped } from '../claude/typed';
 
 export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take';
 export const PICK_KINDS: PickKind[] = ['face', 'wardrobe', 'sheet', 'voice', 'location', 'prop', 'take'];
@@ -129,7 +131,7 @@ async function runVoicePick(film: FilmTarget, w: Writer, args: string[]): Promis
   await backupVoiceFiles(film, w);
   await w.ran(shown, film.show(path.join(film.dir, 'voices', 'cast.json')), 'pick.py writes cast.json and options.json "chosen"');
   if (w.dryRun) return { cmd: shown, out: '(dry run: not run)' };
-  const env: NodeJS.ProcessEnv = { ...process.env, FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' };
+  const env = helperEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
   const r = await run(py, [script, ...args], env, film.repo);
   if (r.code !== 0) throw new PickError(`pick.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
   return { cmd: shown, out: r.out };
@@ -168,7 +170,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   const w = new Writer(`pick ${kind} ${target} ${fromLibrary ? `library:${input.libraryId}` : input.candidate}`, ft.show, !!opts.dryRun);
   const info: FilmInfo = { slug: ft.slug, title: ft.title, dir: ft.dir };
   const date = today();
-  const where = input.from ?? 'the gate page';
+  const where = asTyped(input.from ?? 'the gate page');
   let candidate = input.candidate ?? '';
   let choice = target;
   let candidatesText = '–';
@@ -335,7 +337,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   ].map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`).join(' ');
   const whose = kind === 'take' ? `${target}` : `${target}'s ${kind === 'location' ? 'master' : kind}`;
   const message = [
-    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : candidate} for ${whose} on ${where}. Continue the flow from there.`,
+    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : asTyped(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
     '',
     `The harness already wrote: ${[...wrote, 'the taste.md row', ...(lib ? [`the library entry ${lib.kind}s/${lib.id}`] : [])].join('; ')}.`,
     `Yours: the review card for this pick, the row's "What it says" cell and the score in taste.md${next.length ? `; ${next.join('; ')}` : ''}.`,

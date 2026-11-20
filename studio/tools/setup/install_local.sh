@@ -29,7 +29,7 @@ trap 'rm -rf "$WORK"' EXIT
 ffmpeg -v error -y -f lavfi -i "sine=frequency=220:sample_rate=44100:duration=2" -ac 2 "$WORK/test.wav"
 
 say "  ...   Whisper (faster-whisper, model small.en): the first run downloads it, a few minutes"
-if "$UV" run --quiet --no-project --python 3.12 --with faster-whisper python "$TOOLS/stt/whisper_words.py" \
+if "$UV" run --quiet --no-project --python 3.12 --with faster-whisper==1.2.1 python "$TOOLS/stt/whisper_words.py" \
      "$WORK/test.wav" "$WORK/words.json" --model "${HARNESS_WHISPER_MODEL:-small.en}" >"$WORK/whisper.log" 2>&1; then
   say "  ok    Whisper is ready"
 else

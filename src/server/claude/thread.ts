@@ -3,12 +3,18 @@ import { setProgress } from '../actions/progress';
 import { pokeFilm } from '../films/watcher';
 import type { HarnessContext, ThreadEvent, ThreadInfo } from '../types';
 import { FILM_SLUG } from './config';
+import { isOwnUpload } from '../uploads';
 import { getAlma } from './process';
 import { mergeEvents, readHistory } from './transcript';
 
 export function validFilm(film: string): boolean {
   return FILM_SLUG.test(film);
 }
+
+export { asTyped } from './typed';
+
+/** The chats that belong to no film. */
+export const NON_FILM_THREADS = new Set(['library', 'settings']);
 
 export async function threadHistory(film: string): Promise<{ events: ThreadEvent[]; warnings: string[] }> {
   const alma = getAlma(film);
@@ -36,6 +42,10 @@ function isChip(v: unknown): v is { id: string; label: string; ref?: string } {
   return !!v && typeof v === 'object' && typeof c.id === 'string' && typeof c.label === 'string' && (c.ref === undefined || typeof c.ref === 'string');
 }
 
+/** An attached file's chip ("upload:…", whose ref Alma is told to open) is kept only when its file really is in this
+ *  thread's uploads folder (harness/uploads/<film>/); every other chip as it came. */
+const keptChip = (film: string) => (x: { id: string; ref?: string }): boolean => !x.id.startsWith('upload:') || (!!x.ref && isOwnUpload(film, x.ref));
+
 /** Checks a POST body's context against HarnessContext; drops it when malformed rather than failing the message. */
 export function parseContext(film: string, v: unknown): HarnessContext | undefined {
   if (!v || typeof v !== 'object') return undefined;
@@ -44,7 +54,7 @@ export function parseContext(film: string, v: unknown): HarnessContext | undefin
     film: typeof c.film === 'string' && c.film ? c.film : film,
     page: typeof c.page === 'string' ? c.page : '',
     pinned: typeof c.pinned === 'string' ? c.pinned : '',
-    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}) })) : [],
+    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).filter(keptChip(film)).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}) })) : [],
     ...(typeof c.playhead === 'string' && c.playhead ? { playhead: c.playhead } : {}),
   };
 }

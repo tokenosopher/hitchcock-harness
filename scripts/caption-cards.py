@@ -20,6 +20,11 @@ FALLBACKS = ['/Library/Fonts/Geist-Medium.ttf', os.path.expanduser('~/Library/Fo
              '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
 
 
+def listed(p):
+    """A line of an ffmpeg concat list: the path in single quotes, a quote inside it written '\\''."""
+    return "file '%s'" % p.replace("'", "'\\''")
+
+
 def find_font(roots):
     for r in roots:
         for sub in (('assets', 'brand'), ('brand',)):
@@ -81,12 +86,12 @@ def main():
         if b <= a:
             continue
         if a > t:
-            lst += ["file '%s'" % blank, 'duration %.4f' % (a - t)]
+            lst += [listed(blank), 'duration %.4f' % (a - t)]
         p = os.path.join(out, 'c%03d.png' % n)
         card(wrap([l for l in c['lines'] if l.strip()]), p)
-        lst += ["file '%s'" % p, 'duration %.4f' % (b - a)]
+        lst += [listed(p), 'duration %.4f' % (b - a)]
         t = b
-    lst += ["file '%s'" % blank, 'duration %.4f' % max(0.05, float(job['duration']) - t), "file '%s'" % blank]
+    lst += [listed(blank), 'duration %.4f' % max(0.05, float(job['duration']) - t), listed(blank)]
     lp = os.path.join(out, 'list.txt')
     open(lp, 'w').write('\n'.join(lst) + '\n')
     print(lp)

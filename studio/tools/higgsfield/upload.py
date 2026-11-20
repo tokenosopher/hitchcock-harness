@@ -160,7 +160,18 @@ def cmd_plan(A):
     sys.exit(1 if missing else 0)
 
 
+def in_film(film, rel):
+    """The full path of `rel` when it is a plain relative path inside the film (no "..", not absolute, links resolved);
+    None otherwise."""
+    if not isinstance(rel, str) or not rel or os.path.isabs(rel) or '..' in re.split(r'[\\/]', rel):
+        return None
+    p = os.path.join(film, rel)
+    return p if os.path.realpath(p).startswith(os.path.realpath(film) + os.sep) else None
+
+
 def put_one(path, ct, url):
+    if not isinstance(url, str) or re.search(r'\s', url):
+        return 'refused'                        # a space or a line break would end the url line of curl's config
     cfg = 'url = "' + url.replace('\\', '\\\\').replace('"', '\\"') + '"\n'
     code = '000'
     for _ in range(3):
@@ -202,7 +213,11 @@ def cmd_put(A):
             sys.exit(f'slot {i + 1} is {s["content_type"]} but {it["file"]} is {it["content_type"]}: the order differs from the plan; nothing uploaded')
         if (s.get('method') or 'PUT').upper() != 'PUT':
             sys.exit(f'slot {i + 1} asks for {s.get("method")}, not PUT; nothing uploaded')
-    reg_p = os.path.join(film, pend.get('registry') or os.path.relpath(registry_path(film), film))
+        if not isinstance(s['upload_url'], str) or re.search(r'\s', s['upload_url']):
+            sys.exit(f'slot {i + 1}\'s upload_url has a space or a line break; nothing uploaded')
+    reg_p = in_film(film, pend.get('registry') or os.path.relpath(registry_path(film), film))
+    if not reg_p:
+        sys.exit(f'{os.path.relpath(pend_p, film)} names a registry outside the film folder; nothing uploaded')
     reg = load(reg_p, {})
     done, failed, ok_files = {}, 0, set()
     today = datetime.date.today().isoformat()
@@ -215,7 +230,7 @@ def cmd_put(A):
         h, size = sha1(p), os.path.getsize(p)
         code = put_one(p, it['content_type'], s['upload_url'])
         if code not in ('200', '201', '204'):
-            print(f'FAILED {it["file"]}: HTTP {code}')
+            print(f'FAILED {it["file"]}: ' + ('its upload_url has a space or a line break' if code == 'refused' else f'HTTP {code}'))
             failed += 1
             continue
         t = it['content_type'].split('/')[0]

@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { TaskCard } from '../types';
 import { projectSlug } from './config';
+import { redact } from './redact';
 import { oneLine, resultSummary, resultText, toolSummary } from './summarize';
 
 export interface AgentMeta {
@@ -276,7 +277,7 @@ export class TaskTracker {
     c.state = isError ? 'failed' : 'done';
     c.endedAt = at;
     const body = Array.isArray(r.content) ? resultText(r.content) : text;
-    c.result = { text: body.trim() };
+    c.result = { text: redact(body.trim()) };
     c.liveLine = isError ? oneLine(body || 'failed') : doneLine(c);
     return this.snapshot(toolUseId);
   }
@@ -302,7 +303,7 @@ export class TaskTracker {
     c.state = status === 'completed' ? 'done' : 'failed';
     c.endedAt = at;
     c.liveLine = status === 'stopped' || status === 'killed' ? 'stopped' : status === 'completed' ? doneLine(c) : oneLine(summary ?? 'failed');
-    if (resultBody || summary) c.result = { text: (resultBody ?? summary ?? '').trim() };
+    if (resultBody || summary) c.result = { text: redact((resultBody ?? summary ?? '').trim()) };
     return this.snapshot(id);
   }
 

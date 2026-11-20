@@ -16,7 +16,7 @@ import { connection } from 'next/server';
 import { isMock, mockCut } from '@/fixtures/mock';
 import { errorResponse, NO_STORE, routeFilm } from '@/server/edit/http';
 import { afterNewVersion, auto480p, renderStates } from '@/server/edit/render';
-import { CutError, isVersion, readVersion, readVersions, sourceSeconds } from '@/server/edit/timeline';
+import { CutError, isVersion, readVersion, readVersions, sizeArg, sourceSeconds } from '@/server/edit/timeline';
 import { writePageVersion } from '@/server/edit/alma-drop';
 import { diskStore, mockVersions, peekWorking, readNames, type CutStore } from '@/server/edit/working';
 import { storeFor } from '@/server/edit/working-http';
@@ -117,8 +117,8 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
       tracks: body.tracks as Timeline['tracks'],
       markers: Array.isArray(body.markers) ? (body.markers as Timeline['markers']) : undefined,
       fps: typeof body.fps === 'number' ? (body.fps as Timeline['fps']) : undefined,
-      width: typeof body.width === 'number' ? body.width : undefined,
-      height: typeof body.height === 'number' ? body.height : undefined,
+      width: sizeArg(body.width),
+      height: sizeArg(body.height),
     });
     const render = await afterNewVersion(film.slug, t.version, 'page');
     return Response.json({ film: film.slug, version: t.version, timeline: t, render }, { status: 201, headers: NO_STORE });

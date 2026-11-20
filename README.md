@@ -12,7 +12,7 @@ Hitchcock Harness takes him at his word: you get the film right on paper, and th
 
 See films made with it: [youtube.com/@Zero_Brainy/shorts](https://www.youtube.com/@Zero_Brainy/shorts)
 
-Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below): both sign-ins stay with Claude Code.
+Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below) or a remote-access key for reaching the app from another device: both sign-ins stay with Claude Code.
 
 New here? After installing, press **New film**, tell your idea, and ask Alma to help you set up and make your first film: she guides you through each step in the app. Or read `GUIDE.md`: your first film, step by step.
 
@@ -95,15 +95,16 @@ Every step of a film opens with a few words from Alma: what you do there and why
 
 ## A word on safety
 
-Alma runs Claude Code with its permission prompts turned off, because nobody sits at a terminal to answer them. She works inside the app's `studio` folder. She is told never to delete anything without your yes on that exact name, never to overwrite a picture, a video or a version of the cut, and never to spend outside the rules above. If you want her to ask before anything but file edits, set `HARNESS_ALMA_PERMISSIONS=ask` in `.env.local` and restart the app. The app only answers on this Mac.
+Alma runs Claude Code with its permission prompts turned off, because nobody sits at a terminal to answer them. She works inside the app's `studio` folder. She is told never to delete anything without your yes on that exact name, never to overwrite a picture, a video or a version of the cut, and never to spend outside the rules above. If you would rather limit her to your own Claude Code allow rules, set `HARNESS_ALMA_PERMISSIONS=ask` in `.env.local` and restart the app: she is never asked, and anything outside those rules is refused, but she can still edit files, the studio's tools included, which the app and she run later. The app only answers on this Mac.
 
 These are instructions she follows, not locks. To lower the risk:
 
-- Set `HARNESS_ALMA_PERMISSIONS=ask`, as above, if you would rather approve her commands yourself.
+- Set `HARNESS_ALMA_PERMISSIONS=ask`, as above, if you would rather she ran only the commands your own Claude Code allow rules let through.
 - Give your first film a small budget on the New film form, and look at the film's `spend.md` as it grows.
 - Back up `studio/assets/` and anything else on the Mac you cannot afford to lose.
 - Keep keys, passwords and private files out of the app's folder.
-- Do not put the app on the internet: it is built to answer on this Mac only.
+- Only open films and libraries you made or trust: a film folder or a library from someone else can carry code that runs on your Mac.
+- Do not put the app on the internet. To reach it from your phone, run a tunnel on this Mac and set a long remote-access key (`HARNESS_TUNNEL_TOKEN`, see `.env.example`): anyone with the key and the tunnel's address can use the app, Alma included.
 
 ## Where things are
 

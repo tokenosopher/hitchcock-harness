@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { claudeConfig } from './config';
+import { helperEnv } from '../env';
 
 export interface AlmaProcRecord {
   pid: number;
@@ -39,7 +40,7 @@ export const bootId: string = (g.__harnessBoot ??= randomUUID());
 export const procOps = {
   kill: (pid: number, sig: NodeJS.Signals | 0): void => { process.kill(pid, sig); },
   ps: (pid: number): Promise<{ ppid: number; startedAt: string; command: string } | null> => new Promise((resolve) => {
-    execFile('/bin/ps', ['-ww', '-o', 'ppid=,lstart=,command=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' }, timeout: 5000, maxBuffer: 4 << 20 }, (err, out) => {
+    execFile('/bin/ps', ['-ww', '-o', 'ppid=,lstart=,command=', '-p', String(pid)], { env: helperEnv({ LC_ALL: 'C' }), timeout: 5000, maxBuffer: 4 << 20 }, (err, out) => {
       const line = err ? '' : out.split('\n').find((l) => l.trim()) ?? '';
       const m = /^\s*(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.*)$/.exec(line);
       resolve(m ? { ppid: Number(m[1]), startedAt: m[2].replace(/\s+/g, ' '), command: m[3] } : null);
