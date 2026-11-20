@@ -14,6 +14,16 @@ See films made with it: [youtube.com/@Zero_Brainy/shorts](https://www.youtube.co
 
 Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below): both sign-ins stay with Claude Code.
 
+> [!WARNING]
+> **Use at your own risk.** Hitchcock Harness is an early project, and this version has been through one short test film. Expect sharp edges.
+>
+> - Alma is an AI agent that runs on your Mac with Claude Code's permission prompts turned off. She can read and change files and run commands as you. She is told to stay inside the app's `studio` folder; that is an instruction, not a wall.
+> - She spends real money: Higgsfield credits on your account, and your Claude plan's usage. The budget and the go before the videos are rules she follows, not a lock.
+> - Like any AI agent she can be wrong, and a bad prompt or something she reads along the way can lead her to do something you did not want.
+> - The software comes as it is, with no warranty (see `LICENSE`). What it does on your Mac and your accounts is your responsibility.
+>
+> If you are not comfortable with that, do not run it. If you are: keep backups, keep keys and private files out of the app's folder, start with a small budget, and read [A word on safety](#a-word-on-safety).
+
 New here? After installing, press **New film**, tell your idea, and ask Alma to help you set up and make your first film: she guides you through each step in the app. Or read `GUIDE.md`: your first film, step by step.
 
 ## What you need
@@ -96,6 +106,14 @@ Every step of a film opens with a few words from Alma: what you do there and why
 ## A word on safety
 
 Alma runs Claude Code with its permission prompts turned off, because nobody sits at a terminal to answer them. She works inside the app's `studio` folder. She is told never to delete anything without your yes on that exact name, never to overwrite a picture, a video or a version of the cut, and never to spend outside the rules above. If you want her to ask before anything but file edits, set `HARNESS_ALMA_PERMISSIONS=ask` in `.env.local` and restart the app. The app only answers on this Mac.
+
+These are instructions she follows, not locks. To lower the risk:
+
+- Set `HARNESS_ALMA_PERMISSIONS=ask`, as above, if you would rather approve her commands yourself.
+- Give your first film a small budget on the New film form, and look at the film's `spend.md` as it grows.
+- Back up `studio/assets/` and anything else on the Mac you cannot afford to lose.
+- Keep keys, passwords and private files out of the app's folder.
+- Do not put the app on the internet: it is built to answer on this Mac only.
 
 ## Where things are
 
