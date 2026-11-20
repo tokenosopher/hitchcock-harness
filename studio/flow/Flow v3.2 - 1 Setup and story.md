@@ -33,11 +33,11 @@ status: live
    - Take every rule from this flow. A memory note is a pointer; where one says otherwise, this flow holds.
 3. Make the film folder and its files with one command.
    - **GATE:** Ask the user for the film's public title only, and name the folder and the short code you will make from the title. The title goes into `brief.md`, names the delivery folder and the Higgsfield project, and the release slug is made from it ([[Flow v3.2 - 12 Release]]). Wait for the title.
-   - Never ask about the setup defaults; take them as they are unless the user said otherwise at the start: 9:16; voices from Higgsfield (preset voices, voices made from the face, variants of a preset); video elements 1920x1080, 5 s; 1080p by Seedance 2.5 finalize; a budget of 5,000 credits.
+   - Never ask about the setup defaults; take them as they are unless the user said otherwise at the start: 9:16; voices from Higgsfield (preset voices, voices made from the face, variants of a preset); video elements 1920x1080, 5 s; 1080p by Seedance 2.5 finalize; a budget of 2,000 credits.
    - Run `$PY $T/film/new_film.py $FILM --title "<Public Title>" --code <ABC> --ratio 9:16|16:9 [--budget-credits N] [--date YYYY-MM-DD]`.
      - `--code`: 2 to 6 capitals or digits, the prefix of the film's element and upload names.
      - `--ratio`: 9:16, or 16:9 only when the user said so.
-     - `--budget-credits`: 5000, or the budget the user set. Always pass it.
+     - `--budget-credits`: 2000, or the budget the user set. Always pass it.
      - `--date`: the day the film starts, when that is not today; it dates the delivery folder.
    - It never overwrites a file, makes no delivery folder, calls no service, adds the folder to `films.txt` (the list of films the app shows, at the studio root) and prints the next commands. It makes every top-level folder and file below, the empty `story/` and `refs/research/` included, except `script.md` (step 20), `refs/README.md` and `refs/characters/SOURCES.md` (steps 14 to 16) and `video/` (the finish stage). The folders inside them come with the stages that fill them:
    ```
@@ -200,7 +200,7 @@ The flow already carries what it takes from each; read a source only to close a 
 
 ## Checks
 - `$FILM` resolves under `assets/films/` in the studio folder.
-- `new_film.py` lists the folders and files under `made:`, and nothing under `kept as they were` for a new film. `brief.md` holds the user's title, the code, the ratio (9:16 unless the user said otherwise) and the budget (5000 unless the user set another); `films.txt` lists the folder.
+- `new_film.py` lists the folders and files under `made:`, and nothing under `kept as they were` for a new film. `brief.md` holds the user's title, the code, the ratio (9:16 unless the user said otherwise) and the budget (2000 unless the user set another); `films.txt` lists the folder.
 - `deliver.py --check` prints the delivery folder's path and `answers`.
 - Every file a new card names exists under the film folder and plays or opens on its page in the app; every delivered copy compares identical.
 - `higgsfield.json` holds the project id, the workspace id and a folder id for the cast (`cast`), locations, prompts and every generation. `elements.json` holds elements only.

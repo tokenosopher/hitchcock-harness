@@ -24,8 +24,8 @@ Scale (prices of November 2026):
   - 180 s of drafts: 540 credits;
   - the stills, voices, lines, effects and a score: about 275 (four face rounds about 10, looks, sheets and details about 85, three locations of six candidates about 75, their views about 60, the voices and lines under 20, a 3-minute score about 26);
   - the 1080p, by finalizing every draft the cut uses: 16 credits a second, about 2,880 for 180 s.
-- The default budget of 5,000 credits leaves about 900 for second takes and redos: a 10 s redo is about 190 credits drafted and finalized, so about four or five of them.
-- Say early when a film will pass the budget. At the script lock, work out the whole film: every generation's seconds at 19 credits (draft and finalize), 95 for each video element, about 300 for the stills, voices and score. When that passes 5,000 (or the budget the user set), say so at once. Say it again at "Go for the video?" with what is spent so far, and before any second take or redo that would take the film past it.
+- The default budget of 2,000 credits covers a film of about a minute at 1080p with two speaking characters (60 s at 19 credits, 95 for each video element, about 300 for the stills, voices and score: about 1,630) and leaves about 370 for second takes and redos: a 10 s redo is about 190 credits drafted and finalized, so about two of them. A longer film needs a larger budget: say so at the start.
+- Say early when a film will pass the budget. At the script lock, work out the whole film: every generation's seconds at 19 credits (draft and finalize), 95 for each video element, about 300 for the stills, voices and score. When that passes 2,000 (or the budget the user set), say so at once. Say it again at "Go for the video?" with what is spent so far, and before any second take or redo that would take the film past it.
 
 ## Which service does what
 
@@ -33,7 +33,7 @@ Scale (prices of November 2026):
 - Everything else runs on the Mac and is free: the previz in Blender, the scripts in `tools/` with `.venv/bin/python`, ffmpeg, Demucs (removing music, stems), Whisper (transcription), and the Hitchcock Harness, which cuts, mixes and renders.
 - GPT Image 2.5 makes first versions only: a new image from text, with or without references. Never use it to edit an existing still: every edit runs on Seedream 5.5 (the rule: [[Flow v3.2 - 0 Standing rules]]).
 
-Setup defaults, never asked; the user says at the start if anything differs: 9:16; voices from Higgsfield (preset voices, voices made from the face, variants of a preset); video elements 1920x1080, 5 s; 1080p by Seedance 2.5 finalize; a budget of 5,000 credits. The title is still asked ([[Flow v3.2 - 1 Setup and story]]).
+Setup defaults, never asked; the user says at the start if anything differs: 9:16; voices from Higgsfield (preset voices, voices made from the face, variants of a preset); video elements 1920x1080, 5 s; 1080p by Seedance 2.5 finalize; a budget of 2,000 credits. The title is still asked ([[Flow v3.2 - 1 Setup and story]]).
 
 | Job | Route |
 |---|---|

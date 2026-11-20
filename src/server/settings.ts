@@ -204,7 +204,7 @@ export async function readSettings(): Promise<SettingsInfo> {
       { label: 'Voices', value: 'Higgsfield voices' },
       { label: 'Video elements', value: '1920×1080 side-by-side split, 5 s, a hard cut each second' },
       { label: '1080p', value: 'Seedance 2.5, per take, on your word' },
-      { label: 'Budget', value: 'about 5000 credits' },
+      { label: 'Budget', value: 'about 2000 credits' },
       // the 480p of the cut (14 Nov, ASKS 44): made when asked for, unless HARNESS_AUTO_480P=1 in .env.local
       { label: '480p of the cut', value: cfg.auto480p ? 'rendered after every change (HARNESS_AUTO_480P=1)' : 'rendered when asked for (HARNESS_AUTO_480P=1 renders it after every change)' },
     ],

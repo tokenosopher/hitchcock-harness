@@ -7,7 +7,7 @@ Started <YYYY-MM-DD>. Film Flow v3.2: Seedance 2.5 video built from character vi
 - Title: <Film>
 - Code: <CODE> (Higgsfield element and upload names start with `<CODE>-`)
 - Aspect ratio: 9:16
-- Budget: 5000 credits (the setup default)
+- Budget: 2000 credits (the setup default)
 - Delivery folder: `assets/final-cuts/<YYYY-MM-DD> <Film>`
 
 **Premise:** <one sentence a stranger gets: who, what they try, the stake. The twist stays out.>
@@ -19,7 +19,7 @@ The setup defaults hold unless the user said otherwise at the start:
 - **Drafts: one generation per scene, 480p with the draft flag, no batches.** A second take only after the user's notes. 1080p only on the user's say-so for that action.
 - **Video elements: 1920x1080, 5 s**, one per speaking character; extras go into scenes as their group picture, cropped to each scene.
 - **1080p by Seedance 2.5 finalize** of the drafts the cut uses.
-- **Budget: 5000 credits** <or the user's figure, in their words>.
+- **Budget: 2000 credits** <or the user's figure, in their words>.
 - <Every further decision, one line each, in the user's words where they gave them.>
 
 ## Decisions, <YYYY-MM-DD> (<what this round was about>)

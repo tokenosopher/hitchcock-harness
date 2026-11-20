@@ -76,7 +76,7 @@ Then open **http://localhost:8800** in your browser. Leave the Terminal window o
 ## Make your first film
 
 1. Press **New film** at the top left.
-2. Give it a title and paste your idea in your own words. The rest of the form (9:16, a budget of 5,000 credits, Higgsfield voices, 1080p by Seedance 2.5) is already filled in; change only what you want different.
+2. Give it a title and paste your idea in your own words. The rest of the form (9:16, a budget of 2,000 credits, Higgsfield voices, 1080p by Seedance 2.5) is already filled in; change only what you want different.
 3. Press **Start the film**. Alma makes the film's folder and writes a first story. Read it on the Story page, change it yourself or ask her to, and tell her when it is settled. Then she writes the script.
 4. From then on, Alma puts every choice in front of you as a card under **Waiting for you**: pick a face, a voice, a place, say yes to a script. Answer with the buttons, or just write to her.
 
@@ -84,7 +84,7 @@ Every step of a film opens with a few words from Alma: what you do there and why
 
 ## How spending works
 
-- Each new film starts with a budget of **5,000 Higgsfield credits** (change it on the New film form).
+- Each new film starts with a budget of **2,000 Higgsfield credits** (change it on the New film form).
 - Alma quotes in **Higgsfield credits** before she spends.
 - Once you lock the script, she makes the first round of pictures and voices (faces, clothing, places, voices, the rough previews of each scene) without asking again, and tells you each round's size and cost.
 - **There is one hard stop before the videos.** When every character, place and scene prompt is ready, she stops and asks "Go for the video?" with the total. You review every scene, its prompt and what goes into it on the **Go for the video** page before you say go.

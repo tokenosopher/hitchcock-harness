@@ -16,7 +16,7 @@ export interface NewFilmSetup {
 /** The setup defaults the user never gets asked about: only what differs is changed, in place. */
 export const SETUP_DEFAULTS: Omit<NewFilmSetup, 'code'> = {
   ratio: '9:16',
-  budgetCredits: 5000,
+  budgetCredits: 2000,
   voices: 'Higgsfield voices',
   elements: '1920×1080, 5 s',
   upscale: 'Seedance 2.5',

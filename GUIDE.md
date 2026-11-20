@@ -20,7 +20,7 @@ No button in the app spends credits by itself. A button either records your choi
 
 ## The film, step by step
 
-1. **Start.** Press **New film**. Give it a title and tell the idea the way you would tell a friend: a few lines, a whole story or a finished script all work. Leave the setup line as it is unless you want something else (upright 9:16 picture, a budget of 5,000 credits). Press **Start the film**.
+1. **Start.** Press **New film**. Give it a title and tell the idea the way you would tell a friend: a few lines, a whole story or a finished script all work. Leave the setup line as it is unless you want something else (upright 9:16 picture, a budget of 2,000 credits). Press **Start the film**.
 2. **The story.** Alma writes a short story first, not a script. Read it on the Story page. Change it yourself, or tell Alma what to change; every change is a new version, the old ones stay. When the story is right, settle it with the button on the page.
 3. **The script.** Alma turns the story into a script with scenes and lines. Read it, change it, then press **Lock**. Locking is your go for the first round of pictures and voices: faces, clothes, voices, the places. That round is the cheap part (a round of twenty faces costs about 2.5 credits) and Alma says each round's size and cost in one line as it starts.
 4. **Your picks.** The options arrive as cards in **Waiting for you**: about twenty faces for each character, then their clothes, a few voices to listen to, a few pictures of each place. Click the ones you want. When you are through, press **Done picking · send to Alma**. Before each round Alma says which one she thinks you will pick; she keeps score in `studio/taste.md` and gets better at guessing your taste.
@@ -42,7 +42,7 @@ No button in the app spends credits by itself. A button either records your choi
 ## Money
 
 - Everything paid runs on your Higgsfield credits. Claude runs on your Claude plan.
-- A three-minute film comes to about 4,100 credits from the first face to the 1080p master. A shorter film costs less. The budget you set at the start (5,000 unless you change it) is the line Alma warns you about before crossing.
+- A one-minute film comes to about 1,600 credits from the first face to the 1080p master, and a three-minute film to about 4,100. The budget you set at the start (2,000 unless you change it) is the line Alma warns you about before crossing; raise it on the New film form for a longer film.
 - Alma reads your real balance and the real price before every quote. The figures in this guide are from November 2026 and will drift.
 - There is one hard stop before the videos. Every later paid job (a redo, 1080p, music) has its own price and go. Small things (a sound effect, a spoken line) cost under a credit and are made without asking, then listed.
 - Every paid job is one row in the film's `spend.md`. Ask "how much have we spent?" at any point.

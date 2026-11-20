@@ -6,14 +6,14 @@ films.txt. Flow v3.2 - 1 Setup and story, done in one command. Never overwrites 
                                             [--budget-credits N] [--date YYYY-MM-DD]
 
 --code is the film's short code (2 to 6 capitals or digits, e.g. LHK): the prefix of its Higgsfield element and upload
-names. --ratio defaults to 9:16 and --budget-credits to 5000 (the setup defaults).
+names. --ratio defaults to 9:16 and --budget-credits to 2000 (the setup defaults).
 --date is the day the film starts (default today); it dates the delivery folder assets/final-cuts/<date> <Title>."""
 import argparse, datetime, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
 STUDIO = os.path.dirname(TOOLS)
-DEFAULT_BUDGET = 5000
+DEFAULT_BUDGET = 2000
 
 # The tree of Flow v3.2 - 1 Setup and story, step 3, with generations/ in place of blocks/ (script.md, refs/README.md,
 # refs/characters/SOURCES.md and video/ come with the steps that fill them).
