@@ -15,7 +15,7 @@ See films made with it: [youtube.com/@Zero_Brainy/shorts](https://www.youtube.co
 Hitchcock Harness is an app on your Mac for making short AI films. You talk to an AI assistant called Alma in a chat that runs the whole film: you give her an idea, she writes the story and the script with you, makes the characters, voices and places on Higgsfield, lays out every scene, and asks you before the videos are made. The app shows the film as it grows (story, characters, locations, scenes, the edit, the release) and lets you pick, say yes or give a go with buttons. Alma is Claude Code running on your own Claude login; the pictures, voices and videos are made on your own Higgsfield account. Nothing in the app holds a key or a password, unless you add the optional reserve key (below): both sign-ins stay with Claude Code.
 
 > [!WARNING]
-> **Use at your own risk.** Hitchcock Harness is an early project, and this version has been through one short test film. Expect sharp edges.
+> **Use at your own risk.** Hitchcock Harness is an early project. Expect sharp edges.
 >
 > - Alma is an AI agent that runs on your Mac with Claude Code's permission prompts turned off. She can read and change files and run commands as you. She is told to stay inside the app's `studio` folder; that is an instruction, not a wall.
 > - She spends real money: Higgsfield credits on your account, and your Claude plan's usage. The budget and the go before the videos are rules she follows, not a lock.
