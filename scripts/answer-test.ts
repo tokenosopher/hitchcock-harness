@@ -42,7 +42,7 @@ const CARDS = {
 const TASTE = '# Taste\n\n## The record\n\n| Date | Film | Choice | The candidates | The pick | The user\'s words | Predicted | Right? | What it says |\n|---|---|---|---|---|---|---|---|---|\n| 2026-11-01 | Old | x | a, b (2) | **a** | – | a | yes | – |\n\n## The score\n\n1 of 1.\n';
 
 async function main(): Promise<void> {
-  if (root.startsWith('/path/to/hitchcock-harness/studio') || root.startsWith('/Volumes/')) throw new Error('refusing: the test root must be a scratch folder');
+  if (root.startsWith(path.resolve('studio'))) throw new Error('refusing: the test root must be a scratch folder');
   await fs.mkdir(root, { recursive: true });
   if ((await fs.readdir(root)).length) throw new Error(`refusing: ${root} is not empty`);
   const repo = process.env.HARNESS_FILM_REPO!;

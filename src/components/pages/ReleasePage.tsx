@@ -260,7 +260,7 @@ function KitRelease({ r }: { r: ReleaseInfo }) {
         {/* ---- the delivery strip */}
         <Card>
           {r.delivery.length === 0 ? (
-            <p className="m-0 px-4 py-3 text-[13px] text-sub">No final-cuts folder for this film yet. Delivery copies the FINAL files into <span className="font-mono text-[12px]">assets/final-cuts/&lt;date&gt; {state.film.title}/Social kit/</span> (Flow v3.2 - 12).</p>
+            <p className="m-0 px-4 py-3 text-[13px] text-sub">No final-cuts folder for this film yet. Delivery copies the FINAL files into <span className="font-mono text-[12px]">assets/final-cuts/&lt;date&gt; {state.film.title}/Social kit/</span> (Flow v3.3 - 12).</p>
           ) : r.delivery.map((d) => {
             const shown = d.kit?.shown ?? d.shown;
             const n = d.kit?.files.length ?? d.files.length;

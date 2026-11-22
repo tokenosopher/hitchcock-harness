@@ -86,7 +86,7 @@ export function LocationsPage() {
         </nav>
 
         <PageBody>
-          {!l ? <span className="text-[13px] text-sub">No locations in locations/ yet.</span> : (
+          {!l ? <><StepIntro step="loc" /><span className="text-[13px] text-sub">No locations in locations/ yet.</span></> : (
             <>
               <StageTitle kicker="Stage 4 · Locations and props" title={<><span className="font-mono text-[18px] font-normal text-sub">{l.id}</span> {l.name}</>}
                 sub={!r ? (lMaking.length ? 'The looks of the place are being painted. They appear here as they land, for your pick of the master.' : 'No style images yet.') : st === 'picked' && r.pick

@@ -1,6 +1,6 @@
 // After the takes (stages 9 to 12), by file name only: cut/ (the edits and drafts), the 1080 masters
 // (cut/*1080*, video/1080/), the caption files (subtitles/ and social/), the finished films (cut/ and social/,
-// named "final" or "as-posted"), social/kit.md (the films before Film Flow v3.2) and social/release.json in brief (the
+// named "final" or "as-posted"), social/kit.md (older films) and social/release.json in brief (the
 // release file: there, and the final it names). The flow board reads its Edit, Finish, Sound and Release
 // nodes from it. Pieces made for the cut that are not takes (a title card, a graphic) are read from cut/cards/
 // and edits/, one folder deep.

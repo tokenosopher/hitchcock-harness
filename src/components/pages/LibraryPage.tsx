@@ -256,7 +256,7 @@ export function LibraryPage() {
                     {it.character?.role && <span className="line-clamp-2 text-[12px] leading-[1.4] text-ink-3">{it.character.role}</span>}
                     <span className="mt-0.5 flex flex-wrap gap-1">
                       {tags.map(([r, label]) => {
-                        const on = r === 'voice' ? !!it.voice?.voiceId && it.voice.voiceIdKind !== 'deleted voice' : has(r);
+                        const on = r === 'voice' ? has('preview') || (!!it.voice?.voiceId && it.voice.voiceIdKind === 'saved voice') : has(r);
                         return <span key={r} className={cn('rounded-[6px] border px-1.5 text-[11px]', on ? 'border-edge text-[#D4D4D8]' : 'border-dashed border-edge-strong text-mute')}>{label}</span>;
                       })}
                     </span>

@@ -86,7 +86,7 @@ export interface LocationRef {
   master?: { path?: string; picked?: boolean; measured?: boolean };
   views?: { camera: string; path: string; measured?: boolean }[];
   /** The view cameras that have a colour plate (previz/<LID>/plates-colour/cam<X>-colour.png, the plan's TOP left out),
-   *  lower case ("master", "front", "back"): each wants a painted view, measured against it (Flow v3.2, 4, steps 8 to
+   *  lower case ("master", "front", "back"): each wants a painted view, measured against it (Flow v3.3, 4, steps 8 to
    *  11). Undefined when the film keeps no colour plates. */
   plates?: string[];
   props?: PropRef[];
@@ -322,7 +322,7 @@ export interface PostInfo {
   /** Pieces made for the cut that are not takes: title cards, graphics, inserts. Videos in cut/cards/ and edits/ (one folder deep) (11 Nov). */
   pieces?: string[];
   /** The film's release file, social/release.json (Release, 14 Nov), in brief: there, and the master named as the final
-   *  when one is (Film Flow v3.2: the release starts from it; no social/kit.md is made). */
+   *  when one is (Film Flow v3.3: the release starts from it; no social/kit.md is made). */
   release?: { path: string; final?: { path: string; version?: string } };
   /** When each cut and finished film was last written (ISO), so a page can list them newest first (11 Nov). */
   written?: Record<string, string>;
@@ -440,7 +440,7 @@ export interface SoundGroup { key: string; title: string; note: string; folder: 
 /** How many sound files each folder group holds; the keys are SoundGroup keys. */
 export interface SoundSummary {
   counts: Record<string, number>;
-  /** The user's yes on a master at the Sound page (Film Flow v3.2, 11 Sound and music, the gate after the master): the
+  /** The user's yes on a master at the Sound page (Film Flow v3.3, 11 Sound and music, the gate after the master): the
    *  newest answered yes card placed at `sound` whose title names a master. The finished sound is in the app's master. */
   masterYes?: { key: string; id?: string; title: string };
 }

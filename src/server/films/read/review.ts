@@ -75,7 +75,7 @@ export async function readReview(ctx: FilmCtx, pickupFolders: string[]): Promise
     path: rel,
     title: textOf(data.title) || undefined,
     subtitle: textOf(data.subtitle) || undefined,
-    deliveryFolder: textOf(data.delivery_folder) || textOf(data.icloud_folder) || undefined,
+    deliveryFolder: textOf(data.delivery_folder) || undefined,
     sections: sections.length,
     misses: out,
   };

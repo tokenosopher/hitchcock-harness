@@ -20,7 +20,7 @@ let bad = 0;
 const check = (ok: boolean, what: string): void => { if (!ok) bad++; console.log(`${ok ? '✓' : '✗'} ${what}`); };
 
 async function main(): Promise<void> {
-  if (root.startsWith('/path/to/hitchcock-harness/studio') || root.startsWith('/Volumes/')) throw new Error('refusing: the test root must be a scratch folder');
+  if (root.startsWith(path.resolve('studio'))) throw new Error('refusing: the test root must be a scratch folder');
   await fs.mkdir(root, { recursive: true });
   if ((await fs.readdir(root)).length) throw new Error(`refusing: ${root} is not empty`);
   const dir = path.join(process.env.HARNESS_FILM_REPO!, 'assets', 'films', FILM);

@@ -191,7 +191,7 @@ export async function startFilm(input: NewFilmInput, opts: { repo?: string } = {
     const message =
       `<harness-action kind="new-film" slug="${slug}"/> ` +
       defuse(
-      `A new film: ${input.title}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film); the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
+      `A new film: ${input.title}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film), which loads flow/Film Flow v3.3.md, then Flow v3.3 - 0 Standing rules and Flow v3.3 - 1 Setup and story; the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
       `Setup defaults are taken at face value: ${setupLine(setup)}. The idea, in the user's words:\n\n` +
       `${input.idea || '(the user gave no idea text yet)'}\n\n${output}`);
     if (input.model) await setAlmaModel(slug, input.model);

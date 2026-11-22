@@ -43,7 +43,7 @@ function soundOf(card: FeedCard | undefined): string | undefined {
   return undefined;
 }
 
-/** The user's yes on a master at the Sound page (Film Flow v3.2, 11 Sound and music: the master goes on a card on the
+/** The user's yes on a master at the Sound page (Film Flow v3.3, 11 Sound and music: the master goes on a card on the
  *  Sound page and waits for the user's yes, its title naming the version). The newest answered yes card that says
  *  where it belongs (`"at": "sound"`) and names a master in its title; a "no" is not a yes. */
 export function masterYesOf(cards: FeedCard[]): { key: string; id?: string; title: string } | undefined {

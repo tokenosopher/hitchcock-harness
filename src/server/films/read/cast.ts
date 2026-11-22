@@ -311,10 +311,11 @@ export async function readCharacters(ctx: FilmCtx, script: ScriptInfo | undefine
     const wardPick = byKind.wardrobe.length ? applyTaste(byKind.wardrobe, rowsOf('wardrobe'), wardPickFile) : undefined;
 
     // the sheet: the newest pick-vN.png, else pick.png
-    const sheetFile = pickFiles.filter((n) => /^pick(-v\d+)?\.(png|jpe?g|webp)$/i.test(n)).sort(natCmp).pop();
+    const sheetFile = newest('pick');
     const sheetRows = rowsOf('sheet');
     const approved =
-      sheetRows.some((r) => /lock|approved/i.test(r.pick)) || rows.some((r) => /\block\b/i.test(r.what) && !/none|waiting/i.test(r.pick)) || (delivered && !!sheetFile) || (!cid.includes('-') && !!sheetFile && !!faceFile && !byKind.face.length && !byKind.wardrobe.length && !byKind.sheet.length)
+      // a `C02 sheet` row (the yes on the sheet's card) or a `C02 lock` row is the sheet approved (Flow v3.3 - 2 step 44)
+      sheetRows.some((r) => /lock|approved/i.test(r.pick) || !/\b(none|waiting|redo|again|no)\b/i.test(r.pick)) || rows.some((r) => /\block\b/i.test(r.what) && !/none|waiting/i.test(r.pick)) || (delivered && !!sheetFile) || (!cid.includes('-') && !!sheetFile && !!faceFile && !byKind.face.length && !byKind.wardrobe.length && !byKind.sheet.length)
         ? true
         : sheetRows.length
           ? false

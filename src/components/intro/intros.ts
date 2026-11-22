@@ -6,7 +6,7 @@
 
 export const INTRO_KEYS = [
   'idea', 'story', 'loc', 'views', 'shots', 'previz', 'faces', 'clothing', 'sheet', 'voices', 'gate', 'elements',
-  'character', 'go', 'scenes', 'scene', 'edit', 'finish', 'sound', 'release', 'platform', 'library',
+  'character', 'go', 'scenes', 'scene', 'edit', 'finish', 'sound', 'release', 'platform', 'debrief', 'library',
 ] as const;
 
 export type IntroKey = (typeof INTRO_KEYS)[number];
@@ -105,6 +105,10 @@ export const INTROS: Record<IntroKey, Intro> = {
   platform: {
     name: 'this platform',
     text: 'One platform at a time: pick, rewrite, or ask for another draft. Here are my text and cover picture for this one. Then post it yourself with the steps below, and paste the link so I can keep the record.',
+  },
+  debrief: {
+    name: 'the debrief',
+    text: 'Now that the film is out, I get to be nosy. Where you changed what I proposed and I couldn’t tell why, I ask here. Tap an answer, write your own or skip one: it all helps the next film start closer to your taste.',
   },
   library: {
     name: 'the library',

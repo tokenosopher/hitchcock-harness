@@ -1,4 +1,4 @@
-// The why of a step, kept beside it (Flow v3.2 fixes item 19, Flow v3.3 - 9 Edit step 8). The
+// The why of a step, kept beside it (Flow v3.3 - 9 Edit step 8). The
 // user: "Maybe I should have recorded why I did it ... I did this because of this, I did this because of this, and then
 // you can take that information and learn." A line the user writes beside a step in the History tab is kept in the
 // film's harness/cut-reasons.json, by the step's rev, with the step's own words and time copied in, so the reason

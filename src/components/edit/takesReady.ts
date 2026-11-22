@@ -1,7 +1,7 @@
 // Whether the go for the first takes can really start: no button to press until what it starts can start, and the
 // same for every step.
 // Pure: read from the film's state (the same FilmState the Edit page and the film's board read), never from the step
-// before merely existing. What counts is the flow's (Film Flow v3.2, 5 Previz and storyboards, 6 Scene prompts, 7 Takes
+// before merely existing. What counts is the flow's (Film Flow v3.3, 5 Previz and storyboards, 6 Scene prompts, 7 Takes
 // "Inputs"): for every scene the go covers, its boards passed their check (QC 8.5, or three rounds and then the user's
 // call) and carry the user's yes on the whole-film previz and storyboards; its prompt is written, passed check.py and
 // its QC; and every reference is made and approved: each character's sheet locked, each speaking character's video
@@ -27,7 +27,7 @@ const names = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -
 const of = (xs: string[], all: string[]) => (xs.length === all.length && all.length > 1 ? 'every scene' : names(xs));
 
 /** A QC entry passed: the newest round at 8.5 or above, or three rounds run (then it is the user's call, which the
- *  yes on the boards or the go itself carries: Flow v3.2, 5, step 24). */
+ *  yes on the boards or the go itself carries: Flow v3.3, 5, step 24). */
 export const qcPassed = (q: QCEntry | undefined): boolean =>
   !!q && ((q.latest.score ?? 0) >= QC_LOCK_SCORE || q.history.length >= QC_MAX_ROUNDS);
 
@@ -39,7 +39,7 @@ export function takesReady(s: FilmState, scenes: string[]): TakesReady {
   const sc = s.scenes.filter((x) => scenes.includes(x.id));
   const ids = sc.map((x) => x.id);
 
-  // 1. the scene prompts: written, check.py PASS, and the QC critic's 8.5 (Flow v3.2, 6, steps 14 to 16)
+  // 1. the scene prompts: written, check.py PASS, and the QC critic's 8.5 (Flow v3.3, 6, steps 14 to 16)
   const newest = (x: (typeof sc)[number]) => x.promptVersions[x.promptVersions.length - 1];
   const noPrompt = sc.filter((x) => !newest(x)).map((x) => x.id);
   const unchecked = sc.filter((x) => newest(x) && (newest(x)!.checkPassed !== true || !qcPassed(s.qc?.[`prompt-${x.id}`]))).map((x) => x.id);
@@ -48,7 +48,7 @@ export function takesReady(s: FilmState, scenes: string[]): TakesReady {
   if (unchecked.length) miss.push(`the ${unchecked.length === 1 ? 'prompt' : 'prompts'} of ${of(unchecked, ids)} ${unchecked.length === 1 ? 'has' : 'have'} not passed ${unchecked.length === 1 ? 'its' : 'their'} check`);
 
   // 2. the boards: the QC critic's 8.5 per scene (qc/previz-<S>-r<n>.json), then the user's yes on the whole-film
-  //    previz and storyboards, a yes card at the Previz step answered after the newest board check (Flow v3.2, 5, 24-25)
+  //    previz and storyboards, a yes card at the Previz step answered after the newest board check (Flow v3.3, 5, 24-25)
   const boardQc = (id: string) => s.qc?.[`previz-${id}`];
   const notChecked = ids.filter((id) => !qcPassed(boardQc(id)));
   if (notChecked.length) miss.push(`the boards of ${of(notChecked, ids)} have not passed their check`);
@@ -58,7 +58,7 @@ export function takesReady(s: FilmState, scenes: string[]): TakesReady {
   else if (yes.at && lastCheck && lastCheck > yes.at) miss.push('the boards changed after your yes');
 
   // 3. the cast: every sheet locked, every speaking character's video element at 1080p, every group picture approved
-  //    (Flow v3.2, 2 Characters steps 8, 25 and 44; 3 Voices and video elements steps 24 and 25)
+  //    (Flow v3.3, 2 Characters steps 8, 25 and 44; 3 Voices and video elements steps 24 and 25)
   const cast = s.characters;
   const group = (c: (typeof cast)[number]) => !!c.extra;
   const sheetsOpen = cast.filter((c) => !group(c) && !(c.sheet?.approved || c.reused)).map((c) => c.name);
@@ -69,7 +69,7 @@ export function takesReady(s: FilmState, scenes: string[]): TakesReady {
   if (groupsOpen.length) miss.push(`${plural(groupsOpen.length, 'group picture')} not made or approved (${names(groupsOpen)})`);
 
   // 4. the views: of every place the scenes play in, a painted view for each camera that has a colour plate, its newest
-  //    version measured against that plate (Flow v3.2, 4 Locations and props, steps 8 to 11 and 14)
+  //    version measured against that plate (Flow v3.3, 4 Locations and props, steps 8 to 11 and 14)
   const used = new Set(sc.map((x) => /^(L\d+)/.exec(x.location ?? '')?.[1]).filter((x): x is string => !!x));
   const locs = s.locations.filter((l) => !used.size || used.has(l.id));
   let unpainted = 0;
@@ -87,7 +87,7 @@ export function takesReady(s: FilmState, scenes: string[]): TakesReady {
   if (unpainted) miss.push(`${plural(unpainted, 'view')} not painted`);
   if (unmeasured.length) miss.push(`${plural(unmeasured.length, 'view')} not measured (${names(unmeasured)})`);
 
-  // 5. the props: each approved by the user, by its pick or a yes card that names it (Flow v3.2, 4, step 7)
+  // 5. the props: each approved by the user, by its pick or a yes card that names it (Flow v3.3, 4, step 7)
   const approvedIds = new Set((s.feed?.approvals ?? []).flatMap((a) => a.ids));
   const props = [...new Map(locs.flatMap((l) => l.props ?? []).map((p) => [p.id, p])).values()];
   const propsOpen = props.filter((p) => !p.pick && !approvedIds.has(p.id)).map((p) => p.id);

@@ -85,8 +85,8 @@ async function stageOf(dir: string, delivered: boolean): Promise<Stage | undefin
     };
     return walk(path.join(dir, rel), depth);
   };
-  // the release file (Film Flow v3.2: the release starts from it); after the edit: a mix of stage 11 (audio/master/, or
-  // the clean finished film in cut/ of the films before v3.2), a full-size master of stage 10
+  // the release file (Film Flow v3.3: the release starts from it); after the edit: a mix of stage 11 (audio/master/, or
+  // the clean finished film in cut/ of older films), a full-size master of stage 10
   // (the app's own master render, cut/*1080*, video/1080/, never a file whose name says a smaller size)
   if (await exists(path.join(dir, 'social', 'release.json'))) return 12;
   if (await has('audio/master', /\.(wav|mp3|m4a|aac|flac)$/i, 1) || (await has('cut', /final-clean.*\.(mp4|mov)$/i, 0))) return 11;

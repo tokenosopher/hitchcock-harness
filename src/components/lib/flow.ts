@@ -325,7 +325,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const made = SOUND_GROUPS.filter(([k]) => snd[k]);
   const soundMade = !!(snd.mix || post?.finals?.length || post?.release?.final || s.sound?.masterYes);
   const soundNode = node('sound', '11', 'Sound', {
-    // the finished sound is in the app's master (Film Flow v3.2): done on the user's yes on a master at the Sound page,
+    // the finished sound is in the app's master (Film Flow v3.3): done on the user's yes on a master at the Sound page,
     // or once a final is named in social/release.json; older films: a finished film named final, or a mix kept as audio
     state: soundMade ? 'done' : soundAims.length || snd.music || snd.sfx || snd.fixes ? 'running' : 'waiting',
     status: made.filter(([k]) => SOUND_STATUS.includes(k)).map(([k, one, many]) => plural(snd[k], one, many)).join(' · '),
@@ -338,7 +338,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // released only when the record shows it went out (the registry's `released`); a copy in final cuts is said as one (ASKS 37)
   const copies = s.film.copies ?? [];
   const release = node('release', '12', 'Release', {
-    // started once the release file exists (Film Flow v3.2), or the social kit of the films before it
+    // started once the release file exists (Film Flow v3.3), or the social kit of the films before it
     state: delivered ? 'done' : post?.kit || post?.release ? 'running' : 'waiting',
     status: delivered && out.length ? `delivered ${fmtDate(out[0].date)}` : releaseWords(s.film),
     short: delivered && out.length ? `delivered ${fmtDate(out[0].date)}` : post?.kit ? 'kit' : !delivered && post?.release?.final ? 'final named' : !delivered && post?.release ? 'in work' : copies.length ? 'not yet' : '',

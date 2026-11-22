@@ -9,7 +9,7 @@ import { parseShotId } from './shotCols';
 export interface TakeShots {
   src: string; scene: string; name: string; group?: string;
   seconds?: number; cuts?: number[];
-  /** The scene's number of each shot (server/edit/shots.ts, ASKS 60: a pick-up that redoes shot 5 is `[5]`); absent: 1, 2, 3 ….
+  /** The scene's number of each shot (server/edit/shots.ts: a pick-up that redoes shot 5 is `[5]`); absent: 1, 2, 3 ….
    *  Two shots can share one when `tags` names them apart ("7a", "7b"). */
   ids?: number[];
   /** Each shot's own id as its shots file writes it ("1", "7a", "7b"), when one of them has a letter (shotCols.ts). */

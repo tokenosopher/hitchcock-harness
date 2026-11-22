@@ -91,7 +91,7 @@ Write it as the standing rules ask (the intent and the hard constraints; creativ
 3. If it starts the next step and nothing waits on the user, dispatch that step now. If it waits on a pick, write the card that asks and carry on with the other chain.
 4. Commit.
 
-- **The timeline follows the work.** After the script lock, after the shot lists and after each scene's boards, bring the timeline up to date with one call (`recipes/edit.md`, "The timeline from day one"); the moment a scene's take lands, put it in its boards' place there, before its check. Never write a planned clip yourself.
+- **The timeline follows the work.** After the script lock, after the shot lists and after each scene's boards, bring the timeline up to date with one call (`recipes/edit.md`, "The timeline from day one"); the moment a scene's take lands, `land.py` puts it in its boards' place there, before its check (the call only when it exits 2). Never write a planned clip yourself.
 
 ## What you may start without asking
 

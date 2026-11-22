@@ -20,7 +20,7 @@ def folder_of(film):
     if not os.path.exists(cj):
         return None
     d = json.load(open(cj, encoding='utf-8'))
-    f = d.get('delivery_folder') or d.get('icloud_folder')      # the older key, read as a fallback
+    f = d.get('delivery_folder')
     return os.path.basename(f.rstrip('/')) if f else None      # only the folder's own name counts
 
 

@@ -448,7 +448,7 @@ On the yes, set `"answer": true` on the card; if `send.posted` is not there yet,
 
 ### Recording the post
 
-- When the user pastes the link on the platform page, or presses "I posted it, link later", the page writes `send.posted` and puts a chip in "Alma sees" that goes with their next message. Take it from there: write the platform's row in `published-links.md` at the studio root, as Flow v3.2 - 12 Release says (the link with tracking parameters stripped, the date and time beside it; `add (posted by hand)` while the link is still to come).
+- When the user pastes the link on the platform page, or presses "I posted it, link later", the page writes `send.posted` and puts a chip in "Alma sees" that goes with their next message. Take it from there: write the platform's row in `published-links.md` at the studio root, as Flow v3.3 - 12 Release says (the link with tracking parameters stripped, the date and time beside it; `add (posted by hand)` while the link is still to come).
 - When the user tells you in the chat that it is posted, or sends the link there, write it yourself: `send.posted` `{at, link?}` in `social/release.json` (the link on the platform's own site, tracking parameters stripped), then the row in `published-links.md`. Never guess whether a post went up.
 - A file written before this copy may still hold `send.asked`, `go`, `scheduled`, `sending` or `failed` for a platform. Nothing in this copy acts on them: ask the user whether that post went up, and once they say, write `send.posted` (with the link when they give it) or clear `send` to `{}`.
 

@@ -67,7 +67,7 @@ const lines = castBoxLines(done, { ...fd, nodes: { ...fd.nodes, sheet: { ...fd.n
 ok('a done box takes the cards\' words', /^\d+ of \d+ done$/.test(lines.sheet ?? ''), lines);
 ok('a box still open keeps the flow\'s words', lines.faces === undefined, lines);
 
-// Sound and Release the Film Flow v3.2 way (16 Nov): the finished sound is in the app's master (cut/renders/v<n>-master.mp4),
+// Sound and Release the Film Flow v3.3 way: the finished sound is in the app's master (cut/renders/v<n>-master.mp4),
 // no cut/<film>-final-clean.mp4 and no social/kit.md are made; the older films keep their reading
 const v32 = (edit: (s: FilmState) => void): Flow => { const s = clone(base); s.film = { ...s.film, status: 'in-progress', delivered: undefined }; edit(s); return flowOf(s, []); };
 const master = { path: 'cut/renders/v12-master.mp4', version: 'v12', date: '2026-11-16T10:00:00.000Z', bytes: 60_000_000, from: 'render' as const };

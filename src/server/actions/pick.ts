@@ -8,9 +8,9 @@
 //   location  locations/<LID>-<name>/<LID>-<name>-pick-<candidate>.png (for example L01, pick-w1 and pick-u5b-2)
 //   prop      props/<PID>-<name>/pick.png (for example P01, P02)
 //   take      nothing in the film folder: the taste row and the message only
-//   sfx       tools/sound/sfx.py "$FILM" <sound> --pick N --note '…' [--predicted M], when the studio has it: the sound's
+//   sfx       tools/sound/sfx.py "$FILM" <sound> --pick N --note '…' [--predicted M] (the studio's tool): the sound's
 //             pick.json and prompts.json "picked", and the taste.md row with the tries not picked (Flow v3.3 - 11 step
-//             34); without it the message asks Alma to record them. "none" runs nothing: Alma makes more tries.
+//             34); if the tool is missing the message asks Alma to record them. "none" runs nothing: Alma makes more tries.
 //             The target is the sound's folder name under audio/sfx/; `card` is the pick card it was made on.
 // A file that is already there is never overwritten: the new pick takes the next version (pick-face-v2.png).
 import { execFile } from 'node:child_process';
@@ -249,12 +249,29 @@ export async function makePick(raw: PickInput, film: string, opts: PickOptions =
     choice = `${target} ${name} voice`;
     const words = input.note ? `The user, ${day(date)}: "${input.note}"` : `The user, ${day(date)}, picked ${pickedWhere(where)}`;
     if (libEntry) {
+      // A library voice is reused by its preview (Flow v3.3 - 3 step 5): the file comes into the film and pick.py records
+      // it as the pick, saving nothing. A voice that was saved on Higgsfield keeps its voice id.
       const v = libEntry.meta.voice;
-      if (!v?.voiceId || v.voiceIdKind !== 'saved voice') throw new PickError(`library voice ${libEntry.meta.id} is a design preview, not a saved Higgsfield voice: ask Alma to save it first`, 409);
+      const saved = v?.voiceIdKind === 'saved voice' && v.voiceId ? v.voiceId : undefined;
+      const pv = libEntry.meta.files.find((f) => f.role === 'preview');
+      if (!pv && !saved) throw new PickError(`library voice ${libEntry.meta.id} has no preview file and no saved voice to reuse`, 409);
       candidate = `library ${libEntry.meta.name}`;
       candidatesText = `from the library: ${libEntry.meta.name}'s voice, ${libEntry.meta.film.title}`;
-      script = await runVoicePick(ft, w, [target, '--voice-id', v.voiceId, '--source', `library: ${libEntry.meta.film.title} ${libEntry.meta.character?.id ?? ''} ${libEntry.meta.name} (${v.source ?? 'saved voice'})`.replace(/\s+/g, ' '), '--note', words]);
-      next.push('the voice is reused, so the design round is skipped (flow-fixes 22): speak the sample lines with that Higgsfield voice and cut the element line');
+      // never "option N" in the source: the readers take that as this character's own option (pick.py says the same)
+      const source = `library: ${libEntry.meta.film.title} ${libEntry.meta.character?.id ?? ''} ${libEntry.meta.name} (${saved ? 'saved voice' : 'its picked preview'})`.replace(/\s+/g, ' ');
+      const args = [target];
+      if (pv) {
+        const slug = folder?.slug ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const to = await nextVersion(path.join(ft.dir, 'voices', 'options'), `${target}-${slug}-library-${libEntry.meta.id}`, path.extname(pv.file).toLowerCase() || '.mp3');
+        await w.copyNew(path.join(libEntry.dir, pv.file), to, `the preview of the library voice ${libEntry.meta.id}`);
+        wrote.push(ft.show(to));
+        args.push('--preview', path.relative(ft.dir, to));
+      }
+      if (saved) args.push('--voice-id', saved);
+      script = await runVoicePick(ft, w, [...args, '--source', source, '--note', words]);
+      next.push(pv
+        ? 'the voice is reused from the library by its preview, so the design round is skipped; nothing was saved: cut the element line from the picked preview (element_line.py)'
+        : 'the voice is reused from the library by its saved voice id, so the design round is skipped: cut the element line');
     } else {
       const n = Number(/(\d+)$/.exec(candidate)?.[1]);
       if (!Number.isInteger(n)) throw new PickError('a voice candidate is an option number ("3" or "r1-3")');

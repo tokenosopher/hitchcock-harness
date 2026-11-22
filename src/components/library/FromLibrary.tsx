@@ -62,8 +62,10 @@ const pickKindFor = (k: LibraryKind): PickBody['kind'] => (k === 'voice' ? 'voic
 /** Why an entry cannot be used for a pick, when it cannot. */
 function blocked(it: LibraryItem): string | undefined {
   if (it.kind === 'voice') {
-    if (it.voice?.voiceIdKind === 'deleted voice') return 'This voice was deleted from Higgsfield; ask Alma to rebuild it from its samples.';
-    if (it.voice?.voiceIdKind !== 'saved voice' || !it.voice.voiceId) return 'A design preview, not a saved voice: ask Alma to save it first.';
+    // a voice is reused by its preview file, saved on Higgsfield or not (Flow v3.3 - 3 step 5)
+    const preview = it.files.some((f) => f.role === 'preview');
+    const saved = it.voice?.voiceIdKind === 'saved voice' && !!it.voice.voiceId;
+    if (!preview && !saved) return it.voice?.voiceIdKind === 'deleted voice' ? 'This voice was deleted from Higgsfield and has no preview; ask Alma to rebuild it from its samples.' : 'No preview file in this entry to reuse the voice from.';
   }
   if (it.kind === 'character' && !it.files.some((f) => f.role === 'sheet')) return 'No sheet in this entry: use its face instead.';
   return undefined;

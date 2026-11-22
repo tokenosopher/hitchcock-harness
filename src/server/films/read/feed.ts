@@ -179,7 +179,7 @@ function askOf(card: Record<string, unknown>, media: FeedMedia[]): FeedAsk | und
 
 // ---- the walk
 
-/** The card types the record knows (the old review build stopped on any other; 16 Nov, Film Flow v3.2, it is gone). A
+/** The card types the record knows (the old review build stopped on any other; 16 Nov, Film Flow v3.3, it is gone). A
  *  card with another type is still shown as a plain card, with the files it names, and the film's warnings say so. */
 export const CARD_TYPES = ['card', 'asset', 'group', 'video', 'videos', 'audio', 'images', 'script', 'lines', 'shotlist'] as const;
 function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCard[] {

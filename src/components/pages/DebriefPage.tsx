@@ -1,5 +1,5 @@
 'use client';
-// The debrief (Flow v3.2 fixes item 22, Flow v3.3 - 12 Release steps 39 to 42). The user: "when
+// The debrief (Flow v3.3 - 12 Release steps 39 to 42). The user: "when
 // the film is done, I think Alma should start asking questions around 'Why did you make the changes that you made?'
 // ... kind of like a debrief session at the end of every video". One page per film: Alma's questions from
 // review/debrief.json, grouped by kind (cutting, sound, previz, prompts) in the film's order, each showing its change
@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { filmMeta, filmPath, useFilmPage } from './common';
 import { useJson } from './postCommon';
 import { almaFetch } from '@/components/data/almaOutbox';
+import { StepIntro } from '@/components/intro/StepIntro';
 
 interface Data { debrief?: Debrief; answers: DebriefAnswers; problems: string[] }
 const AUDIO = /\.(wav|mp3|m4a|aac|flac|ogg)$/i;
@@ -154,6 +155,7 @@ export function DebriefPage() {
       <PageBody>
         <StageTitle kicker="After the release · the debrief" title="Why you changed what you changed"
           sub={d?.intro ?? 'Alma asks about your changes to her proposals where the reason is not plain, so the next film starts closer to how you work. Tap an answer, write your own, or skip any.'} />
+        <StepIntro step="debrief" />
         {!d?.questions.length ? (
           <Card dashed className="px-4 py-3.5 text-[13px] leading-normal text-sub">No debrief yet. Alma writes its questions once the film is released.</Card>
         ) : (

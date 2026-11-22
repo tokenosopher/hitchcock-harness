@@ -163,7 +163,7 @@ When the sound designer's tries of a scene's sounds are made, write one card tha
 
 - The harness reads, for each sound, where it sits on the cut from `audio/sfx/plan.json` (else from the plan's effect kept as `"effect"` in the sound's `prompts.json`), and its tries from `prompts.json` (`"tries"`: `try`, `file`, `prompt`, `style`, `seconds`; else from the `<name>-try<N>.wav` files beside it). It shows each sound with its times, its level and fades, a strip of the film with its place lit, your plan's reason, and every try with a play button and its prompt.
 - The user chooses one try per sound, or "None of these", with a line of why if they want. A choice is set aside like every pick and sent with "Done picking".
-- **Recording the pick**: when the studio has `tools/sound/sfx.py`, the harness runs `sfx.py "$FILM" <sound> --pick N [--note "<their words>"] [--predicted M]` itself, which writes the sound's `pick.json`, `prompts.json` "picked" and the `taste.md` row; do not run it again. Without that tool the harness writes nothing in the film folder and its message asks you to record those three yourself. A pick reaches you as `<harness-action kind="pick" what="sfx" target="<sound>" candidate="<N>" card="<the card>"/>`; "None of these" as `candidate="none"`, with the user's words for the next prompt when they gave some.
+- **Recording the pick**: the harness runs the studio's `tools/sound/sfx.py "$FILM" <sound> --pick N [--note "<their words>"] [--predicted M]` itself, which writes the sound's `pick.json`, `prompts.json` "picked" and the `taste.md` row; do not run it again. If that tool is missing, the harness writes nothing in the film folder and its message asks you to record those three yourself. A pick reaches you as `<harness-action kind="pick" what="sfx" target="<sound>" candidate="<N>" card="<the card>"/>`; "None of these" as `candidate="none"`, with the user's words for the next prompt when they gave some.
 - The card stops asking once every sound on it has an answer. Then set `"answer"` on it yourself, as for any card.
 - More tries after "None of these" are a new round: a new card with a new id, naming only the sounds it asks about.
 
@@ -279,7 +279,7 @@ curl -s -X POST "$HARNESS_URL/api/library/save" -H 'content-type: application/js
 
 - The checks the stage note gives before something counts as presented are done (looked at by you, the checks run). This file adds to them and replaces none.
 - The card is in `review/cards.json` with its `at` and its `updated`, and the page shows it with no warning about the file.
-- Every file the card names exists under the film folder, with a path relative to it. A `/Volumes/…` path or a path outside the film folder does not show.
+- Every file the card names exists under the film folder, with a path relative to it. An absolute path or a path outside the film folder does not show.
 - Say in the thread what is up and where ("three takes of the laugh, on S3"), with the card's ID if it asks.
 
 ## The reserve switch

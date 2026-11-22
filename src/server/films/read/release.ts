@@ -260,7 +260,7 @@ export function parseKit(md: string): Omit<Kit, 'path'> {
   return { title, intro, platforms, confirm, posting, postingNote, almaThumb };
 }
 
-/** The line that opens step 16 of the stage note: v3.1 "16. Write the **Before every upload** checklist:", v3.2
+/** The line that opens step 16 of the stage note: the older form "16. Write the **Before every upload** checklist:", the current one
  *  "16. Before every upload, on each platform (…):". Both read. */
 export const BEFORE_EVERY_UPLOAD = /^\d+\.\s+(?:Write the \*\*)?Before every upload\b/i;
 /** The bullets of that step: the items of the note's "Before every upload", from its text. */

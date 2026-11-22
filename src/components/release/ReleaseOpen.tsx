@@ -273,7 +273,7 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
         {(rel.view?.companions ?? []).map((c) => <CompanionRow key={c.key} c={c} abs={abs} />)}
       </ul>
       {rel.view?.kit && (
-        <div data-icloud className="flex items-center gap-2 border-t border-line pt-2.5 text-[12.5px]">
+        <div data-delivery className="flex items-center gap-2 border-t border-line pt-2.5 text-[12.5px]">
           <IconFile size={13} className="flex-none text-sub" />
           <span className="min-w-0 flex-1 truncate text-sub" title={rel.view.kit.shown}>In the final-cuts folder: <span className="text-ink">Social kit</span></span>
           <CopyPath path={rel.view.kit.folder} />
