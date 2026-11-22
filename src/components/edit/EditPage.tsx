@@ -64,6 +64,8 @@ import { leftInputBefore } from './leftInput';
 import { usePlan } from './usePlan';
 import { PlannedView } from './PlannedView';
 import { BoardsBack, EmptyCard, PlannedTakes } from './PlannedTakes';
+import { LayoutsBar, useLayouts } from './LayoutsBar';
+import { layoutInCut, layoutOfTake, layoutShotOfTake, sameShotIn, swapCheck, type Layout } from './layouts';
 import { useSendAsUser } from '@/components/release/AskAlma';
 import { usePhoneFull } from './phoneFull';
 import { useEditRefSource } from './refSource';
@@ -184,6 +186,9 @@ export function EditPage() {
 
   // the film in shots (ASKS 16): every take cut into its shots by the server, the cut's clips split to match
   const shots = useShots(film);
+  // a scene's layouts: read again when the takes change; the layout whose takes the Takes view shows
+  const layouts = useLayouts(film, useMemo(() => shots.takes.map((t) => `${t.src}:${t.state}`).join('|'), [shots.takes]));
+  const [viewLay, setViewLay] = useState<{ scene: string; key: number }>();
   // the shots of other takes selected in the Takes view (ASKS 52): one a shot column of a scene, in any scenes. While
   // there is any, the film is shown and played with all of them in place (as one shot tried in place used to be);
   // nothing is saved until "Use in the film", which puts them all in as one step
@@ -1317,6 +1322,39 @@ export function EditPage() {
   // column of a scene, in any scenes. The film is then shown, scrubbed and played with every one of them in place.
   const order = state.scenes.map((x) => x.id);
   const pickKey = (p: { src: string; n: number }) => `${p.src}#${p.n}`;
+  // ---- a scene's layouts: the open scene's layouts, the one the cut uses, the one whose takes
+  // the Takes view shows. A shot of another layout's take goes into a place of the layout the cut uses: its safe swap
+  // (the same framing and line) when it has one, else the place with its number; the warnings are said, never a refusal.
+  const sceneLays: Layout[] = gridScene ? layouts.get(gridScene.id) ?? [] : [];
+  const layIn = gridScene && sceneLays.length ? layoutInCut(tl, gridScene.id, sceneLays) : undefined;
+  const layView = gridScene && sceneLays.length
+    ? (viewLay?.scene === gridScene.id ? sceneLays.find((l) => l.key === viewLay.key) : undefined) ?? layIn ?? sceneLays.find((l) => l.current) ?? sceneLays[sceneLays.length - 1]
+    : undefined;
+  const layForeign = !!layView && !!layIn && layView.key !== layIn.key;
+  /** Where shot `n` of take `t` goes when the take is of another layout than the one its scene uses in the cut (place
+   *  `to` when given), and what that swap means; undefined for a take of the layout in use. */
+  const swapOf = (t: TakeShots, n: number, to?: number) => {
+    const ls = layouts.get(t.scene);
+    const into = ls ? layoutInCut(tl, t.scene, ls) : undefined;
+    const from = ls ? layoutOfTake(ls, t.src) : undefined;
+    const sh = shotOf(t, n);
+    if (!into || !from || !sh || (from.key === into.key && to === undefined)) return undefined;
+    const ls1 = layoutShotOfTake(from, shotsOf(t), sh.i);
+    const same = ls1 ? sameShotIn(ls1, into) : undefined;
+    const place = to ?? same?.n ?? Math.min(n, into.shots.length);
+    const c = swapCheck(ls1, into.shots[place - 1], sh.out - sh.in, into, from);
+    return { to: place, layout: into.key, safe: c.safe, warnings: c.warnings, short: c.short, from, into };
+  };
+  /** A step's note for shots of another layout: which layout, and safe or what warns, in a few words. */
+  const layNote = (ps: Trying[]) => {
+    const sw = ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to) : undefined; return x ? [x] : []; });
+    if (!sw.length) return '';
+    if (sw.length === 1) return ` (from Layout ${sw[0].from.n} into Layout ${sw[0].into.n}: ${sw[0].safe && !sw[0].short.length ? 'a safe swap' : `${sw[0].safe ? 'a safe swap, ' : ''}${sw[0].short.join(', ')}`})`;
+    const safe = sw.filter((x) => x.safe).length, warned = sw.filter((x) => x.short.length).length;
+    return `; ${sw.length} from another layout (${safe} safe ${safe === 1 ? 'swap' : 'swaps'}${warned ? `, ${warned} with warnings` : ''})`;
+  };
+  /** The warnings of shots of another layout, said back once they are in the film. */
+  const layWarnings = (ps: Trying[]) => ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to) : undefined; return x?.warnings.length ? [`${p.scene} shot ${x.to}: ${x.warnings.join(' ')}`] : []; });
   /** A click on a shot of a take: watch it; and, when the film does not use it already, select it (a click on a
    *  selected shot unselects it). The playhead goes to where it plays in the film with the shots selected. */
   const clickShot = (t: TakeShots, n: number) => {
@@ -1325,7 +1363,10 @@ export function EditPage() {
     if (picks.some((p) => pickKey(p) === key)) { unpick(t, n); return; }
     setWatching({ scene: t.scene, n, src: t.src, k: nextK() });
     if (inFilm(tl, by).has(key)) return;
-    const next = [...picks.filter((p) => !(p.scene === t.scene && p.n === n)), { scene: t.scene, n, src: t.src }];
+    // a shot of another layout's take goes into a place of the layout the cut uses: one shot a place
+    const sw = swapOf(t, n);
+    const into = sw ? { to: sw.to, layout: sw.layout } : undefined;
+    const next = [...picks.filter((p) => !(p.scene === t.scene && (p.into?.to ?? p.n) === (into?.to ?? n))), { scene: t.scene, n, src: t.src, ...(into ? { into } : {}) }];
     setPicks(next);
     const at = withPicks(tl, next, by, names, 'try', order)?.placed.find((x) => x.src === t.src && x.n === n)?.at;
     if (at !== undefined) setFrameRaw(at);
@@ -1340,21 +1381,34 @@ export function EditPage() {
   const putPicks = async () => {
     if (readOnly || !picks.length) return;
     const e = withPicks(tl, picks, by, names, undefined, order);
+    const warned = layWarnings(picks), note = layNote(picks);
     setRate(0); setWatching(undefined); setPicks([]); setBoxFolded(false);
     if (!e) { sayRefused(); return; }
-    await apply(e);
+    await apply({ ...e, note: `${e.note}${note}` });
     const one = e.placed.length === 1 ? e.placed[0] : undefined;
     if (one && mainV) { setSel({ trackId: mainV, clipId: one.clipId }); setFrameRaw(one.at); }
+    if (warned.length) say(`In the film, with what does not match: ${warned.join(' ')} ⌘Z takes it back.`);
   };
   /** One shot put in the film at once (the Takes view's menu): one step, as "Use in the film" with that one alone. */
-  const putOne = async (t: TakeShots, n: number) => {
+  const putOne = async (t: TakeShots, n: number, to?: number) => {
     if (readOnly) return;
-    const e = withPicks(tl, [{ scene: t.scene, n, src: t.src }], by, names, undefined, order);
+    const sw = swapOf(t, n, to);
+    const one: Trying = { scene: t.scene, n, src: t.src, ...(sw ? { into: { to: sw.to, layout: sw.layout } } : {}) };
+    const e = withPicks(tl, [one], by, names, undefined, order);
+    const warned = layWarnings([one]), note = layNote([one]);
     setRate(0); setWatching(undefined);
-    setPicks((cur) => cur.filter((p) => !(p.scene === t.scene && p.n === n)));
+    setPicks((cur) => cur.filter((p) => !(p.scene === t.scene && (p.into?.to ?? p.n) === (sw?.to ?? n))));
     if (!e) { sayRefused(); return; }
-    await apply(e);
+    await apply({ ...e, note: `${e.note}${note}` });
     if (mainV) { setSel({ trackId: mainV, clipId: e.placed[0].clipId }); setFrameRaw(e.placed[0].at); }
+    if (warned.length) say(`In the film, with what does not match: ${warned.join(' ')} ⌘Z takes it back.`);
+  };
+  /** "Use Layout n in the film": one step on the server, Undo takes it back. */
+  const chooseLay = async (sc: string, l: Layout) => {
+    setPicks((cur) => cur.filter((p) => p.scene !== sc));
+    setWatching(undefined);
+    await planStep(() => plan.layout(sc, l.key, cut.working?.rev), `Layout ${l.n} was not put in the film`);
+    setViewLay(undefined);
   };
   // what the selection says: in the floating box, its hover text, and Alma's pinned chip
   const pickScenes = sceneOrder(picks.map((p) => p.scene));
@@ -1516,12 +1570,19 @@ export function EditPage() {
     const isIn = inFilm(tl, by).has(key);
     const colOut = !shotClips(tl, by, t.scene, n).length;
     const ro = readOnly || !!hearEdit;
+    // a shot of another layout's take: any place of the layout the cut uses, each saying safe or what warns
+    const sw = isIn ? undefined : swapOf(t, n);
     const put: MenuItem = isIn
       ? { label: 'Take it out of the film', hint: picks.length ? 'not while shots are selected' : '⌘Z brings it back', disabled: ro || picks.length > 0, onPick: () => shotOut(t, n) }
+      : sw ? { label: 'Use in the film', hint: `in place of shot ${sw.to}${sw.safe ? ', safe' : ''}`, disabled: ro, onPick: () => void putOne(t, n) }
       : { label: 'Use in the film', hint: colOut ? 'puts it back' : undefined, disabled: ro, onPick: () => void (colOut ? bringBack(t, n) : putOne(t, n)) };
+    const places: MenuItem[] = sw ? sw.into.shots.map((x, i) => {
+      const c = swapOf(t, n, x.n)!;
+      return { label: `In place of shot ${x.n} of Layout ${sw.into.n}`, hint: c.safe && !c.short.length ? 'safe swap' : c.safe ? `safe, ${c.short.join(', ')}` : c.short.join(', ') || 'no warning', disabled: ro, sepBefore: i === 0, onPick: () => void putOne(t, n, x.n) };
+    }) : [];
     return {
-      title: `${t.scene} · ${take} · shot ${n} · ${secsOf(Math.round((sh.out - sh.in) * fps))}`,
-      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK() })) : clickShot(t, n)) }, put, copy],
+      title: `${t.scene} · ${take} · shot ${n} · ${secsOf(Math.round((sh.out - sh.in) * fps))}${sw ? ` · Layout ${sw.from.n}` : ''}`,
+      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK() })) : clickShot(t, n)) }, put, ...places, copy],
     };
   })();
   // ---- the right-click menu: every entry that goes to Alma carries the point it was opened at
@@ -2124,7 +2185,7 @@ export function EditPage() {
             </div>
           ) : lowerTab === 'history' && hist ? (
             <div key="history" className="duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
-              <HistoryPanel history={hist} versions={cut.versions} unreadable={cut.unreadable} names={cut.names} equals={viewing ? undefined : cut.equals} marks={marks}
+              <HistoryPanel film={state.film.slug} history={hist} versions={cut.versions} unreadable={cut.unreadable} names={cut.names} equals={viewing ? undefined : cut.equals} marks={marks}
                 keys={{ undo: keyName('Z'), redo: keyName('Z', true) }} busy={!!cut.saving || !!viewing} onGo={goToStep}
                 onOpen={(v) => { const x = cut.versions.find((y) => y.version === v); if (x) void restore(x); }} />
             </div>
@@ -2150,11 +2211,29 @@ export function EditPage() {
             </div>
           ) : gridScene && (
             <div key="takes" className="duration-200 animate-in fade-in-0">
-              <ShotGrid scene={gridScene} takes={shots.takes} by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} seenKey={`hh:takes-seen:${film}`}
-                selShot={watching ? gridHead?.n ?? watching.n : selShotN ?? (picScene === openId ? picShot : undefined)} base={base} onShot={clickShot} onUnpick={unpick} head={gridHead}
+              {/* a scene with two layouts or more: its layouts, the viewed one's storyboard, and its takes below */}
+              {layView && sceneLays.length > 1 && (
+                <div className="mb-3">
+                  <LayoutsBar scene={gridScene.id} title={'title' in gridScene ? gridScene.title : undefined} layouts={sceneLays} inFilm={layIn} viewing={layView} busy={planBusy || !!cut.saving} readOnly={readOnly}
+                    onView={(l) => { setViewLay({ scene: gridScene.id, key: l.key }); setWatching(undefined); }} onUse={(l) => void chooseLay(gridScene.id, l)}
+                    picksWarn={picks.filter((p) => p.scene === gridScene.id && p.into).flatMap((p) => {
+                      const t = by.get(p.src); const x = t ? swapOf(t, p.n, p.into!.to) : undefined;
+                      return x ? [{ label: `${cap1(names.get(p.src) ?? t!.name)} shot ${p.n} of Layout ${x.from.n}, in place of shot ${x.to} of Layout ${x.into.n}`, safe: x.safe, warnings: x.warnings }] : [];
+                    })} />
+                </div>
+              )}
+              {layView && sceneLays.length > 1 && !shots.takes.some((t) => t.scene === gridScene.id && t.state !== 'making' && layView.takes.some((x) => x.src === t.src)) ? (
+                <EmptyCard title={`No take of Layout ${layView.n} yet.`} text={layForeign ? `Its storyboard is above. “Use Layout ${layView.n} in the film” puts its boards and lines in ${gridScene.id}’s place.` : `Its boards are in the film. Shots of the other layouts’ takes can go into its places: open their layout above and click one.`} />
+              ) : (
+              <ShotGrid scene={gridScene} takes={layView && sceneLays.length > 1 ? shots.takes.filter((t) => t.scene !== gridScene.id || !layoutOfTake(sceneLays, t.src) || layView.takes.some((x) => x.src === t.src)) : shots.takes}
+                by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} seenKey={`hh:takes-seen:${film}`}
+                selShot={layForeign ? undefined : watching ? gridHead?.n ?? watching.n : selShotN ?? (picScene === openId ? picShot : undefined)} base={base} onShot={clickShot} onUnpick={unpick} head={layForeign ? undefined : gridHead}
                 onMenu={(at, t, n) => { setMenu(undefined); setHeadMenu(undefined); setTakeMenu({ ...at, src: t.src, n }); }}
-                onSeek={seekTakes} onSeekEdge={seekEdge}
-                onBring={readOnly ? undefined : (t, n) => void bringBack(t, n)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)} />
+                onSeek={layForeign ? undefined : seekTakes} onSeekEdge={seekEdge}
+                foreign={layForeign && layView && layIn ? { from: layView.n, into: layIn.n } : undefined} markOf={layForeign ? (t, n) => swapOf(t, n) : undefined}
+                onBring={readOnly ? undefined : (t, n) => void bringBack(t, n)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)}
+                views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} />
+              )}
               <PicksBox count={picksCount} hover={picksHover} open={picks.length > 0} folded={boxFolded} onFold={setBoxFolded} disabled={readOnly}
                 onBack={backToFilm} onUse={() => void putPicks()} />
               {plan.data?.locked && !readOnly && (mainTracks(tl).v?.clips ?? []).some((c) => !c.plan && c.takeRef?.scene === gridScene.id && c.id.startsWith(`${gridScene.id.toLowerCase()}-take`)) && (

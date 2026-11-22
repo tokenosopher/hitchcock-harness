@@ -81,7 +81,7 @@ export function StoryPage() {
       <PageBody wide>
         <StageTitle kicker="Stage 1 · Setup and story" title="Story"
           sub={script ? `The brief, the story and the script.${lockedV ? ` Everything after the lock reads script ${lockedV}.` : ''}` : 'The brief and the story. The script is written from the story once you settle it.'}
-          right={<QCChip spec={qcSpec('script')} targets={{ target: FILM_TARGET, label: 'script', entry: qcEntry(state, 'script', FILM_TARGET), ready: !!script, waitsFor: script ? `script ${current ?? ''}`.trim() : 'the script' }} />} />
+          right={<QCChip spec={qcSpec('script')} targets={{ target: FILM_TARGET, label: 'script', entry: qcEntry(state, 'script', FILM_TARGET), ready: !!script, waitsFor: script ? `script ${current ?? ''}`.trim() : 'the script' }} phoneTall />} />
         <StepIntro step="story" />
 
         <div className="-mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -161,13 +161,13 @@ function BriefTab({ state, brief }: { state: NonNullable<ReturnType<typeof useFi
           {brief.sections.filter((s) => s.items.length && !/^Characters/.test(s.heading)).map((s) => (
             <div key={s.heading} className="flex flex-col gap-2 border-t border-line px-5 py-3.5">
               <span className="lbl">{s.heading.replace(/\s*\(.*\)$/, '')}</span>
-              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              <ul className="m-0 flex list-none flex-col gap-2 p-0 max-[760px]:-my-2.5 max-[760px]:gap-0">
                 {s.items.map((it, i) => {
                   const id = /^(D\d+)\s+(.*)$/.exec(it.label ?? '');
                   return (
                     <li key={i}>
                       <button type="button" onClick={() => ui.addChip({ id: `brief:${it.label ?? i}`, label: id ? `${id[1]} · ${id[2]}` : (it.label ?? it.text).slice(0, 40) })}
-                        className="flex min-h-6 w-full cursor-pointer gap-2.5 rounded-md text-left text-[13px] leading-normal outline-none focus-visible:shadow-[0_0_0_2px_#A1A1AA]">
+                        className="flex min-h-6 w-full cursor-pointer gap-2.5 rounded-md text-left text-[13px] leading-normal outline-none focus-visible:shadow-[0_0_0_2px_#A1A1AA] max-[760px]:min-h-11 max-[760px]:py-2.5">
                         {id ? <span className="w-6 flex-none font-mono text-[11.5px] text-sub">{id[1]}</span> : <IconCheck size={12} className="mt-1 flex-none text-sub" />}
                         <span className="flex min-w-0 flex-col">
                           {(id?.[2] ?? it.label) && <span className="font-medium text-ink">{id?.[2] ?? it.label}</span>}

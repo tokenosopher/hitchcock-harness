@@ -2,10 +2,11 @@
 // Length and shots come from the scene file (S<n>-scene.md, then S<n>-shots.json), never from the plan;
 // the plan's numbers ride along so the UI can grey them as "superseded". Takes come from *.jobid files
 // and the take videos; pick-ups (FIX-<what>/) join the scene they fix.
-import type { CutSource, SceneRef, TakeRef } from '../../types';
+import type { CutSource, SceneRef, ShotView, TakeRef } from '../../types';
+import { shotViewsOf } from './shotViews';
 import type { ReviewMiss } from './review';
 import type { SpendLineX } from './spend';
-import { abs, isoDay, list, natCmp, readJson, readText, statOf, tables, VIDEO_RE, asRecord, asNumber, type FilmCtx } from '../util';
+import { abs, exists, isoDay, list, natCmp, readJson, readText, statOf, tables, VIDEO_RE, asRecord, asNumber, type FilmCtx } from '../util';
 
 export interface TakeExtra {
   folder: string;                 // the scene or pick-up folder the take lives in
@@ -81,6 +82,17 @@ async function readSceneFile(ctx: FilmCtx, rel: string) {
 }
 
 /** The prompt versions in a folder: <prefix>-prompt-vN.txt with -check-vN.txt and -media-vN.json beside them. */
+/** The view behind each shot, from the newest prompt that has a media list; a view whose file is gone is left out. */
+async function readShotViews(ctx: FilmCtx, pv: SceneRef['promptVersions']): Promise<ShotView[]> {
+  const last = [...pv].reverse().find((v) => v.mediaPath);
+  if (!last?.mediaPath) return [];
+  const [text, list] = [await readText(abs(ctx, last.path)), await readJson(ctx, last.mediaPath)];
+  if (!text || !list) return [];
+  const out: ShotView[] = [];
+  for (const v of shotViewsOf(text, list, last.version)) if (!v.path.split('/').includes('..') && (await exists(abs(ctx, v.path)))) out.push(v);
+  return out;
+}
+
 async function promptVersions(ctx: FilmCtx, rel: string, prefix: string): Promise<SceneRef['promptVersions']> {
   const files = (await list(abs(ctx, rel))).filter((f) => !f.dir).map((f) => f.name);
   const esc = prefix.replace(/[-]/g, '\\-');
@@ -192,7 +204,11 @@ async function readTakes(
     const dir = main && under.get(main)!.includes('/') ? under.get(main)!.split('/')[0] : undefined;
     const md = dir ? await readText(abs(ctx, `${rel}/takes/${dir}/findings.md`)) : undefined;
     const found = md ? readFinding(md) : {};
+    // the record of what was sent, written at submission (so a take being made has one too)
+    const sentName = `${prefix}-${id}-sent.json`;
+    const sent = under.has(sentName) ? `${rel}/takes/${under.get(sentName)}` : undefined;
     out.push({
+      sent,
       verdict: found.verdict,
       finding: found.finding,
       stopped: stop?.how,
@@ -271,6 +287,8 @@ export async function readScenes(
         inserts.push({ id: `${sid}-${name}`, file: `${rel}/${f.name}`, seconds: i?.seconds, shots: i?.shots });
       }
       const p = plan.get(sid);
+      const pv = await promptVersions(ctx, `${rel}/prompt`, sid);
+      const views = await readShotViews(ctx, pv);
       const takes = await readTakes(ctx, rel, sid, 'take', spendByJob, reviewMisses.filter((m) => m.scene === sid && !m.pickup));
       const legacyPrompts = files.filter((f) => !f.dir && new RegExp(`^${sid}-prompt[-.]`).test(f.name)).map((f) => `${rel}/${f.name}`);
       const previzDir = await list(abs(ctx, `previz/${sid}`));
@@ -285,7 +303,8 @@ export async function readScenes(
         sceneFile: sf ? `${rel}/${sid}-scene.md` : undefined,
         planSeconds: p?.seconds,
         planShots: p?.shots,
-        promptVersions: await promptVersions(ctx, `${rel}/prompt`, sid),
+        promptVersions: pv,
+        ...(views.length ? { shotViews: views } : {}),
         takes,
         previzPath: previzFiles.length ? `previz/${sid}/${previzFiles[previzFiles.length - 1]}` : undefined,
         more: {

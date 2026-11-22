@@ -1,7 +1,8 @@
 'use client';
 // The timeline from day one on the page (15 Nov 2026, ASKS 47): GET /api/films/<film>/cut/plan, read once and on each
 // change of the film's folder (whether the script is locked, whether the film has no cut yet, and the words of what an
-// update would bring in), and the page's two presses: "Update the timeline" and "Put the boards back", each a step by
+// update would bring in), and the page's presses: "Update the timeline", "Put the boards back" and "Use Layout n in the
+// film", each a step by
 // the user (no version). Set only when the answer changed, so an idle page draws nothing.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -37,5 +38,7 @@ export function usePlan(film: string, changed?: string) {
   }, [film]);
   const update = useCallback((rev?: number) => post({ action: 'update', ...(rev !== undefined ? { rev } : {}) }), [post]);
   const boardsBack = useCallback((scene: string, rev?: number) => post({ action: 'boards', scene, ...(rev !== undefined ? { rev } : {}) }), [post]);
-  return useMemo(() => ({ data, update, boardsBack }), [data, update, boardsBack]);
+  /** A scene's layout in its place, named by its previz take. */
+  const layout = useCallback((scene: string, previz: number, rev?: number) => post({ action: 'layout', scene, previz, ...(rev !== undefined ? { rev } : {}) }), [post]);
+  return useMemo(() => ({ data, update, boardsBack, layout }), [data, update, boardsBack, layout]);
 }

@@ -173,8 +173,8 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
               <div className="flex flex-col">
                 {voiceAll.map((o) => (
                   <span key={`${o.round}:${o.id}`} className="flex items-center gap-2.5 border-t border-line py-1.5 text-[12.5px] first:border-t-0">
-                    {o.path ? <PlayButton path={toRepo(o.path)!} label={`option ${o.id}`} className="size-6" /> : <span className="size-6" />}
-                    <span className={cn('w-16 flex-none', o.id === c.voice?.pick?.candidateId ? 'font-medium text-ink' : 'text-ink-3')}>option {o.id}</span>
+                    {o.path ? <PlayButton path={toRepo(o.path)!} label={/^\d+$/.test(o.id) ? `option ${o.id}` : o.id} className="size-6" /> : <span className="size-6" />}
+                    <span className={cn('w-16 flex-none', o.id === c.voice?.pick?.candidateId ? 'font-medium text-ink' : 'text-ink-3')}>{/^\d+$/.test(o.id) ? `option ${o.id}` : o.id}</span>
                     <span className="min-w-0 flex-1 truncate text-sub">{o.note && o.note !== o.round ? o.note : o.round}</span>
                     <span className="flex-none font-mono text-[11px] text-mute">{o.hz !== undefined ? `${o.hz.toFixed(0)} Hz` : ''}</span>
                   </span>

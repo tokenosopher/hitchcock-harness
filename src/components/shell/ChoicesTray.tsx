@@ -40,7 +40,7 @@ export function ChoicesTray({ film }: { film: string }) {
     setP({ k: 'busy' });
     try {
       const r = await fetch(`/api/films/${film}/done`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-        answers: list.filter((c) => c.answer).map((c) => ({ card: c.answer!.card, option: c.answer!.option })),
+        answers: list.filter((c) => c.answer).map((c) => ({ card: c.answer!.card, option: c.answer!.option, note: c.answer!.note })),
         picks: list.filter((c) => c.pick).map((c) => c.pick),
       }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string };

@@ -2,6 +2,12 @@
 // The library as the pages see it (GET /api/library), and the two actions that write: the pick and "Save to library".
 import { useCallback, useEffect, useState } from 'react';
 
+/** What a library voice's voiceId is. 'saved voice': saved on Higgsfield, reused by its id. 'picked preview': a film's
+ *  pick recorded without saving (Flow v3.3 - 3 step 5): no voice id, the picked preview file is the voice, reused by that
+ *  file or its design. 'design preview': an option that was not picked (its id is the design's). 'deleted voice': saved
+ *  once, deleted from Higgsfield since; its preview and samples remain. */
+export type VoiceIdKind = 'saved voice' | 'picked preview' | 'design preview' | 'deleted voice';
+
 export type LibraryKind = 'face' | 'voice' | 'character' | 'location';
 export const KIND_FOLDER: Record<LibraryKind, 'faces' | 'voices' | 'characters' | 'locations'> = { face: 'faces', voice: 'voices', character: 'characters', location: 'locations' };
 
@@ -17,7 +23,7 @@ export interface LibraryItem {
   round?: string;
   candidate?: string;
   prompt?: string;
-  voice?: { voiceId?: string; voiceIdKind?: 'saved voice' | 'design preview' | 'deleted voice'; model?: string; hz?: number; seconds?: number; source?: string; note?: string };
+  voice?: { voiceId?: string; voiceIdKind?: VoiceIdKind; model?: string; hz?: number; seconds?: number; source?: string; note?: string };
   dates: { made?: string; picked?: string; saved: string };
   files: { role: string; file: string; source: string; label?: string }[];
   thumb?: string;
@@ -52,7 +58,7 @@ export function useLibrary(): { data?: LibraryData; error?: string; reload: () =
 }
 
 export interface PickBody {
-  kind: 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take';
+  kind: 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take' | 'sfx';
   target: string;
   round?: string;
   candidate?: string;
@@ -62,6 +68,8 @@ export interface PickBody {
   libraryId?: string;
   libraryKind?: LibraryKind;
   from?: string;
+  /** sfx: the pick card it was made on. */
+  card?: string;
 }
 
 export async function postPick(film: string, body: PickBody): Promise<{ ok: boolean; error?: string; tasteRow?: string }> {
@@ -74,12 +82,21 @@ export async function postPick(film: string, body: PickBody): Promise<{ ok: bool
   }
 }
 
-export async function postSave(film: string, kind: LibraryKind, ref: string): Promise<{ ok: boolean; error?: string; created?: boolean; id?: string }> {
+/** "Save to the library": the server copies the file in. With `note`, the user's own line goes into meta.json; sent
+ *  again for an entry already saved, it only replaces the note. */
+export async function postSave(film: string, kind: LibraryKind, ref: string, note?: string): Promise<{ ok: boolean; error?: string; created?: boolean; id?: string; meta?: LibraryItem }> {
   try {
-    const r = await fetch('/api/library/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ film, kind, ref }) });
-    const j = (await r.json().catch(() => ({}))) as { error?: string; created?: boolean; id?: string };
-    return r.ok ? { ok: true, created: j.created, id: j.id } : { ok: false, error: j.error ?? `save: ${r.status}` };
+    const r = await fetch('/api/library/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ film, kind, ref, ...(note ? { note } : {}) }) });
+    const j = (await r.json().catch(() => ({}))) as { error?: string; created?: boolean; id?: string; meta?: LibraryItem };
+    return r.ok ? { ok: true, created: j.created, id: j.id, meta: j.meta } : { ok: false, error: j.error ?? `save: ${r.status}` };
   } catch {
     return { ok: false, error: 'The harness server is not answering' };
   }
+}
+
+/** The library entry a film's file was saved as, when it was: the entry whose file came from that path. */
+export function savedFrom(items: LibraryItem[] | undefined, film: string, kind: LibraryKind, refPath: string | undefined): LibraryItem | undefined {
+  if (!items || !refPath) return undefined;
+  const src = `assets/films/${film}/${refPath}`;
+  return items.find((i) => i.kind === kind && i.film.slug === film && i.files.some((f) => f.source === src || f.source.endsWith(`/${src}`)));
 }

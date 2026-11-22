@@ -11,7 +11,7 @@ import { IconChevronDown } from './icons';
 import { cn } from '@/lib/utils';
 import { usePresence } from '@/components/shell/Reveal';
 
-export function QCChip({ spec, targets, chipLabel, note, lockWord }: {
+export function QCChip({ spec, targets, chipLabel, note, lockWord, phoneTall }: {
   spec: QCSpec;
   /** One target, or several (the popover then lets the user switch between them). */
   targets: QCTarget | QCTarget[];
@@ -19,6 +19,8 @@ export function QCChip({ spec, targets, chipLabel, note, lockWord }: {
   chipLabel?: string;
   note?: string;
   lockWord?: string;
+  /** On the phone the button takes a 44 px press, the chip drawn as before inside it (the Story page). */
+  phoneTall?: boolean;
 }) {
   const list = Array.isArray(targets) ? targets : [targets];
   const [open, setOpen] = useState(false);
@@ -58,10 +60,12 @@ export function QCChip({ spec, targets, chipLabel, note, lockWord }: {
     <div ref={box} className={cn('relative flex flex-none flex-col gap-1.5', side === 'right' ? 'items-end' : 'items-start')}>
       <button type="button" aria-expanded={open} aria-label={`${label}. Open the QC panel`}
         onClick={() => { const r = box.current?.getBoundingClientRect(); const host = box.current?.closest('main')?.getBoundingClientRect().left ?? 0; if (r) setSide(r.right - 520 < host + 8 ? 'left' : 'right'); setOpen(!open); if (!open) ui.addChip({ id: `qc:${spec.stage}:${many ? 'all' : list[0].target}`, label: `QC · ${many ? chipLabel ?? spec.name : list[0].label}` }); }}
-        className={cn('inline-flex h-7 max-w-[min(520px,calc(100vw-32px))] cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-[14px] border px-2.5 text-[12px] font-medium tabular-nums text-ink', hasRun ? 'border-faint bg-panel' : settled ? 'border-transparent px-1 font-normal text-mute hover:text-sub' : 'border-dashed border-edge-strong', open && 'bg-raised')}>
-        {!settled && <span className={cn('size-1.5 flex-none rounded-full', !hasRun ? 'border border-mute' : good ? 'bg-ok' : 'bg-ink')} />}
-        <span className="truncate">{label}</span>
-        <IconChevronDown size={12} className={cn('flex-none text-sub transition-transform', open && 'rotate-180')} />
+        className={cn('inline-flex max-w-[min(520px,calc(100vw-32px))] cursor-pointer items-center rounded-[14px]', phoneTall && 'max-[760px]:-my-2 max-[760px]:h-11')}>
+        <span className={cn('inline-flex h-7 min-w-0 max-w-full items-center gap-[7px] whitespace-nowrap rounded-[14px] border px-2.5 text-[12px] font-medium tabular-nums text-ink', hasRun ? 'border-faint bg-panel' : settled ? 'border-transparent px-1 font-normal text-mute hover:text-sub' : 'border-dashed border-edge-strong', open && 'bg-raised')}>
+          {!settled && <span className={cn('size-1.5 flex-none rounded-full', !hasRun ? 'border border-mute' : good ? 'bg-ok' : 'bg-ink')} />}
+          <span className="truncate">{label}</span>
+          <IconChevronDown size={12} className={cn('flex-none text-sub transition-transform', open && 'rotate-180')} />
+        </span>
       </button>
       {note && <span className="max-w-[300px] text-right text-[11.5px] leading-[1.4] text-mute">{note}</span>}
       {pop.mounted && current && (

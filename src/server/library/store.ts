@@ -7,6 +7,12 @@ import { harnessConfig } from '../config';
 import { DRIVE_MISSING, driveConnected } from '../actions/film';
 import { isDir, isFile, type Writer } from '../actions/writes';
 
+/** What a library voice's voiceId is. 'saved voice': saved on Higgsfield, reused by its id. 'picked preview': a film's
+ *  pick recorded without saving (Flow v3.3 - 3 step 5): no voice id, the picked preview file is the voice, reused by that
+ *  file or its design. 'design preview': an option that was not picked (its id is the design's). 'deleted voice': saved
+ *  once, deleted from Higgsfield since; its preview and samples remain. */
+export type VoiceIdKind = 'saved voice' | 'picked preview' | 'design preview' | 'deleted voice';
+
 export type LibraryKind = 'face' | 'voice' | 'character' | 'location';
 export const LIBRARY_KINDS: LibraryKind[] = ['face', 'voice', 'character', 'location'];
 export const FOLDER: Record<LibraryKind, string> = { face: 'faces', voice: 'voices', character: 'characters', location: 'locations' };
@@ -30,7 +36,7 @@ export interface LibraryMeta {
   candidate?: string;           // "r1-7", "option 3", "u5b-2"
   prompt?: string;              // the prompt that made it, when the round's prompt file has it
   promptFrom?: string;
-  voice?: { voiceId?: string; voiceIdKind?: 'saved voice' | 'design preview' | 'deleted voice'; model?: string; hz?: number; seconds?: number; source?: string; note?: string };
+  voice?: { voiceId?: string; voiceIdKind?: VoiceIdKind; model?: string; hz?: number; seconds?: number; source?: string; note?: string };
   dates: { made?: string; picked?: string; saved: string };
   files: LibraryFile[];
   thumb?: string;               // a small jpeg made with sips for the grids
@@ -90,10 +96,11 @@ function sips(src: string, out: string): Promise<boolean> {
   });
 }
 
-export interface SaveResult { id: string; kind: LibraryKind; dir: string; created: boolean; upgraded?: boolean; meta: LibraryMeta }
+export interface SaveResult { id: string; kind: LibraryKind; dir: string; created: boolean; upgraded?: boolean; noted?: boolean; meta: LibraryMeta }
 
-/** Writes one entry: copies the files beside meta.json. An entry already there is kept as it is; a pick of
- *  a saved entry only turns its status to "picked" (the library is the harness's own folder, not a film's). */
+/** Writes one entry: copies the files beside meta.json. An entry already there keeps its files; a pick of a saved
+ *  entry only turns its status to "picked", and a new note of the user's replaces its note (the library is the
+ *  harness's own folder, not a film's). */
 export async function saveEntry(draft: LibraryDraft, w: Writer): Promise<SaveResult> {
   const root = await ensureLibrary(w);
   const kind = draft.meta.kind;
@@ -101,11 +108,17 @@ export async function saveEntry(draft: LibraryDraft, w: Writer): Promise<SaveRes
   const metaFile = path.join(dir, 'meta.json');
   if (await isFile(metaFile)) {
     const meta = JSON.parse(await fs.readFile(metaFile, 'utf8')) as LibraryMeta;
-    if (draft.meta.status === 'picked' && meta.status !== 'picked') {
-      const next: LibraryMeta = { ...meta, status: 'picked', dates: { ...meta.dates, picked: draft.meta.dates?.picked ?? today() } };
+    const upgraded = draft.meta.status === 'picked' && meta.status !== 'picked';
+    const noted = !!draft.meta.note && draft.meta.note !== meta.note;
+    if (upgraded || noted) {
+      const next: LibraryMeta = {
+        ...meta,
+        ...(upgraded ? { status: 'picked' as const, dates: { ...meta.dates, picked: draft.meta.dates?.picked ?? today() } } : {}),
+        ...(noted ? { note: draft.meta.note } : {}),
+      };
       if (!w.dryRun) await fs.writeFile(metaFile, JSON.stringify(next, null, 1) + '\n');
-      await w.ran('status saved → picked', w.show(metaFile));
-      return { id: meta.id, kind, dir, created: false, upgraded: true, meta: next };
+      await w.ran([upgraded ? 'status saved → picked' : '', noted ? 'the note' : ''].filter(Boolean).join(', '), w.show(metaFile));
+      return { id: meta.id, kind, dir, created: false, ...(upgraded ? { upgraded } : {}), ...(noted ? { noted } : {}), meta: next };
     }
     return { id: meta.id, kind, dir, created: false, meta };
   }

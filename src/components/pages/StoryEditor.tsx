@@ -40,6 +40,36 @@ function changedParas(a: string, b: string): number {
   const n = Math.max(y.filter((p) => !inX.has(p)).length, x.filter((p) => !inY.has(p)).length);
   return Math.max(n, a.trim() !== b.trim() ? 1 : 0);
 }
+/** The elements that scroll around `el`, nearest first, and the page itself. */
+function scrollers(el: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (let e = el.parentElement; e; e = e.parentElement) if (/(auto|scroll)/.test(getComputedStyle(e).overflowY)) out.push(e);
+  const root = document.scrollingElement as HTMLElement | null;
+  if (root && !out.includes(root)) out.push(root);
+  return out;
+}
+/** Scrolls the nearest scroller the least it takes to show the caret's line above the story's save bar. */
+function keepCaretInView(el: HTMLTextAreaElement): void {
+  const s = scrollers(el)[0];
+  if (!s) return;
+  const cs = getComputedStyle(el);
+  const m = document.createElement('div');
+  for (const k of ['font', 'letterSpacing', 'lineHeight', 'wordSpacing', 'tabSize', 'padding', 'borderWidth', 'boxSizing'] as const) m.style[k] = cs[k];
+  Object.assign(m.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', width: `${el.offsetWidth}px` });
+  m.textContent = el.value.slice(0, el.selectionEnd);
+  const mark = m.appendChild(document.createElement('span'));
+  mark.textContent = '\u200b';
+  document.body.appendChild(m);
+  const line = parseFloat(cs.lineHeight) || 28;
+  const y = el.getBoundingClientRect().top + mark.offsetTop;
+  m.remove();
+  const box = s.getBoundingClientRect();
+  const bar = document.querySelector('[data-save-bar="story"] > div')?.getBoundingClientRect();
+  const top = Math.max(box.top, 0) + 8;
+  const bottom = Math.min(box.bottom, window.innerHeight, bar && bar.height ? bar.top : Infinity) - 8;
+  if (y + line > bottom) s.scrollTop += y + line - bottom;
+  else if (y < top) s.scrollTop -= top - y;
+}
 const draftKey = (film: string) => `hh-story-draft:${film}`;
 
 interface Draft { base?: string; text: string }
@@ -91,8 +121,13 @@ export function StoryEditor({ state, film, locked, hasScript }: { state: FilmSta
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
+    // 'auto' collapses the page for a moment and the browser clamps its scroll (the page shot up on each key,
+    // 20 Nov 2026): the scroll is put back as it was, then the caret is kept clear of the save bar
+    const kept = scrollers(el).map((s) => [s, s.scrollTop] as const);
     el.style.height = 'auto';
     el.style.height = `${Math.max(el.scrollHeight + 2, 220)}px`;
+    for (const [s, top] of kept) if (s.scrollTop !== top) s.scrollTop = top;
+    if (document.activeElement === el) keepCaretInView(el);
   }, [text, shownV]);
 
   useEffect(() => {

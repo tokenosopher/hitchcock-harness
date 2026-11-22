@@ -17,14 +17,22 @@
 //   sample-day1-waiting the unready sample with cards waiting for the user: a yes on S1 and S2's storyboards, the
 //                       Neighbour's voice round 1 (three sounds, also a pick at the gate) and a go with its quote; the
 //                       sounds are three short placeholder tones beside the fixtures (voice-1.mp3 to voice-3.mp3)
+//   sample-day1-layouts S3 changed after its takes landed: S1 and S2 took their boards' place as in sample-day1-takes, S3
+//                       with its take 1 of Layout 1 (previz take 1, boards v1, five shots); then S3 was restaged as
+//                       Layout 2 (previz take 2, boards v2, six shots: the turning lens put in as shot 3, the sea's shot
+//                       after it shorter). Layout 1 has two takes, Layout 2 none yet; the cut still uses Layout 1.
+//                       Shot 2 is framed closer in Layout 2, so four of Layout 1's five shots are safe swaps into it
+//                       (its shot 3 into shot 4, 2.2 s longer); its shot 2 warns.
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { FeedApproval, FeedCard, FilmRef, FilmState, QCEntry, QCReport, SceneRef, Timeline, TimelineVersionRef } from '@/server/types';
-import { bringUp, takeForBoards, type PlanPreviz, type PlanScene, type PlanSource } from '@/components/edit/planned';
+import { bringUp, takeForBoards, type PlanPreviz, type PlanScene, type PlanSource, type PrevizLine, type TakeIn } from '@/components/edit/planned';
+import { layoutContent, sceneLayouts, type BoardsIn, type Layout, type LayoutShotIn, type PrevizIn, type TakeLayoutIn } from '@/components/edit/layouts';
 import type { TakeShots } from '@/components/edit/shots';
 import { castSampleState } from './cast';
+import { SAMPLE_VIEWS_S1, SENT_S1, SENT_S4 } from './sent';
 
-type Id = 'sample-day1-idea' | 'sample-day1-script' | 'sample-day1-shots' | 'sample-day1-boards' | 'sample-day1-unready' | 'sample-day1-takes' | 'sample-day1-waiting';
+type Id = 'sample-day1-idea' | 'sample-day1-script' | 'sample-day1-shots' | 'sample-day1-boards' | 'sample-day1-unready' | 'sample-day1-takes' | 'sample-day1-waiting' | 'sample-day1-layouts';
 const cast = castSampleState('sample-cast')!;
 const repo = cast.film.repo;
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
@@ -36,10 +44,13 @@ export const DAY1_SAMPLES: Record<Id, FilmRef> = {
   'sample-day1-unready': ref('sample-day1-unready', 'Sample · day one: the boards, the takes not ready', 5),
   'sample-day1-takes': ref('sample-day1-takes', 'Sample · day one: takes land', 6),
   'sample-day1-waiting': ref('sample-day1-waiting', 'Sample · day one: three cards wait for you', 5),
+  'sample-day1-layouts': ref('sample-day1-layouts', 'Sample · S3 changed after its takes', 6),
 };
 const isDay1 = (slug: string): slug is Id => slug in DAY1_SAMPLES;
 /** The samples whose cut has the boards (the two with the boards in, and the one where takes land). */
-const hasBoards = (slug: Id) => slug === 'sample-day1-boards' || slug === 'sample-day1-unready' || slug === 'sample-day1-takes' || slug === 'sample-day1-waiting';
+const hasBoards = (slug: Id) => slug === 'sample-day1-boards' || slug === 'sample-day1-unready' || slug === 'sample-day1-takes' || slug === 'sample-day1-waiting' || slug === 'sample-day1-layouts';
+/** The samples whose S1 and S2 took their boards' place. */
+const landed = (slug: Id) => slug === 'sample-day1-takes' || slug === 'sample-day1-layouts';
 export const day1SampleFilms = (): FilmRef[] => Object.values(DAY1_SAMPLES);
 
 // ---- the script, the shot lists and the boards
@@ -78,10 +89,10 @@ const PREVIZ_S3: PlanPreviz = { take: 2, lines: [{ who: 'MAREN', text: 'Twice. J
 /** S2's storyboard as every panel: only sample-day1-boards' files have it, after its v3, so "Update the timeline" turns
  *  S2's four boards into its seven panels (shot 1 two, shot 2 three), each its own board. */
 const PANELS_S2: [number, number][][] = [[[1, 0.1], [2, 2.2]], [[3, 4.1], [4, 7], [5, 10.2]], [[6, 12.6]], [[7, 15.4]]];
-function sourceFor(slug: string, shots: boolean, boards: boolean, previz = false): PlanSource {
+function sourceFor(slug: string, shots: boolean, boards: boolean, previz = false, s3?: 1 | 2): PlanSource {
   return {
     locked: { version: 'v2', date: '2026-11-11' }, pace: { wps: 2.9, gap: 0.5 },
-    scenes: SCRIPT.map(([id, title, seconds, items]) => ({
+    scenes: SCRIPT.map(([id, title, seconds, items]) => (id === 'S3' && s3 && shots && boards ? s3Scene(slug, s3, title, seconds, items) : {
       id, title, seconds, items,
       ...(shots ? { shots: SHOTS[id].map(([t0, t1], i) => ({ n: i + 1, id: String(i + 1), t0, t1, text: WHAT[id][i], inFrame: IN_FRAME[id],
         ...(boards ? { board: `assets/films/${slug}/previz/${id}/storyboard/v1/panels/${String(i + 1).padStart(2, '0')}-shot${i + 1}.png` } : {}),
@@ -92,10 +103,59 @@ function sourceFor(slug: string, shots: boolean, boards: boolean, previz = false
     })),
   };
 }
-/** What each sample's plan is built from (the server reads files; the samples hold it here). */
+/** What each sample's plan is built from (the server reads files; the samples hold it here). The layouts sample's S3 is
+ *  its Layout 2 now (its files were changed after the takes). */
 export function mockPlanSource(slug: string): PlanSource | undefined {
   if (!isDay1(slug) || slug === 'sample-day1-idea') return undefined;
-  return sourceFor(slug, slug !== 'sample-day1-script', hasBoards(slug), slug === 'sample-day1-boards');
+  return sourceFor(slug, slug !== 'sample-day1-script', hasBoards(slug), slug === 'sample-day1-boards', slug === 'sample-day1-layouts' ? 2 : undefined);
+}
+
+// ---- the layouts sample's S3: two layouts, each a previz take and the storyboard made from it
+
+const THERE = 'Someone’s there.';
+type Cam = Pick<LayoutShotIn, 'cam' | 'yaw' | 'pitch' | 'lens'>;
+const CAM: Record<string, Cam> = {
+  switch: { cam: [1, 2, 1.6], yaw: 90, pitch: -10, lens: 50 }, window: { cam: [0, 0, 1.5], yaw: 180, pitch: 0, lens: 35 }, closer: { cam: [0, 0.6, 1.5], yaw: 180, pitch: 0, lens: 50 },
+  lens: { cam: [-1, 2, 1.2], yaw: 120, pitch: -20, lens: 50 }, sea: { cam: [0.5, -1, 1.7], yaw: 200, pitch: -5, lens: 28 },
+  blink: { cam: [0, 0.4, 1.5], yaw: 180, pitch: 0, lens: 85 }, smile: { cam: [3, 4, 1.6], yaw: 30, pitch: 0, lens: 50 },
+};
+const S3_LAYOUT: Record<1 | 2, { n: number; written: number; shots: [string, number, number, string][]; lines: PrevizLine[] }> = {
+  1: { n: 1, written: Date.UTC(2026, 10, 13, 9), shots: [['1 Her hand on the switch, the lamp off and on', 0, 3.2, 'switch'], ['2 The two of them at the window', 3.2, 6, 'window'], ['3 From behind them: the dark sea', 6, 10, 'sea'], ['4 A small light blinks twice', 10, 11.5, 'blink'], ['5 Maren smiles', 11.5, 14, 'smile']],
+    lines: [{ who: 'TOBIAS', text: THERE, t: [10.2, 11.3] }] },
+  2: { n: 2, written: Date.UTC(2026, 10, 15, 9), shots: [['1 Her hand on the switch, the lamp off and on', 0, 3.2, 'switch'], ['2 Closer: the two of them at the window', 3.2, 6, 'closer'], ['3 The lens turns, the beam sweeps out', 6, 8.2, 'lens'], ['4 From behind them: the dark sea', 8.2, 10, 'sea'], ['5 A small light blinks twice', 10, 11.5, 'blink'], ['6 Maren smiles', 11.5, 14, 'smile']],
+    lines: [{ who: 'TOBIAS', text: THERE, t: [10.2, 11.3] }] },
+};
+const s3Board = (slug: string, k: 1 | 2, i: number) => `assets/films/${slug}/previz/S3/storyboard/v${k}/panels/${String(i).padStart(2, '0')}-shot${i}.png`;
+const s3Previz = (k: 1 | 2): PrevizIn => ({ n: k, written: S3_LAYOUT[k].written, lines: S3_LAYOUT[k].lines,
+  shots: S3_LAYOUT[k].shots.map(([name, t0, t1, cam], i) => ({ id: String(i + 1), t0, t1, name, ...CAM[cam] })) });
+/** S3 as Layout `k`'s files say it: its shots (with the scene file's words), its boards and its lines at its own times. */
+function s3Scene(slug: string, k: 1 | 2, title: string, seconds: number, items: PlanScene['items']): PlanScene {
+  const L = S3_LAYOUT[k];
+  return { id: 'S3', title, seconds, items, previz: { take: L.n, lines: L.lines },
+    shots: L.shots.map(([name, t0, t1], i) => ({ n: i + 1, id: String(i + 1), t0, t1, text: name.replace(/^\d+\s+/, ''), inFrame: IN_FRAME.S3, board: s3Board(slug, k, i + 1) })),
+    boards: { version: `v${k}`, why: 'checked, 8.7 and on your card', panels: L.shots.length, take: L.n, newestTake: 2, takeHow: 'check' } };
+}
+const S3_DIR = 'assets/films/the-lighthouse/blocks/S3/takes';
+/** Layout 1's two takes (the-lighthouse's S3 files, 23 s; the sample uses their first 14 s), cut where Layout 1 cuts. */
+const S3_TAKES: { src: string; name: string; seconds: number; cuts: number[]; previz: 1 | 2 }[] = [
+  { src: `${S3_DIR}/take1.mp4`, name: 'take 1', seconds: 14, cuts: [3.2, 6.05, 10, 11.55], previz: 1 },
+  { src: `${S3_DIR}/take2.mp4`, name: 'take 2', seconds: 14, cuts: [3.3, 6, 10.1, 11.5], previz: 1 },
+];
+/** GET …/layouts for the samples: S3's two layouts in the layouts sample, nothing elsewhere. */
+export function mockLayouts(slug: string): { scene: string; layouts: Layout[] }[] | undefined {
+  if (!isDay1(slug)) return undefined;
+  if (slug !== 'sample-day1-layouts') return [];
+  const boards: BoardsIn[] = ([1, 2] as const).map((k) => ({ version: `v${k}`, take: k, shots: S3_LAYOUT[k].shots.map((_, i) => ({ shot: String(i + 1), src: s3Board(slug, k, i + 1) })), ...(k === 2 ? { shown: true } : {}) }));
+  const takes: TakeLayoutIn[] = S3_TAKES.map((t) => ({ src: t.src, name: t.name, previzTake: t.previz, storyboard: `v${t.previz}`, seconds: t.seconds, landed: true }));
+  return [{ scene: 'S3', layouts: sceneLayouts([s3Previz(1), s3Previz(2)], boards, takes) }];
+}
+/** What a sample layout puts in its scene's place (the plan route's "layout" action): its newest take, else its boards. */
+export function mockLayoutPut(slug: string, scene: string, l: Layout): { take: TakeIn } | { scene: PlanScene; pace: PlanSource['pace'] } | undefined {
+  if (slug !== 'sample-day1-layouts' || scene !== 'S3') return undefined;
+  const c = layoutContent(l);
+  if ('take' in c) return { take: { src: c.take.src, name: c.take.name, seconds: c.take.seconds ?? 14, sound: true } };
+  const [, title, seconds, items] = SCRIPT.find(([id]) => id === 'S3')!;
+  return { scene: s3Scene(slug, l.key as 1 | 2, title, seconds, items), pace: { wps: 2.9, gap: 0.5 } };
 }
 
 // ---- the takes of the last sample: the-lighthouse's files of S1 and S2
@@ -106,14 +166,18 @@ const TAKES: { scene: string; src: string; seconds: number }[] = [
   { scene: 'S2', src: `${BLOCKS}/S2/takes/S2-grey-take1-480p.mp4`, seconds: 26.125 },
 ];
 export function mockPlanTakes(slug: string): { scene: string; src: string; name: string; seconds: number }[] {
+  if (slug === 'sample-day1-layouts') return [...TAKES.filter((t) => t.scene !== 'S3').map((t) => ({ ...t, name: 'take 1' })), ...S3_TAKES.map((t) => ({ scene: 'S3', src: t.src, name: t.name, seconds: t.seconds }))];
   return slug === 'sample-day1-takes' ? TAKES.map((t) => ({ ...t, name: 'take 1' })) : [];
 }
 /** GET …/shots for the samples: the takes of S1 and S2, cut where the-lighthouse's cut cuts them. */
 export function day1Shots(slug: string, filmShots: () => { takes: TakeShots[] }): { takes: TakeShots[]; waiting: number } | undefined {
   if (!isDay1(slug)) return undefined;
-  if (slug !== 'sample-day1-takes') return { takes: [], waiting: 0 };
+  if (!landed(slug)) return { takes: [], waiting: 0 };
   const all = filmShots().takes;
-  return { takes: TAKES.map((t) => { const x = all.find((y) => y.src === t.src); return { src: t.src, scene: t.scene, name: 'take 1', seconds: x?.seconds ?? t.seconds, cuts: x?.cuts ?? [], state: 'ready' as const }; }), waiting: 0 };
+  const takes: TakeShots[] = TAKES.filter((t) => slug !== 'sample-day1-layouts' || t.scene !== 'S3')
+    .map((t) => { const x = all.find((y) => y.src === t.src); return { src: t.src, scene: t.scene, name: 'take 1', seconds: x?.seconds ?? t.seconds, cuts: x?.cuts ?? [], state: 'ready' as const }; });
+  if (slug === 'sample-day1-layouts') takes.push(...S3_TAKES.map((t) => ({ src: t.src, scene: 'S3', name: t.name, seconds: t.seconds, cuts: t.cuts, state: 'ready' as const })));
+  return { takes, waiting: 0 };
 }
 
 // ---- the cuts
@@ -132,11 +196,12 @@ function chain(slug: Id): Cut {
   const b2 = bringUp(steps[0].tl, sourceFor(slug, true, false))!;
   push(b2.tl, b2.words);
   if (hasBoards(slug)) {
-    const b3 = bringUp(steps[1].tl, sourceFor(slug, true, true))!;
+    // the layouts sample's S3 had Layout 1's boards when its take landed
+    const b3 = bringUp(steps[1].tl, sourceFor(slug, true, true, false, slug === 'sample-day1-layouts' ? 1 : undefined))!;
     push(b3.tl, b3.words);
   }
-  if (slug === 'sample-day1-takes') {
-    for (const t of mockPlanTakes(slug)) {
+  if (landed(slug)) {
+    for (const t of mockPlanTakes(slug).filter((x) => x.name === 'take 1')) {
       const r = takeForBoards(steps[steps.length - 1].tl, t.scene, { src: t.src, name: t.name, seconds: t.seconds, sound: true });
       if (typeof r !== 'string') push(r.tl, r.words);
     }
@@ -161,15 +226,22 @@ export function day1SampleCut(slug: string): Cut | undefined {
 function scenesOf(slug: Id): SceneRef[] {
   const shots = slug !== 'sample-day1-idea' && slug !== 'sample-day1-script';
   return SCRIPT.map(([id, title, seconds], i) => {
-    const take = slug === 'sample-day1-takes' ? TAKES.find((t) => t.scene === id) : undefined;
-    const making = slug === 'sample-day1-takes' && !take;
+    const take = landed(slug) ? TAKES.find((t) => t.scene === id) : undefined;
+    const making = landed(slug) && !take;
+    if (slug === 'sample-day1-layouts' && id === 'S3') {
+      return { id, title, folder: `generations/${id}`, seconds, location: 'L02 the lamp room', shots: 6, sceneFile: `generations/${id}/${id}-scene.md`, promptVersions: [],
+        takes: S3_TAKES.map((t) => ({ id: t.name.replace(' ', ''), path: t.src.replace(/^assets\/films\/the-lighthouse\//, ''), seconds: t.seconds, kind: 'take' as const, date: '2026-11-14' })) };
+    }
     return {
       id, title, folder: `generations/${id}`, seconds, location: i < 1 ? 'L01 the shore' : 'L02 the lamp room',
       ...(shots ? { shots: SHOTS[id].length, sceneFile: `generations/${id}/${id}-scene.md` } : {}),
       // the ready sample's prompts: v1 written and checked (check.py PASS; its QC below)
       promptVersions: slug === 'sample-day1-boards' ? [{ version: 'v1', path: `generations/${id}/prompt/${id}-prompt-v1.txt`, checkPath: `generations/${id}/prompt/${id}-check-v1.txt`, checkPassed: true, mediaPath: `generations/${id}/prompt/${id}-media-v1.json` }] : [],
-      takes: take ? [{ id: 'take1', path: take.src.replace(/^assets\/films\/the-lighthouse\//, ''), seconds: take.seconds, kind: 'take' as const, date: '2026-11-14' }]
-        : making ? [{ id: 'take1', jobId: `job-${id}`, kind: 'take' as const, date: '2026-11-14' }] : [],
+      // the view behind each of S1's shots that names one
+      ...(slug === 'sample-day1-takes' && id === 'S1' ? { shotViews: SAMPLE_VIEWS_S1 } : {}),
+      // S1's take and S4's (being made) carry the record of what was sent; the others have none (src/fixtures/sent.ts)
+      takes: take ? [{ id: 'take1', path: take.src.replace(/^assets\/films\/the-lighthouse\//, ''), seconds: take.seconds, kind: 'take' as const, date: '2026-11-14', ...(id === 'S1' ? { sent: SENT_S1 } : {}) }]
+        : making ? [{ id: 'take1', jobId: `job-${id}`, kind: 'take' as const, date: '2026-11-14', ...(id === 'S4' ? { sent: SENT_S4 } : {}) }] : [],
     };
   });
 }

@@ -61,12 +61,12 @@ export function Btn({ children, primary, ghost, className, ...rest }: React.Butt
 }
 
 /** A candidate tile: the picture itself when `src` (a path relative to the film repo) is given, else a grey tile with the id. */
-export function Tile({ label, selected, alma, onClick, className, ariaLabel, faded, src, w = 320 }: { label: string; selected?: boolean; alma?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number }) {
+export function Tile({ label, selected, alma, kept, onClick, className, ariaLabel, faded, src, w = 320 }: { label: string; selected?: boolean; alma?: boolean; kept?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={ariaLabel ?? `Candidate ${label}`}
+      aria-label={`${ariaLabel ?? `Candidate ${label}`}${kept ? ', in the library' : ''}`}
       aria-pressed={selected}
       className={cn(
         'relative flex cursor-pointer items-end justify-center rounded-[6px] border bg-tile pb-1.5 font-mono text-[10.5px]',
@@ -77,6 +77,8 @@ export function Tile({ label, selected, alma, onClick, className, ariaLabel, fad
     >
       {src && <Media path={src} w={w} missingLabel="" className="absolute inset-0 rounded-[5px]" />}
       {alma && <span className="absolute left-1.5 top-1.5 z-[1] rounded-[4px] bg-ink px-1.5 py-px font-sans text-[10px] font-semibold text-bg">Alma</span>}
+      {/* in the library: a small filled bookmark in the corner */}
+      {kept && <span title="In the library" className="absolute right-1.5 top-1.5 z-[1] flex size-[18px] items-center justify-center rounded-[4px] bg-black/60 text-ink duration-200 animate-in fade-in-0"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z" /></svg></span>}
       {src ? <span className="relative z-[1] rounded-[4px] bg-black/60 px-1.5 py-px text-ink-3">{label}</span> : label}
     </button>
   );

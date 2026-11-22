@@ -9,7 +9,7 @@ import type { PickBody } from '@/components/library/data';
 export interface Choice {
   id: string;                                   // "card:<key>" or "pick:<kind>:<target>"
   label: string;                                // "C02 Tobias: which voice · Option 2"
-  answer?: { card: string; option?: string; kind: 'pick' | 'yes' | 'go'; cost?: string };
+  answer?: { card: string; option?: string; kind: 'pick' | 'yes' | 'go' | 'why'; cost?: string; note?: string };
   pick?: PickBody;
 }
 

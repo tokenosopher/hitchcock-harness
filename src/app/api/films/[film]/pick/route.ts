@@ -5,6 +5,8 @@ import { connection } from 'next/server';
 import { makePick, PickError, PICK_KINDS, type PickInput, type PickKind } from '@/server/actions/pick';
 import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { LIBRARY_KINDS, LibraryUnavailable, type LibraryKind } from '@/server/library/store';
+import { isMock } from '@/fixtures/mock';
+import { soundMockPicks } from '@/fixtures/soundpick';
 
 type Ctx = { params: Promise<{ film: string }> };
 
@@ -19,6 +21,8 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
   } catch {
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
+  const mocked = isMock() ? soundMockPicks(film, [{ kind: s(body.kind), target: s(body.target), candidate: s(body.candidate), note: s(body.note), card: s(body.card) }]) : undefined;
+  if (mocked) return mocked;
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   const kind = s(body.kind) as PickKind | undefined;
   if (!kind || !PICK_KINDS.includes(kind)) return Response.json({ error: `kind must be one of ${PICK_KINDS.join(', ')}` }, { status: 400 });
@@ -34,6 +38,7 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
     libraryId: s(body.libraryId),
     libraryKind: libraryKind && LIBRARY_KINDS.includes(libraryKind) ? libraryKind : undefined,
     from: s(body.from),
+    card: s(body.card),
   };
   try {
     const r = await makePick(input, film, { dryRun: body.dryRun === true });

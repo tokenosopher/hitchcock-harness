@@ -21,6 +21,8 @@ import { Reveal } from '@/components/shell/Reveal';
 import { IconFile } from '@/components/shell/icons';
 import { refData } from '@/components/lib/refPick';
 import { cardRefOf } from '@/components/shell/refItems';
+import { SoundPicks } from './SoundPicks';
+import { WhyPanel } from './WhyPanel';
 
 interface FeedData { cards: FeedCard[]; total: number; warnings: string[] }
 type ToRepo = (rel: string) => string;
@@ -28,7 +30,30 @@ type ToRepo = (rel: string) => string;
 const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;
 const visual = (m: { kind?: string; path?: string }): boolean => m.kind === 'video' || m.kind === 'image';
 const short = (s: string, n = 44): string => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
-const ASK_WORD: Record<FeedAsk['kind'], string> = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go' };
+const ASK_WORD: Record<FeedAsk['kind'], string> = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go', why: 'Why?', debrief: 'Your answers' };
+const askWord = (c: FeedCard): string => (c.sounds?.length ? 'Pick each' : ASK_WORD[c.ask!.kind]);
+
+/** The debrief's card: how far the answers are, and the way to the page where they are given. */
+function DebriefLink({ film, card }: { film: string; card: FeedCard }) {
+  const d = card.debrief;
+  const left = d ? d.questions - d.answered - d.skipped : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <Link href={`/films/${film}/debrief`} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-3 text-[13px] font-medium text-bg no-underline transition-colors duration-200 hover:bg-ink-3">
+        {d && (d.answered || d.skipped) ? 'Go on with the debrief' : 'Open the debrief'}
+      </Link>
+      {d && <span className="text-[12.5px] tabular-nums text-sub">{d.answered} answered · {d.skipped} skipped · {left} to go</span>}
+    </div>
+  );
+}
+
+/** What a card that asks answers with: its sounds, a why, the debrief's page, or the options and buttons. */
+function Answer({ film, card, toRepo, from, onAnswered }: { film: string; card: FeedCard; toRepo: ToRepo; from: string; onAnswered?: (option?: string) => void }) {
+  if (card.sounds?.length) return <SoundPicks film={film} card={card} toRepo={toRepo} from={from} open={!card.ask?.answer} />;
+  if (card.ask?.kind === 'why') return <WhyPanel film={film} card={card} from={from} />;
+  if (card.ask?.kind === 'debrief') return <DebriefLink film={film} card={card} />;
+  return <AskPanel film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />;
+}
 
 /** "6 clips · 2 sounds": what a folded card holds. */
 function mediaLine(media: FeedMedia[]): string {
@@ -113,7 +138,7 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
   const sel = mine?.answer?.option;
   const about = `${card.ids[0] ? `${card.ids[0]} · ` : ''}${short(card.title, 44)}`;
   const setSel = (id: string) => choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
-  const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind, cost: ask.cost } }));
+  const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind === 'go' ? 'go' : 'yes', cost: ask.cost } }));
   const [note, setNote] = useState('');
   const [p, setP] = useState<Phase>({ k: 'idle' });
   const opt = ask.options.find((o) => o.id === sel);
@@ -261,7 +286,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         </p>
         <fieldset disabled aria-label="The options, locked while this is in progress" className="pointer-events-none m-0 flex min-w-0 select-none flex-col gap-3 border-0 p-0 opacity-45 grayscale">
           <CardBody card={card} toRepo={toRepo} hideOptions />
-          <AskPanel film={film} card={card} toRepo={toRepo} from={from} />
+          <Answer film={film} card={card} toRepo={toRepo} from={from} />
         </fieldset>
         {p.by === 'harness' && (
           <div><Btn ghost className="-ml-2.5 h-7 text-[12.5px]" disabled={busy} onClick={unlock}>Unlock the options</Btn></div>
@@ -275,7 +300,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         <span aria-hidden="true" className="box-border size-[7px] flex-none rounded-full border-[1.5px] border-ink bg-bg" />
         {card.id && <span className="font-mono text-[12px] text-sub">{card.id}</span>}
         <h3 className="m-0 min-w-0 text-[14px] font-medium leading-snug">{card.title}</h3>
-        <Badge>{ASK_WORD[card.ask!.kind]}</Badge>
+        <Badge>{askWord(card)}</Badge>
         <span className="ml-auto flex flex-none items-center gap-2 text-[12px] text-mute">{where}{card.date && <span>{fmtDate(card.date)}</span>}</span>
       </div>
       {state && <Who state={state} ids={card.ids} text={card.who} face={card.place !== 'faces'} />}
@@ -289,7 +314,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         </div>
       )}
       <CardBody card={card} toRepo={toRepo} hideOptions />
-      <AskPanel film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />
+      <Answer film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />
     </article>
   );
 }
@@ -297,9 +322,16 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
 function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
   const [open, setOpen] = useState(false);
   const ui = useUI();
+  const { state } = useFilm();
   const a = card.ask?.answer;
   const picked = a ? (card.ask!.options.find((o) => o.id === a.option)?.label || a.option) : undefined;
-  const line = [mediaLine(card.media), a ? (a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : card.ask!.kind === 'go' ? 'go given' : 'yes given') : ''].filter(Boolean).join(' · ');
+  const k = card.ask?.kind;
+  const said = !a ? ''
+    : card.sounds?.length ? `${card.sounds.length} sounds answered`
+      : k === 'debrief' ? `answers sent${card.debrief ? ` · ${card.debrief.answered} answered` : ''}`
+        : k === 'why' ? (a.option === 'skip' ? 'skipped' : 'you said why')
+          : a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : k === 'go' ? 'go given' : 'yes given';
+  const line = [mediaLine(card.media), said].filter(Boolean).join(' · ');
   return (
     <li className="border-t border-line first:border-t-0">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
@@ -314,7 +346,9 @@ function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
       <Reveal open={open}>
         <div className="flex flex-col gap-3 px-4 pb-4 pt-0.5 min-[761px]:pl-[80px]">
           <CardBody card={card} toRepo={toRepo} />
-          {a?.note && <p className="m-0 text-[12.5px] text-sub">Your note: {a.note}</p>}
+          {state && card.sounds?.length ? <SoundPicks film={state.film.slug} card={card} toRepo={toRepo} from="" open={false} /> : null}
+          {k === 'debrief' && state && <DebriefLink film={state.film.slug} card={card} />}
+          {a?.note && <p className="m-0 text-[12.5px] text-sub">{k === 'why' ? 'Your reason' : 'Your note'}: {a.note}</p>}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Btn ghost className="-ml-2.5 h-7 text-[12.5px]" onClick={() => ui.prefill(`About "${short(card.title, 60)}"${card.id ? ` (${card.id})` : ''}: `, { id: `card:${card.key}`, label: `card · ${short(card.title, 32)}` })}>Ask Alma about this</Btn>
             <span className="truncate text-[11.5px] text-mute">{[card.section, card.group].filter(Boolean).join(' › ')}</span>

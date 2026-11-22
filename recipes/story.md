@@ -46,7 +46,7 @@ If the user changes the story after the script exists, the story gets its next v
 
 ## When the user edits the script on the page
 
-Before the lock the user can change the words of a spoken line or of a direction in place on the Story page, and save. The rules for the script, its timing and its lock are the stage 1 note's (`Flow v3.2 - 1 Setup and story`, steps 20 to 29); this is only what the harness does and what reaches you.
+Before the lock the user can change the words of a spoken line or of a direction in place on the Story page, and save. The rules for the script, its timing and its lock are the stage 1 note's (`Flow v3.3 - 1 Setup and story`, steps 20 to 29); this is only what the harness does and what reaches you.
 
 What the harness writes, in `script.md`, as one save (all the changes of that sitting):
 

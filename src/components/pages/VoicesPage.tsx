@@ -135,7 +135,7 @@ export function VoicesPage() {
                   )}
                 </Card>
               ) : <Card dashed className="p-4 text-[12.5px] text-sub">No voice designed for {c.id} yet. It starts with the face rounds.</Card>}
-              <p className="m-0 text-[12.5px] leading-normal text-sub">One design call per brief returns three previews; each starts with the element line, then the character’s own lines. Choose an option to pick it here, or say it in chat, e.g. “{c.id} option 2”. A pick runs the flow’s pick.py (no paid samples); Alma speaks the samples next.</p>
+              <p className="m-0 text-[12.5px] leading-normal text-sub">One design call per brief returns three previews; each starts with the element line, then the character’s own lines. Choose an option to pick it here, or say it in chat, e.g. “{c.id} option 2”. A pick runs the flow’s pick.py and calls no service: the picked preview is the voice, and Alma cuts the element line from it next.</p>
             </div>
 
             <Card>

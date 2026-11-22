@@ -108,7 +108,13 @@ export interface SceneRef {
   cutSource?: CutSource;        // how inCut was derived (the cut reader, 8 Nov); also on the server's more.cutSource
   location?: string;            // "L01 the shore", from the scene file (the truth), not the script heading
   cost?: Cost;                  // the scene's takes and pick-ups together
+  /** The painted view of the location behind each shot that names one, from the scene's newest prompt with a
+   *  media list (shotViews.ts). A shot that names no view is not in the list. */
+  shotViews?: ShotView[];
 }
+/** The painted view behind one shot: the shot's number in its scene, the view's [TAG] in the prompt, its file relative
+ *  to the film folder (locations/L02-shore/L02-shore-back-v2.png), and the prompt version it was read from. */
+export interface ShotView { shot: number; tag: string; path: string; from?: string }
 export interface TakeRef {
   id: string;                   // "take3", "FIX-lamp-S3 · take 2"
   path?: string;
@@ -124,6 +130,9 @@ export interface TakeRef {
   verdict?: 'redo' | 'usable' | 'good';
   finding?: string;             // the reason in a sentence: "the scene's punchline was never spoken"
   placement?: TakePlacement;    // where the take sits in the current cut, when it is in it (the cut reader, 8 Nov)
+  /** The record of what was sent to the model for this take, relative to the film folder
+   *  (generations/<G>/takes/take<N>/<G>-take<N>-sent.json, written at submission). */
+  sent?: string;
 }
 
 /** How the current cut was read: the cut's name, the files it came from, the date, and a one-line label
@@ -311,7 +320,10 @@ export interface FeedMedia {
 export interface FeedOption { id: string; label: string; path?: string }
 /** What a card asks of the user. Only a card that says so asks: nothing is read out of its words. */
 export interface FeedAsk {
-  kind: 'pick' | 'yes' | 'go';  // choose one option · say yes to what is shown · give the go for a paid job
+  /** choose one option · say yes to what is shown · give the go for a paid job · say why, in words, or skip ·
+   *  the film's debrief, answered on its own page (the harness writes this card from review/debrief.json). A
+   *  card of sound picks is a "pick" with `sounds`: one pick per sound, not one per card. */
+  kind: 'pick' | 'yes' | 'go' | 'why' | 'debrief';
   options: FeedOption[];        // for "pick": the card's own options, else its files
   prediction?: string;          // the option Alma expects, said before the pick (taste.md)
   cost?: string;                // for "go": the quote, as written ("12 credits at 480p draft")
@@ -347,6 +359,33 @@ export interface FeedCard {
   fileLine?: { name: string; sub?: string; path?: string };
   /** A short note of Alma's, set apart under the words. */
   note?: string;
+  /** The sound designer's pick card: each sound of the scene with its place on the cut and its tries. */
+  sounds?: FeedSound[];
+  /** The debrief card: how many questions, how many answered or skipped. */
+  debrief?: { questions: number; answered: number; skipped: number };
+}
+
+/** One planned sound of the sound designer, on its pick card (Flow v3.3 - 11 Sound and music, steps 31 to 34).
+ *  Read from audio/sfx/plan.json (its place) and audio/sfx/<name>/prompts.json (its tries). */
+export interface FeedSound {
+  name: string;                 // its folder under audio/sfx/, the name sfx.py takes
+  /** The plan's entry: where it sits on the cut and how it is set. */
+  effect?: {
+    id?: string; kind?: string; what?: string; reason?: string;
+    startTc?: string; endTc?: string; startFrame?: number; endFrame?: number; seconds?: number;
+    levelDb?: number; fadeIn?: number; fadeOut?: number;
+  };
+  /** The scene it sits in (the plan's scenes by frames), and the film's length in frames, for the small strip. */
+  scene?: string;
+  filmFrames?: number;
+  fps?: number;
+  tries: { n: number; file?: string; style?: string; prompt?: string; seconds?: number; lufs?: number }[];
+  /** Alma's prediction: the try she expects the user to take. */
+  prediction?: number;
+  /** The pick sfx.py recorded (pick.json), if any. */
+  picked?: { n: number; note?: string; date?: string };
+  /** The answer given on this card through the harness: a try, or "none" (none of these). */
+  answer?: { option: string; note?: string; at?: string };
 }
 /** The part of the feed every page needs at once; the cards themselves come from GET /api/films/[film]/feed. */
 export interface FeedSummary {
@@ -475,7 +514,7 @@ export interface TimelineClip {
    *  picture track (`text`, `inFrame`, no src); 'board': the previz panel of a planned shot (`src` a still image). */
   plan?: PlanKind;
   scene?: string;               // the scene a planned clip belongs to ("S4")
-  shot?: number;                // a planned shot's or board's number in its scene (1, 2 …)
+  shot?: number;                // a planned shot's or board's number in its scene (1, 2 …); on a take's shot swapped into another place of its scene's layout (`layout`), that place
   who?: string;                 // a line's speaker ("TOBIAS"); absent on an action
   inFrame?: string;             // who and what a planned shot shows ("the boy, Maren, the bottle")
   made?: string;                // what the app built, "<scene hash>.<clip hash>": a clip changed by hand no longer matches
@@ -485,6 +524,10 @@ export interface TimelineClip {
    *  `n` its number in the storyboard, `s` its time in the scene as the storyboard names it (seconds). Every panel of a
    *  shot is its own clip, from its own time to the next panel's; a take replaces all of a shot's panels together. */
   panel?: BoardPanel;
+  /** The scene's layout this clip was put in by: the previz take of the layout the user chose for
+   *  the scene, on every clip that choice put in, and on a shot of another layout's take swapped into one of its places
+   *  (`shot` is then that place). Set by the app only; "Update the timeline" leaves a scene with it as it is. */
+  layout?: number;
 }
 export interface BoardPanel { k: number; of: number; n: number; s: number }
 export type PlanKind = 'line' | 'shot' | 'board';
@@ -600,6 +643,42 @@ export interface GoMediaItem {
   view?: boolean;
   page?: number;
   missing?: boolean;            // the file is not on disk
+}
+/** One reference sent with a take, at the number the prompt names it by ("IMAGE REFERENCE 1" is Image 1). */
+export interface SentRef {
+  order: number;                // 1-based place in the order sent
+  kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
+  n: number;                    // its number within its kind
+  label: string;                // "IMAGE REFERENCE 1", as the prompt names it
+  name: string;                 // "Image 1"
+  tag?: string;                 // "MAREN", "PAGE 2"; none when no media list named it
+  file?: string;                // the file that media id was uploaded from, relative to the film folder
+  what: string;                 // "C01 element", "P02 prop", "L01 view", "boards v4 · page 2", "voice line"
+  desc?: string;                // what the media list says of it (the prompt's words for it)
+  view?: boolean;
+  page?: number;
+  uploaded?: string;            // the upload registry's date
+  missing?: boolean;            // the file is not on disk now
+}
+/** What was sent to the video model for one take: the record tools/takes/record_sent.py writes beside it
+ *  (<G>-take<N>-sent.json; Flow v3.3 - 7 Takes, step 8), as GET /api/films/[film]/sent reads it. */
+export interface SentRecord {
+  path: string;                 // the record, relative to the film folder
+  take: string;                 // "S3-take1"
+  jobId?: string;
+  submitted?: string;           // ISO time
+  model?: string;               // "seedance_2_5"
+  settings: {
+    mode?: string; aspect?: string; resolution?: string; duration?: number; draft?: boolean; audio?: boolean;
+    seed?: number | null; count?: number; unlim?: boolean;
+    more: [string, string][];   // any other setting sent (folder_id, declined_preset_id …), as text
+  };
+  settingsFrom?: string;        // "the generate_video arguments as sent" or "the files and step 7"
+  prompt: { file?: string; version?: string; text: string; chars: number; sameAsFile?: boolean };
+  refs: SentRef[];
+  layout?: { previzTake?: string; previzTakeNumber?: number; storyboard?: string; storyboardVersion?: string };
+  spend?: { row: boolean; cost?: string };
+  differences: string[];        // where what was sent differs from the files, in plain words
 }
 export interface GoCheck {
   path: string;

@@ -150,7 +150,7 @@ export function sheetParts(s: FilmState, tasks: TaskCard[]): Part[] {
 }
 export function voiceParts(s: FilmState, tasks: TaskCard[]): Part[] {
   return castOf(s).filter(speaks).map((c) => partOf({ id: c.id, name: c.name, rounds: c.voice?.rounds, aims: liveAims(tasks, 'voices', c.id),
-    done: voiceDone(c) ? (c.voice?.pick ? `option ${c.voice.pick.candidateId} picked` : 'picked') : undefined,
+    done: voiceDone(c) ? (c.voice?.pick ? `${/^\d+$/.test(c.voice.pick.candidateId) ? 'option ' : ''}${c.voice.pick.candidateId} picked` : 'picked') : undefined,
     blocked: faceDone(c) ? undefined : 'after the face pick' }));
 }
 export function elementParts(s: FilmState, tasks: TaskCard[]): Part[] {

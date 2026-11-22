@@ -115,7 +115,10 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
     steps.push({ id: 'takes', done: false, row: { kind: 'takes-tab' },
       facts: `${plural(waiting.length, 'take')}, one for each scene${planned ? ` · ${mmss(planned)} of film` : ''}${go?.ask?.cost ? ` · ${go.ask.cost}` : ''}`,
       ...(r.ready ? { act: { label: `Go for the ${plural(waiting.length, 'take')}`, do: { kind: 'go-takes', n: waiting.length, scenes: waiting } } } : { wait: r.line, waitFull: r.full }) });
-  } else steps.push({ id: 'takes', done: false, row: { kind: 'takes-tab' }, facts: `${inFilm.length} of ${ids.length} in the film${making.length ? ` · ${making.length} being made` : ''}` });
+  } else {
+    // a take goes into its boards' place the moment it lands, before its check (Flow v3.3 - 7 step 19, 9 step 1)
+    steps.push({ id: 'takes', done: false, row: { kind: 'takes-tab' }, facts: `${inFilm.length} of ${ids.length} in the film${making.length ? ` · ${making.length} being made, each into the edit as it lands` : ''}` });
+  }
 
   // a cut of takes (nothing planned in it), or a delivered film: the early steps are behind it
   const behind = s.film.status === 'delivered' || (!!tl && !hasPlanned(tl) && tl.tracks.some((t) => t.kind === 'video' && t.clips.length > 0));
@@ -136,5 +139,5 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
  *  ready, which the press can only be when it is (takesReady.ts). What she does with it (her asking card, its
  *  quote) is the flow's; the page sends nothing else and states no cost. */
 export function goTakesAsk(n: number, scenes: string[]): string {
-  return `Go for the first takes: ${plural(n, 'take')}, one for each scene (${scenes.join(', ')}). ${scenes.length === 1 ? 'The scene\'s' : 'Every scene\'s'} boards passed their check and have your yes, its prompt passed its check, and every sheet, video element, view and prop is made and approved.`;
+  return `Go for the first takes: ${plural(n, 'take')}, one for each scene (${scenes.join(', ')}). ${scenes.length === 1 ? 'The scene\'s' : 'Every scene\'s'} boards passed their check and have your yes, its prompt passed its check, and every sheet, video element, view and prop is made and approved. Each take goes into the edit, in its boards' place, the moment it lands, before its check.`;
 }

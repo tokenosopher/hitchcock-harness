@@ -27,12 +27,12 @@ export interface WaitItem {
   /** One more line: the card's own line under its title, or the pick's round and count. */
   line?: string;
   /** What the answer is, for the steps' line: "your yes", "your go", "your pick". */
-  answer: 'your yes' | 'your go' | 'your pick';
+  answer: 'your yes' | 'your go' | 'your pick' | 'your answer';
   /** The gate's Voices pick, narrowed to the characters no card of Alma's already asks about. */
   voiceIds?: string[];
 }
 
-const ASK_WORD = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go' } as const;
+const ASK_WORD = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go', why: 'Why?', debrief: 'Your answers' } as const;
 const GATE_PLACE: Record<GateItem['kind'], FlowKey> = { face: 'faces', master: 'loc', clothing: 'clothing', sheet: 'sheet', voices: 'voices', prop: 'loc', go: 'scenes' };
 
 /** Every item of "Waiting for you", in its order: Alma's cards that ask (in the order the work goes), then the picks in
@@ -43,9 +43,9 @@ export function waitItemsOf(flow: Flow, s: FilmState): WaitItem[] {
   const asks = [...flow.asks].sort((a, b) => ORDER.indexOf(a.place) - ORDER.indexOf(b.place));
   const cards: WaitItem[] = asks.map((c) => {
     const k = c.ask?.kind ?? 'yes';
-    return { key: `card:${c.key}`, card: c, place: c.place, title: c.title, word: ASK_WORD[k], ready: true,
+    return { key: `card:${c.key}`, card: c, place: c.place, title: c.title, word: c.sounds?.length ? 'Pick each' : ASK_WORD[k], ready: true,
       ...(k === 'go' && c.ask?.cost ? { cost: c.ask.cost } : {}), ...(c.sub ? { line: c.sub } : {}),
-      answer: k === 'go' ? 'your go' : k === 'pick' ? 'your pick' : 'your yes' };
+      answer: k === 'go' ? 'your go' : k === 'pick' ? 'your pick' : k === 'why' || k === 'debrief' ? 'your answer' : 'your yes' };
   });
   const gate = [...flow.gate.filter((g) => g.group === 'chains'), ...flow.gate.filter((g) => g.group === 'gate')];
   const picks: WaitItem[] = gate.map((g) => {
@@ -122,6 +122,8 @@ export function itemHref(it: WaitItem, flow: Flow): string {
  *  voices of each round waiting at the gate. Paths relative to the film folder. */
 export function soundsOf(it: WaitItem, s: FilmState): { path: string; label: string; key: string }[] {
   const c = it.card;
+  // a card of sound picks: every try of every sound, "cheer-toast 2"
+  if (c?.sounds?.length) return c.sounds.filter((x) => !x.answer).flatMap((x) => x.tries.filter((t) => t.file).map((t) => ({ path: t.file!, label: `${x.name} ${t.n}`, key: `${x.name}:${t.n}` })));
   if (c?.ask?.kind === 'pick') {
     return c.ask.options.flatMap((o) => {
       const m = c.media.find((x) => x.option === o.id) ?? (o.path ? c.media.find((x) => x.path === o.path) : undefined);

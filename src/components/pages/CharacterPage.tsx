@@ -17,6 +17,7 @@ import { IconBookmark, IconChevronDown } from '@/components/shell/icons';
 import { useFilmPage, filmPath } from './common';
 import { FromLibrary } from '@/components/library/FromLibrary';
 import { PickButton, SaveButton } from '@/components/library/PickButton';
+import { savedFrom, useLibrary } from '@/components/library/data';
 import { Media } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { characterRowTest } from '@/lib/spendMatch';
@@ -103,8 +104,11 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
   const r = lastRound(rounds);
   const [sel, setSel] = useState(r?.prediction);
   const [tab, setTab] = useState<'round' | 'lib'>('round');
+  const [chosen, setChosen] = useState<string>();   // after the pick: the candidate chosen to save to the library
   const { ui, state } = useFilmPage();
+  const lib = useLibrary();
   const media = (p?: string) => (p && state ? filmPath(state, p) : undefined);
+  const kept = (p?: string) => (state ? savedFrom(lib.data?.items, state.film.slug, 'face', p) : undefined);
   if (!r) return <span className="text-[12.5px] text-sub">No round yet.</span>;
   const landed = r.candidates.filter((k) => k.path);
   const pink = r.candidates.filter((k) => /pink/.test(k.note ?? '')).map((k) => k.id);
@@ -147,10 +151,23 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
             <span className="text-[12px] text-sub">Round {roundNo(from)} · the candidates you picked from</span>
             <div className="grid grid-cols-8 gap-1 max-[760px]:grid-cols-5">
               {from.candidates.map((k) => (
-                <Tile key={k.id} label={k.id.split('-').pop() ?? k.id} src={media(k.path)} w={160} className="aspect-[4/5] w-full overflow-hidden text-[9.5px]" selected={k.id === c.face?.pick?.candidateId} faded={!k.path}
-                  ariaLabel={`Candidate ${k.id}`} onClick={() => ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path })} />
+                <Tile key={k.id} label={k.id.split('-').pop() ?? k.id} src={media(k.path)} w={160} kept={!!kept(k.path)}
+                  className={cn('aspect-[4/5] w-full overflow-hidden text-[9.5px] transition-shadow duration-200', k.id === chosen && k.id !== c.face?.pick?.candidateId && 'ring-1 ring-sub ring-offset-2 ring-offset-bg')}
+                  selected={k.id === c.face?.pick?.candidateId} faded={!k.path}
+                  ariaLabel={`Candidate ${k.id}`} onClick={() => { if (k.path) setChosen(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
               ))}
             </div>
+            {/* any face of the round, picked or not, can be kept for a later film */}
+            {(() => {
+              const k = from.candidates.find((x) => x.id === chosen && x.path);
+              if (!k || !state) return <span className="text-[12px] text-mute">Choose a face to save it to the library for a later film.</span>;
+              return (
+                <div className="flex flex-wrap items-center gap-2 duration-200 animate-in fade-in-0">
+                  <SaveButton key={`s-${k.id}`} film={state.film.slug} kind="face" refPath={k.path!} saved={kept(k.path)} onSaved={lib.reload}
+                    label={<>Save <span className="font-mono">{k.id}</span> to the library</>} />
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -162,7 +179,7 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
         <>
           <div className="grid grid-cols-5 gap-1.5 max-[760px]:grid-cols-4">
             {r.candidates.map((k) => (
-              <Tile key={k.id} label={k.id} src={media(k.path)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} alma={k.id === r.prediction} faded={!k.path}
+              <Tile key={k.id} label={k.id} src={media(k.path)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} alma={k.id === r.prediction} kept={!!kept(k.path)} faded={!k.path}
                 onClick={() => { setSel(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
             ))}
           </div>
@@ -178,7 +195,7 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
                   <PickButton key={sel} film={state.film.slug} body={{ kind: 'face', target: c.id, round: r.id, candidate: sel, prediction: r.prediction, from: 'the Character page' }}
                     label={<>Pick <span className="font-mono">{sel}</span></>} what={`${sel} for ${c.id} ${c.name}`} />
                   {r.candidates.find((k) => k.id === sel)?.path && (
-                    <SaveButton key={`s-${sel}`} film={state.film.slug} kind="face" refPath={r.candidates.find((k) => k.id === sel)!.path!} label={<>Save <span className="font-mono">{sel}</span> to the library</>} />
+                    <SaveButton key={`s-${sel}`} film={state.film.slug} kind="face" refPath={r.candidates.find((k) => k.id === sel)!.path!} saved={kept(r.candidates.find((k) => k.id === sel)!.path)} onSaved={lib.reload} label={<>Save <span className="font-mono">{sel}</span> to the library</>} />
                   )}
                 </>
               ) : (

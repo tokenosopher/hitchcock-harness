@@ -8,6 +8,7 @@ import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { PickError } from '@/server/actions/pick';
 import { isMock } from '@/fixtures/mock';
 import { mockAnswer } from '@/server/release/mockAlma';
+import { soundMockAnswer } from '@/fixtures/soundpick';
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
   // MOCK=boards: a release sample's card is answered in memory (the harness's line goes to the mock thread)
-  const mocked = isMock() && !Array.isArray(body.answers) ? mockAnswer(film, { card: s(body.card), option: s(body.option), from: s(body.from) }) : undefined;
+  const mocked = isMock() && !Array.isArray(body.answers) ? (soundMockAnswer(film, { card: s(body.card), option: s(body.option), note: s(body.note) }) ?? mockAnswer(film, { card: s(body.card), option: s(body.option), from: s(body.from) })) : undefined;
   if (mocked) return mocked;
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   if (Array.isArray(body.answers)) {

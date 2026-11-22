@@ -165,9 +165,20 @@ function voiceFor(ctx: FilmCtx, cid: string, vf: VoiceFiles, rows: TastePickX[],
   const el = asRecord(lKey ? lineFor(vf.lines, lKey) : undefined);
   const chosen = asRecord(o?.chosen);
   const castRow = asRecord(cKey ? vf.cast?.[cKey] : undefined);
+  const castPreview = asString(castRow?.preview) ?? asString(chosen?.file);
+  const foreign = !!castPreview && !opts.some((x) => asString(asRecord(x)?.file) === castPreview);
   let filePick = chosen ? String(asNumber(chosen.option) ?? '') : '';
-  if (!filePick && castRow) filePick = /option (\d+)/.exec(asString(castRow.source) ?? '')?.[1] ?? '';
+  if (!filePick && castRow && !foreign) filePick = /option (\d+)/.exec(asString(castRow.source) ?? '')?.[1] ?? '';
   if (!filePick && el && asNumber(el.option) !== undefined) filePick = String(asNumber(el.option));
+  // Since Flow v3.3 a pick has no voice id: the picked preview file is the voice (3 step 5). A preview that is not one of
+  // this character's options (another character's, a library voice's) is shown as a round of its own, before the design
+  // rounds so the newest round stays last, and is the pick.
+  if (!filePick && foreign) {
+    if (!present.has(castPreview!)) ctx.warn.add('voices/cast.json', `${key} preview: ${castPreview} not found`);
+    rounds.unshift({ id: 'picked', candidates: [{ id: 'preview', path: present.has(castPreview!) ? castPreview : undefined, note: asString(castRow?.source) }] });
+    filePick = 'preview';
+    known.add(filePick);
+  }
   let pick = applyTaste(rounds, rows, known.has(filePick) ? filePick : undefined);
   if (!pick && filePick) pick = { candidateId: filePick };
   if (pick && !pick.words) pick.words = asString(chosen?.note) ?? asString(castRow?.note);
@@ -190,6 +201,7 @@ async function presentFiles(ctx: FilmCtx, vf: VoiceFiles): Promise<Set<string>> 
     else if (v && typeof v === 'object') Object.values(v).forEach(walk);
   };
   walk(vf.options);
+  walk(vf.cast);
   walk(vf.lines);
   const out = new Set<string>();
   await Promise.all([...names].map(async (n) => (await exists(abs(ctx, n))) && out.add(n)));

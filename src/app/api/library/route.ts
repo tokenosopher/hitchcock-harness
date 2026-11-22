@@ -4,10 +4,11 @@
 import { connection } from 'next/server';
 import { isMock, mockLibrary } from '@/fixtures/mock';
 import { listLibrary } from '@/server/library/store';
+import { mockLibraryItems } from '@/fixtures/library';
 
 export async function GET() {
   await connection();
-  if (isMock()) { const c = mockLibrary(); return Response.json({ ...c, counts: c, items: [] }); } // the same shape as below
+  if (isMock()) { const c = mockLibrary(); return Response.json({ ...c, counts: c, items: mockLibraryItems() }, { headers: { 'cache-control': 'no-store' } }); } // the same shape as below
   const l = await listLibrary();
   return Response.json({ ...l.counts, counts: l.counts, items: l.items, ...(l.note ? { note: l.note } : {}) }, { headers: { 'cache-control': 'no-store' } });
 }

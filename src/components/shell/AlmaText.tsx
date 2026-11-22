@@ -12,7 +12,7 @@ const PAGES: Record<string, string> = {
   shots: '?open=shots', previz: '?open=previz', storyboards: '?open=previz', picks: '?open=gate', gate: '?open=gate',
   character: 'character', characters: 'character', cast: 'character', faces: 'character', clothing: 'character', sheet: 'character',
   voices: 'character/voices', elements: 'character/elements', scenes: 'scenes', scene: 'scenes', takes: 'scenes',
-  go: 'go', edit: 'edit', finish: 'finish', sound: 'sound', release: 'release',
+  go: 'go', edit: 'edit', finish: 'finish', sound: 'sound', release: 'release', debrief: 'debrief',
 };
 const NAMED = /\b((?:the |The )?(Story|Locations?|Views|Shots|Previz|Storyboards|Characters?|Cast|Voices|Elements|Scenes|Go|Edit|Finish|Sound|Release|Main|Board) page)\b|\b((?:the |The )?"?Your picks"?(?: page)?)/g;
 const TOKEN = /\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|(https?:\/\/[^\s<>"'`]+)/g;

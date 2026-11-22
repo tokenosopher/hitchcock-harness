@@ -160,7 +160,7 @@ export async function readSettings(): Promise<SettingsInfo> {
     folder('Library', cfg.library, false, 'faces, voices, characters, locations across films'),
     ...cfg.otherRepos.map((r) => folder('Other studio', r, false, 'its films are listed in the registry')),
     ...cfg.finalCuts.map((r) => folder('Final cuts', r, true, 'deliveries: copied with a time limit')),
-    folder('Rules', FLOW_DIR, true, 'studio/flow: Film Flow v3.2, read per stage by the film skill'),
+    folder('Rules', FLOW_DIR, true, 'studio/flow: Film Flow v3.3, read per stage by the film skill'),
   ]);
 
   const envPath = path.join(cfg.filmRepo, '.env');

@@ -41,6 +41,11 @@
     "refs:test": "tsx scripts/refs-test.ts",
     "port:test": "tsx scripts/port-test.ts",
     "security:test": "tsx scripts/security-test.ts",
+    "soundpick:test": "tsx scripts/soundpick-test.ts",
+    "library-save:test": "tsx scripts/library-save-test.ts",
+    "sent:test": "tsx scripts/sent-test.ts",
+    "layouts:test": "tsx scripts/layouts-test.ts",
+    "shot-views:test": "tsx scripts/shot-views-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

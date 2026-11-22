@@ -10,6 +10,7 @@ import { leftSampleCut, leftSampleFilms, leftSampleState } from './left';
 import { castSampleFilms, castSampleState } from './cast';
 import { day1SampleCut, day1SampleFilms, day1SampleState } from './day1';
 import { storySampleFilms, storySampleState } from './story';
+import { soundSampleFilms, soundSampleState } from './soundpick';
 
 export const isMock = () => process.env.MOCK === 'boards';
 const set = () => FIXTURES_BOARDS;
@@ -21,14 +22,16 @@ const store = (g.__hhMock ??= {
   listeners: {},
 });
 
-export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms()];
+export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms(), ...soundSampleFilms()];
 export const mockLibrary = () => FIXTURE_LIBRARY;
-export const mockState = (film: string) => storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
+export const mockState = (film: string) => soundSampleState(film) ?? storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
 /** The Edit page's hand-written timeline (the Scenes page's cut lane as of 1 Nov), for the boards comparison:
  *  GET …/cut answers it with `mock: true` and the page keeps its versions in memory (nothing is written). */
 const CUTS: Record<string, unknown> = { 'the-lighthouse': cutFilm };
 export const mockCut = (film: string) => (CUTS[film] ?? sampleCut(film) ?? leftSampleCut(film) ?? day1SampleCut(film)) as { current: unknown; empty?: boolean; versions: unknown[]; timelines?: unknown[]; sourceSeconds?: Record<string, number>; problems?: Record<string, string[]> } | undefined;
 export const mockThread = (film: string) => store.threads[film] ?? [];
+/** The film's thread as the fixtures have it: a sample's reset clears what earlier tests sent. */
+export const resetMockThread = (film: string) => { const f = FIXTURE_THREADS[film]; if (f) store.threads[film] = [...f]; else delete store.threads[film]; };
 
 function emit(film: string, e: ThreadEvent) {
   (store.threads[film] ??= []).push(e);

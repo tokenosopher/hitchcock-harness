@@ -7,25 +7,26 @@ Alma reads this file when a QC round is due and hands the brief below to one sub
 - Tool: Agent. `model: "opus"`, `run_in_background: true`. Description: `QC · <target>` (the task card then reads `Alma › QC · <target>`), for example `QC · S1 boards v4`.
 - One critic per artefact and round. Alma does not wait on it: she says in one line that round n is running and carries on.
 - The 480p of a cut is made only when asked for. For the `cut` stage, when `cut/renders/v<n>-proxy.mp4` of the version to grade is not there, Alma writes an empty `cut/renders/v<n>.proxy-requested` and waits for the file (or for a `FAILED:` line in `cut/renders/v<n>.log`, then says so and stops) before spawning the critic. Run QC from the Edit page renders it first by itself.
-- Before spawning, Alma fills the brief's blanks: the film folder (`assets/films/<film>/`), the stage, the target, the round number n (one more than the newest `qc/<stage>-<target>-r*.json`, else 1), the artefact's files, and the text of the stage note's checks and the film record's rules (she has them from the `film` skill; the critic may also read the stage notes itself).
+- Before spawning, Alma fills the brief's blanks: the film folder (`assets/films/<film>/`), the stage, the target, the QC folder (`qc/` unless the run is a test beside the film, which names its own), the round number n (one more than the newest `<qc-folder>/<stage>-<target>-r*.json`, else 1), the artefact's files, and the text of the stage note's checks and the film record's rules (she has them from the `film` skill; the critic may also read the stage notes in `studio/flow/` itself).
 - When it finishes, Alma reads the report and says the score, the open misses in one line each, and the "Next" sentence. She then applies the critic's fixes herself and runs the next round, up to three rounds or until it passes, and shows the user the result, as the QC step of the stage note says (the user's choice, 12 Nov 2026). What a fix may touch, and what still goes to the user first (anything that spends, anything the user picked or wrote), is the stage note's to say. The panel's "Fix these now" button only asks her to start at once.
 
 ## Stages, targets and files
 
 | stage | target | the page | what the critic reads | the stage note |
 |---|---|---|---|---|
-| `script` | `film` | Story | `script.md`, `brief.md` | Flow v3.2 - 1 Setup and story |
-| `sheet` | `C01` … | Character | `cast/<CID>-*/pick-face*.png`, `pick-wardrobe*.png`, the sheet, the brief's wardrobe line | Flow v3.2 - 2 Characters |
-| `voice` | `film` | Voices | `voices/cast.json`, the picked previews, the element lines | Flow v3.2 - 3 Voices and video elements |
-| `views` | `L01` … | Locations | the master, `locations/<LID>-*/views/`, the scene files that use it | Flow v3.2 - 4 Locations and props |
-| `previz` | `S1` … | Previz | `previz/<S>/`: the shots file, the newest previz take and its JSON, `storyboard/v<n>/` (pages, `panels.json`, panels), the views each wide uses, the picked sheets | Flow v3.2 - 5 Previz and storyboards (and 6b Acting, 6c Fight scene where there is action) |
-| `elements` | `film` | Elements | `elements/`, the sheets, the picked voices | Flow v3.2 - 3 Voices and video elements |
-| `prompt` | `S1` … | Scene (prompt panel), Scenes | `generations/<S>/prompt/<S>-prompt-v<n>.txt`, its media list, the scene file and shots file (an older film: `blocks/<S>/prompt/v<n>` and `blocks/scene-plan.md`) | Flow v3.2 - 6 Scene prompts |
-| `take` | `S1` … | Scene | the half-second strips of the take in the cut, `review/cards.json`, the prompt it came from | Flow v3.2 - 7 Takes |
-| `cut` | `film` | Edit | the timeline / cut file, its 480p (`cut/renders/v<n>-proxy.mp4`), `review/cards.json` | Flow v3.2 - 9 Edit |
-| `frames` | `film` | Finish | frames of the 1080p master beside the 480p | Flow v3.2 - 10 Finish and 1080p |
-| `captions` | `film` | Finish | the subtitle lines on the cut's Subtitles track (`cut/working.json`, the track of kind `captions`), `script.md` | Flow v3.2 - 12 Release |
-| `kit` | `film` | Release | `social/release.json` (each platform's texts in use, the facts, the cover frames), the final it names, the platform checklist | Flow v3.2 - 12 Release |
+| `script` | `film` | Story | `script.md`, `brief.md` | Flow v3.3 - 1 Setup and story |
+| `sheet` | `C01` … | Character | `cast/<CID>-*/pick-face*.png`, `pick-wardrobe*.png`, the sheet, the brief's wardrobe line | Flow v3.3 - 2 Characters |
+| `voice` | `film` | Voices | `voices/cast.json`, the picked previews, the element lines | Flow v3.3 - 3 Voices and video elements |
+| `views` | `L01` … | Locations | the master, `locations/<LID>-*/views/`, the scene files that use it | Flow v3.3 - 4 Locations and props |
+| `place` | `L01` … | Previz | `previz/<LID>-place/`: the place's people file, its shared script, the joins note, its grey stills and contact sheet, every scene's camera rendered against the approved props, the approved props and views | Flow v3.3 - 5 Previz and storyboards (the place check, before any scene is staged) |
+| `previz` | `S1` … | Previz | `previz/<S>/`: the shots file, the newest previz take and its JSON, `storyboard/v<n>/` (pages, `panels.json`, panels), the views each wide uses, the picked sheets | Flow v3.3 - 5 Previz and storyboards (and 6b Acting, 6c Fight scene where there is action) |
+| `elements` | `film` | Elements | `elements/`, the sheets, the picked voices | Flow v3.3 - 3 Voices and video elements |
+| `prompt` | `S1` … | Scene (prompt panel), Scenes | `generations/<S>/prompt/<S>-prompt-v<n>.txt`, its media list, the scene file and shots file (an older film: `blocks/<S>/prompt/v<n>` and `blocks/scene-plan.md`) | Flow v3.3 - 6 Scene prompts |
+| `take` | `S1` … | Scene | the half-second strips of the take in the cut, `review/cards.json`, the prompt it came from | Flow v3.3 - 7 Takes |
+| `cut` | `film` | Edit | the timeline / cut file, its 480p (`cut/renders/v<n>-proxy.mp4`), `review/cards.json` | Flow v3.3 - 9 Edit |
+| `frames` | `film` | Finish | frames of the 1080p master beside the 480p | Flow v3.3 - 10 Finish and 1080p |
+| `captions` | `film` | Finish | the subtitle lines on the cut's Subtitles track (`cut/working.json`, the track of kind `captions`), `script.md` | Flow v3.3 - 12 Release |
+| `kit` | `film` | Release | `social/release.json` (each platform's texts in use, the facts, the cover frames), the final it names, the platform checklist | Flow v3.3 - 12 Release |
 
 ## The brief (Alma pastes this, with the blanks filled)
 
@@ -33,16 +34,16 @@ Alma reads this file when a QC round is due and hands the brief below to one sub
 >
 > **Film folder:** `<assets/films/<film>/>`  **Stage:** `<stage>`  **Target:** `<target>` (`<label>`)  **Round:** `<n>` of at most 3.
 >
-> **Inputs.** Read these files (paths relative to the film folder): `<list>`. The checks of the stage note `<Flow v3.2 - …>`: `<pasted text>`. The film record's rules that apply (from `brief.md`, `regeneration-log.md`, `spend.md`, `review/cards.json` and the user's corrections recorded in the stage notes): `<pasted text>`. The previous round's report, if any: `qc/<stage>-<target>-r<n-1>.json`.
+> **Inputs.** Read these files (paths relative to the film folder): `<list>`. The checks of the stage note `<Flow v3.3 - …>`: `<pasted text>`. The film record's rules that apply (from `brief.md`, `regeneration-log.md`, `spend.md`, `review/cards.json` and the user's corrections recorded in the stage notes): `<pasted text>`. The previous round's report, if any: `<qc-folder>/<stage>-<target>-r<n-1>.json`. For a previz round 2 or later, first read `<qc-folder>/previz-<G>-fixed-misses.json` (written by the studio's `qc_recheck.py` before the round, when the studio has that tool) and look again at every item on it: a miss that is back keeps its id, with `open: true` and `reopened: true`.
 >
 > **What to grade** (only what applies to this stage; the five categories are fixed):
-> - **camera+geometry** (sub: camera, geometry): every wide stands on an empty view painted from its own camera; every other camera stands on a view of the side of the place it sees, cameras close together share one, and a camera that sees a really different side has its own (Flow v3.2 - 4 Locations and props, step 8); the panel's camera is the camera that rendered it (camera provenance: compare the shots file's camera position, height and facing with what the panel shows); sizes by diagonal field of view (extreme close-up 30°, close-up 47°, medium 63°, wide 84°).
+> - **camera+geometry** (sub: camera, geometry): every wide stands on an empty view painted from its own camera; every other camera stands on a view of the side of the place it sees, cameras close together share one, and a camera that sees a really different side has its own (Flow v3.3 - 4 Locations and props, step 8); the panel's camera is the camera that rendered it (camera provenance: compare the shots file's camera position, height and facing with what the panel shows); sizes by diagonal field of view (extreme close-up 30°, close-up 47°, medium 63°, wide 84°).
 > - **blocking+fluidity** (sub: blocking, fluidity, states): one action per wide; states agree across cuts (who stands where, what is held, doors, light, damage); for previz and boards also the **action fluidity** of entry 21: beats of one to two seconds, two to four beats, the pose matched across each cut, the movement readable on camera.
 > - **prop** (sub: prop): props at the scale, place and state the script and the prop pick give.
 > - **lines** (sub: lines, timing, IDs, text): a shot's text names only what is in frame (in-frame-only text); lines fit their shots at the measured rate with the tail after the last word (line timing); IDs unique, and spoken lines never share the `L` prefix with locations; captions word for word.
 > - **audio+effect** (sub: audio, effect): sound and effects as the prompt asks, nothing added (no music where none is asked).
 > - **Across all:** reference videos under 30 s in one generation (30 s refs); no full-size grey panel sent alone, and every grey image carries its "blocking only" line (grey-panel rules); the boards match the picked sheets and views (boards match picks); the scene plan agrees with the scene file (lengths, shot counts, who is in frame; entry 24).
-> - **For previz and boards, also camera design** (entry 21): angles and sizes worth having; neighbouring shots change position, not only size; a move named in `move=`; the coverage reads as a sequence. Use Flow v3.2 - 5's shot block (Size, Placement, Angle, Lens, Mount, Focus) as the vocabulary.
+> - **For previz and boards, also camera design** (entry 21): angles and sizes worth having; neighbouring shots change position, not only size; a move named in `move=`; the coverage reads as a sequence. Use Flow v3.3 - 5's shot block (Size, Placement, Angle, Lens, Mount, Focus) as the vocabulary.
 >
 > **Score.** 1 to 10, one decimal, for the artefact as it stands. 8.5 or above passes. A miss that would make a paid generation fail caps the score under 8.5. Carry every miss of the previous round forward with the same `id`: `open: false` and `fixedIn` (the version or file that fixed it) when it is fixed, still `open: true` when not. New misses get new ids.
 >
@@ -50,12 +51,12 @@ Alma reads this file when a QC round is due and hands the brief below to one sub
 >
 > **Next.** One sentence for the top of the panel, starting "Next:": what happens now ("Next: Alma applies 2 fixes (0 cr), then round 3 runs. You lock at 8.5 or above."). After round 3 under 8.5, say it is the user's call.
 >
-> **Output.** Write exactly one file, `qc/<stage>-<target>-r<n>.json` in the film folder (make `qc/` if missing), in this shape, and nothing else anywhere: no other file in the film folder, no edit to the artefact, no spend, no message to the user.
+> **Output.** Write exactly one file, `<qc-folder>/<stage>-<target>-r<n>.json` in the film folder (make the folder if missing), in this shape, and nothing else anywhere: no other file in the film folder, no edit to the artefact, no spend, no message to the user.
 >
 > ```json
 > {
 >   "stage": "previz", "target": "S1", "label": "S1 boards v4", "round": 2, "score": 7.4,
->   "model": "opus", "at": "2026-11-08T15:20:00Z",
+>   "at": "2026-11-08T15:20:00Z",
 >   "inputs": [{ "path": "previz/S1/S1-shots.json", "sha1": "…" }],
 >   "misses": [
 >     { "id": "m8", "category": "camera+geometry", "sub": "camera", "where": "shots 3 → 4",
@@ -82,4 +83,4 @@ Alma reads this file when a QC round is due and hands the brief below to one sub
 - The critic writes only `qc/<stage>-<target>-r<n>.json`. Alma never writes or edits a QC report by hand; a correction is a new round.
 - Fixes cost 0 credits when they change previz, boards, prompts or text; a fix that needs a paid generation is named as such in `fix`, and Alma quotes it before doing it.
 - Up to three rounds, or until 8.5. A pass with an open miss reads "8.6 · 1 open flag" and does not count as locked.
-- The checks live in the rules, `studio/flow/` (Film Flow v3.2, loaded by the `studio-film` skill); this recipe only says how to run the critic and what it writes. Where the stage note has no written standard yet (camera design and action fluidity), the critic uses the bullets above and says in the finding which rule it applied.
+- The checks live in the rules, `studio/flow/` (Film Flow v3.3, loaded by the `studio-film` skill); this recipe only says how to run the critic and what it writes. Where the stage note has no written standard yet (camera design and action fluidity), the critic uses the bullets above and says in the finding which rule it applied.

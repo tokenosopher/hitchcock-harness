@@ -5,6 +5,8 @@ import { sendChoices } from '@/server/actions/answer';
 import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { PickError, PICK_KINDS, type PickInput, type PickKind } from '@/server/actions/pick';
 import { LIBRARY_KINDS, LibraryUnavailable, type LibraryKind } from '@/server/library/store';
+import { isMock } from '@/fixtures/mock';
+import { soundMockDone } from '@/fixtures/soundpick';
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 const rows = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {})) : []);
@@ -19,7 +21,7 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
-  const answers = rows(body.answers).map((x) => ({ card: s(x.card) ?? '', option: s(x.option), from: 'the Done picking button' }));
+  const answers = rows(body.answers).map((x) => ({ card: s(x.card) ?? '', option: s(x.option), note: s(x.note), from: 'the Done picking button' }));
   if (answers.some((a) => !a.card)) return Response.json({ error: 'every answer needs its card' }, { status: 400 });
   const picks: PickInput[] = [];
   for (const x of rows(body.picks)) {
@@ -29,9 +31,12 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
     picks.push({
       kind, target: s(x.target) ?? '', round: s(x.round), candidate: s(x.candidate), prediction: s(x.prediction), note: s(x.note),
       source: x.source === 'library' ? 'library' : 'round', libraryId: s(x.libraryId),
-      libraryKind: libraryKind && LIBRARY_KINDS.includes(libraryKind) ? libraryKind : undefined, from: s(x.from),
+      libraryKind: libraryKind && LIBRARY_KINDS.includes(libraryKind) ? libraryKind : undefined, from: s(x.from), card: s(x.card),
     });
   }
+  const mocked = isMock() ? soundMockDone(film, answers, picks) : undefined;
+  if (mocked) return mocked;
+  if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   try {
     return Response.json(await sendChoices({ answers, picks }, film, { dryRun: body.dryRun === true }), { headers: { 'cache-control': 'no-store' } });
   } catch (e) {

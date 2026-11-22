@@ -1,7 +1,7 @@
 // Stage 12 (Release): the delivery in the film's final-cuts folder, the thumbnails in social/, the social kit
 // (social/kit.md: the copy per platform, the tags, what only the user can confirm, the posting order) and the
 // upload checklist per platform (the kit's own instructions plus "Before every upload" from the rules note
-// Flow v3.2 - 12 Release in studio/flow). The final-cuts folder and the notes are read in a child process with a
+// Flow v3.3 - 12 Release in studio/flow). The final-cuts folder and the notes are read in a child process with a
 // time limit (a read can hang on a macOS permission prompt); nothing is written. Served by GET /api/films/[film]/release.
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -13,7 +13,7 @@ import { fileFact, reviewSections, sentences } from './record';
 
 /** The rules folder the checklist cites (read-only; the rules live there): HARNESS_FLOW_DIR, else <studio>/flow. */
 export const FLOW_DIR = process.env.HARNESS_FLOW_DIR || path.join(/*turbopackIgnore: true*/ harnessConfig().filmRepo, 'flow');
-export const RELEASE_NOTE = 'Flow v3.2 - 12 Release';
+export const RELEASE_NOTE = 'Flow v3.3 - 12 Release';
 
 export type DeliveredKind = 'captioned' | 'captioned-480p' | 'clean' | 'srt' | 'kit' | 'thumbnail' | 'page' | 'video' | 'folder' | 'other';
 export interface DeliveredFile { name: string; bytes?: number; date?: string; kind: DeliveredKind; edition?: string; current?: boolean }
@@ -281,7 +281,7 @@ async function beforeEveryUpload(): Promise<{ items: string[]; available: boolea
   return { items: beforeEveryUploadIn(md), available: true };
 }
 
-/** The film's posts, from the note the release stage keeps (Flow v3.2 - 12 Release, "Published links"): a section
+/** The film's posts, from the note the release stage keeps (Flow v3.3 - 12 Release, "Published links"): a section
  *  per film, a row per platform. Read-only, under a time limit; a film with no section has none.
  *  HARNESS_PUBLISHED_LINKS, else <studio>/published-links.md. */
 const PUBLISHED_NOTE = process.env.HARNESS_PUBLISHED_LINKS || path.join(/*turbopackIgnore: true*/ harnessConfig().filmRepo, 'published-links.md');
