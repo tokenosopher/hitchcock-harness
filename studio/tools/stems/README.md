@@ -24,7 +24,7 @@ uv run --quiet --no-project --python 3.12 --with demucs==4.1.0 --with numpy --wi
 ## When Demucs is not installed
 
 Use Higgsfield's `separate_stems` through the `higgsfield` MCP server (paid; quote it from the price on file in
-`flow/Flow v3.2 - 13 Services and costs.md`):
+`flow/Flow v3.3 - 13 Services and costs.md`):
 
 1. Bring the file into the Higgsfield sandbox with `sandbox_exec` (it lives under `/home/user`).
 2. Call `separate_stems` with `path` (the file in the sandbox), `mode: two` (vocals, no_vocals) or `four`, and a new

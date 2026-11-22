@@ -10,8 +10,8 @@ Python that sets PEOPLE to the same dict):
    "groups": {"CROWD": [{"name": "CROWD01", "at": [x, y], "height": 1.71, "facing": 268, "hands": "side"}, ...],
               "QUEUE": [{"name": "QUEUE01", "at": [1.55, -1.15, 0.3], "height": 1.40, "build": [0.85, 0.85],
                          "facing": 90, "hands": "front"}, ...]},
-             crowds and standing groups: each figure keyed standing at frame 1 (stand()); "build" widens a stand-in (x, y scale on
-             top of the height); a shot's in_frame names the group's tag (CROWD), not each figure
+             crowds and standing groups: each figure keyed standing at frame 1 (stand()); "build" [wide, deep] makes a stand-in
+             broader or slighter (its torso and limbs, never a scaled rig); a shot's in_frame names the group's tag (CROWD)
    "props":  [{"name": "LANTERN", "kind": "box", "size": [0.15, 0.15, 0.3], "at": [3.9, 3.26, 0.98], "owner": "BEN"},
               {"name": "CUP", "kind": "cyl", "r": 0.04, "h": 0.1, "at": [...], "rot": [0, 0, 0]},
               {"name": "STAFF", "kind": "rod", "length": 1.85, "r": 0.018, "grip": 0.0, "at": [...]}],
@@ -88,7 +88,7 @@ def _build(lid, path, st):
     cast = {}
     for n, c in (P.get('cast') or {}).items():
         c = c if isinstance(c, dict) else {'height': c}
-        arm, T = figure(n, c.get('height')); cast[arm.name] = FIGS[arm.name]['height']
+        arm, T = figure(n, c.get('height'), build=c.get('build')); cast[arm.name] = FIGS[arm.name]['height']
         if c.get('at') is not None:
             at = list(c['at']) + [0.0] * (3 - len(c['at']))
             arm.location = at; arm.rotation_euler = (0, 0, math.radians(float(c.get('facing', 270)) + 90))
@@ -96,8 +96,7 @@ def _build(lid, path, st):
     for tag, members in (P.get('groups') or {}).items():
         tag = tag.upper(); groups[tag] = []
         for m in members:
-            arm, T = figure(m['name'], m.get('height', 1.70))
-            if m.get('build'): arm.scale.x *= float(m['build'][0]); arm.scale.y *= float(m['build'][1])
+            arm, T = figure(m['name'], m.get('height', 1.70), build=m.get('build'))   # broader in its parts, never a scaled rig
             stand((arm, T), 0.0, loc=tuple(m['at']), facing=float(m.get('facing', 270)), hands=m.get('hands', 'side'))
             arm['group'] = tag; arm['fig'] = arm.name; groups[tag].append(arm.name)
     for p in P.get('props') or []:

@@ -10,7 +10,7 @@ Writes social/thumbnails-sheet.jpg; tools/deliver.py copies the picked options i
 --film is a path or a name under the studio's assets/films/ (default $FILM, else the film folder you are in).
 Frames are picked by index from one straight decode of the master (-fps_mode passthrough, frames counted from the start),
 never by -ss seeking and never by select=eq(n,...): a film joined from clips with different colour tags restarts ffmpeg's
-frame counter partway (Flow v3.2 - 9 Edit, Checks)."""
+frame counter partway (Flow v3.3 - 9 Edit, Checks)."""
 import argparse, os, re, subprocess, sys
 from PIL import Image
 

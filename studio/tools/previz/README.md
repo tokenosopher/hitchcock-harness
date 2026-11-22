@@ -10,7 +10,7 @@ board, and the generation's shots file for the pre-submit check.
   is `SLOTS` in `blender_run.py`), from the studio folder:
   `.venv/bin/python tools/previz/blender_run.py <script>.py -- --film $FILM [flags]`. The kit refuses a headless run that
   did not come through it. Waiting runs are served first come, first served (a numbered ticket each). Runs that render
-  nothing (`--project`, `--shots-file`, `--build`, `build_location.py`) never wait behind renders: they have their own fast
+  nothing (`--project`, `--shots-file`, `--build`, `--facts`, `build_location.py`) never wait behind renders: they have their own fast
   lane (`FAST_SLOTS`, 3). Every run ends with `blender_run: <lane> slot N, waited W s, ran R s, exit E`.
   Eight is the ceiling, not a promise: a render also waits while the Mac has no room for one more
   (the first four always start; a further one needs normal memory pressure and about 3 GB free, `MEM_NEED_GB`). A waiting
@@ -22,6 +22,7 @@ board, and the generation's shots file for the pre-submit check.
 - Panels render through **each shot's own camera** with the timeline markers removed (bound markers override the scene camera
   at render time). `run()` does this; never render a panel through another camera.
 - Compare every panel with the film frame at the same moment (`--check`, or the take's frames) before showing it.
+- Before the critic: `precheck.py` (below), free and in seconds; fix every WARN or say in the scene file why the shot wants it.
 - Look at every render yourself before you hand it on.
 
 ## Units and conventions
@@ -80,6 +81,8 @@ board, and the generation's shots file for the pre-submit check.
  "lights": [{"kind": "window", "opening": "window", "power": 600, "target": [2.4, 1.6, 0.75], "cone": 70},
             {"kind": "point", "name": "lamp", "at": [2.0, 1.5, 2.1], "power": 40}]}
 ```
+- An open place (`"ceiling": 0`): `haze` is a box volume round the place (300 m each way, 60 m high), not a world volume, which
+  in Blender 5.2 EEVEE is endless and blacks out the open sky.
 - `box`: `at` = centre of its footprint (+ base z), `size` = width along x, depth along y (before `rot`), height. `cyl`: `at` = centre
   of its base, `size` = radius, height. `table`: top + four legs. `chair`: `facing` = where the sitter faces, `back` = top of its back.
   `cable`: a tube through points. Any entry: `at` as a list of points makes numbered copies (`pillar-1`, `pillar-2`; `size` may be a
@@ -204,7 +207,11 @@ height asked is ignored and said), `R.marks`, `R.cast`, `R.groups`.
 
 ## Figures
 `arm, T = figure('ANNA')` builds the cast member's mannequin (height from the cast; `figure('X', height=1.8)` for someone not in
-it). Every helper takes the figure as its name, the armature or the `(arm, T)` tuple.
+it). Every helper takes the figure as its name, the armature or the `(arm, T)` tuple. The mannequin has two dark eyes, a nose and a
+brow, so where it looks reads in every panel, and its limbs are capsules, round at both ends, so no flat cap shows at a shoulder,
+elbow, hip or knee in a close shot. `figure('X', build=(1.1, 1.05))` (or a people file's `"build"`) makes a broader or slighter body
+in its torso and limbs; never scale an armature in x or y for this (the limbs shear): `run()` turns such a scale into a build, keeps
+the hands where they were and says so.
 
 | helper | does |
 |---|---|
@@ -239,9 +246,11 @@ what `in_frame` uses.
 `candle(name, at, power=12)`, `candles(name, (x, y), n=5, h=1.3, power=35)` (a stand: topple it by keying its rotation),
 `screen(name, at, (w, h), facing, strength, power=3)` (a lit panel + its soft light), `window_light(R, 'window', W, target=...)`
 (the pane glows, a light shines in). Keys: `key_light(name, t, W)`, `key_glow(mat, t, strength)`, `show(objs, t, on)`;
-`haze(density)`, `world(rgb)`, `set_exposure(ev)`, `haze_to_box(lo, hi)` (before any object volume such as smoke: in Blender 5.2
-EEVEE a world volume hides object volumes). Colours are kept for the normal render; `--grey` makes every light and glow white at
-the same place and strength.
+`haze(density)` (indoors a world volume; in an open place a box volume, so the sky stays), `world(rgb)`, `set_exposure(ev)`,
+`haze_to_box(lo, hi)` (before any object volume such as smoke: in Blender 5.2 EEVEE a world volume hides object volumes). Colours
+are kept for the normal render; `--grey` makes every light and glow white at the same place and strength, and every surface one
+grey, except a material that keeps its own grey: `grey('water')` (0.07, still water darker than the sand), `grey('foam')` (0.80,
+foam and breaking water white), the mannequins' eyes, or any `mat(..., grey=0.5)` / `m['previz_grey'] = 0.5`.
 
 ## Cameras
 `shot(id, t0, t1, diag, pos, pt, in_frame=[...], fx=0, fy=0, focus=None, handheld=False, move=None, exposure=None, board=None)`
@@ -251,7 +260,10 @@ from the ratio (`vfov`, `hfov`, `lens_mm`, `lens_ff`). `pt` lands at `(fx, fy)` 
 **`in_frame`** = what the frame shows, as the prompt tags it (cast keys, props, set pieces); it goes into the shots file and
 `--check` warns when a camera sees a figure the list leaves out (or never sees one it lists). `move=dict(pos=, pt=, fx=, fy=,
 focus=, diag=, t0=, t1=, ease='both'|'in'|'out'|'linear')` travels between t0 and t1. `handheld=True` breathes, `jolts=[t]` bump.
-`board=` overrides the storyboard camera line (default written from the camera: `CAM FACING E | 63° medium | 1.29 m | locked off`).
+`board=` overrides the storyboard camera line (default written from the scene: `CAM FACING E | close-up of Anna, 47° lens | 1.29 m | locked off`:
+the size from how many frame heights the subject's height makes, the lens apart). `focus=`: a world point, or a figure's name (the
+point between its eyes, followed as it moves); left out, the camera focuses on the nearest face in frame turned toward the lens
+among the shot's `in_frame` figures, else the nearest head, else `pt`.
 The cut defaults to one cut per shot at its own times; `shot_plan([(label, shot id, t0, t1), ...])` reuses a camera.
 Helpers: `ring(center, compass, dist, dz)`, `frame_on`, `free_cam`, `cam(id)`.
 
@@ -291,11 +303,12 @@ A film's scene script lives in `$FILM/previz/scenes/` and reaches the kit five f
 ## Modes and flags (one mode per invocation; OUTDIR = `<film>/previz/<G>/`)
 | flag | output |
 |---|---|
-| `--check [--shots 1,2]` | three frames per cut -> `check/shotNN-<id>-<t>.png`, the in_frame check, `<G>-previz.blend`. Sheet: `.venv/bin/python tools/previz/sheet.py <check dir> <out.jpg>` |
+| `--check [--shots 1,2]` | three frames per cut -> `check/shotNN-<id>-<t>.png`, the in_frame check, the sight check (named faces covered or too small, hands in use out of frame or covered: `SIGHT CHECK ok` or WARN lines), `<G>-previz.blend`. Sheet: `.venv/bin/python tools/previz/sheet.py <check dir> <out.jpg>` |
 | `--panels [--version v1] [--only 1,3] [--panel-start N] [--panel-times "id:t,..."]` | `storyboard/<version>/panels/NN-shot<id>-<t>.png`, `panels.json`, `board.json` (written unless a hand-made one is there), the shots file |
-| `--plate <id> <t>` | the empty set through that shot's camera (figures and what they hold hidden) -> `plates/` |
+| `--plate <id> <t>` | the empty set through that shot's camera (figures and what they hold hidden) -> `plates/`, with the camera beside it (`<plate>.json`: position, yaw, pitch, lens) for views.md |
 | `--project <id> t1,t2` | prints `PROJECT {...}`: where each figure's head and hips and each `points` entry land (x, y from top-left 0..1, depth) |
-| `--mannequin [--mq-time t]` | close-ups and full views of every figure, the set hidden -> `check/mq-<name>-<view>.png` |
+| `--mannequin [--mq-time t]` | close-ups and full views of every figure at t, the set hidden -> `check/mq-<name>-<view>.png` |
+| `--facts` | only the scene's facts -> `<G>-facts.json` (nothing rendered, fast lane; `--check`, `--panels` and the take write them too) |
 | `--shots-file` | only the shots file |
 | `--build` | only builds the scene (and, with `reuse=True`, saves it for the next runs); prints `BUILD DONE` |
 | (none) | the take: `<G>-previz-take-N.mp4` (crf 18, yuv420p, faststart) + `.json` + the .blend + the shots file |
@@ -310,6 +323,11 @@ video model), `--res <short side>`, `--samples <n>`, `--exposure <EV>` (beats th
   `name`, `camera`, `t0`, `t1`, `in_frame`, `diag_fov`, `vfov`, `hfov`, `lens_mm` (24 mm long-side sensor), `lens_ff_mm`, `cam`,
   `yaw`, `pitch`, `handheld`, `board`, `move`), `shot_plan` (`label, cam, t0, t1`), `moves` (`who, what, t`, sorted by start),
   `lines` (`who, text, t`; the pre-submit check compares the words), `script`, plus `extra`.
+- **Facts** `<G>-facts.json`: per cut, at its start, middle, end and every panel time, each figure's head (place in frame, size,
+  covered or not and by what), its look (the angle between face and lens, screen left / right, whom it looks at), each hand (in
+  frame, covered, raised, holding; a held prop's gap), body parts inside furniture, figures cut by the edge; per shot the subject,
+  the size, the lens, the camera and its move; the lines, moves and panels; `built_from` (the hashes of what the scene was built
+  from). The take json and `storyboard/vN/built-from.json` keep `built_from` too, so a stale take is found.
 - **Shots file** `<G>-shots.json` in the generation's folder, found as the pre-submit check finds it: `generations/<G>` if it
   exists, else `blocks/<G>` if it exists, else a new folder under `generations/` (or `blocks/` when the film has no `generations/`):
   `{"duration": s, "shots": [{"id": "1", "t0", "t1", "in_frame": [...]}]}`, merged by id into an existing file (its other keys
@@ -318,7 +336,10 @@ video model), `--res <short side>`, `--samples <n>`, `--exposure <EV>` (beats th
   `panels.json` into `page-N.png` (3300x2550, three panels a page in one row, sized for the film's ratio).
   `board.json` = `{"header", "ratio", "shots": [{"shot", "camera"}], "captions": [{"n", "caption"}]}`; every panel `n` needs a
   caption and every panel's shot an entry. Edit it by hand freely: once it no longer says `"generated_by": "previz kit"`, the
-  kit leaves it alone.
+  kit keeps its words, but writes the camera lines again from the scene (a shot entry with `"camera_by_hand": true` keeps its own).
+  A new version starts from the newest earlier hand-edited board (`kit/board.py`, by `--panels` and by `storyboard.py` when the
+  folder has no board.json): the layout note and header kept, a caption carried only to the panel of the same shot and time and
+  marked `"carried_from"`, which `precheck.py` reports until it is written again from the new frame and the mark deleted.
 - **The whole film:** `.venv/bin/python tools/previz/assemble_film.py $FILM --generations G1,G2,...` stamps every generation's latest take
   (shot labels, dialogue captions) into `<film>/previz/film/<PREFIX>-previz-film-vN.mp4` (+ json) and gathers the latest
   storyboard pages into `<PREFIX>-storyboards-vN.pdf`, at the film's ratio. There is no default list.
@@ -351,15 +372,37 @@ kind with its wait and run (from the wrapper's last line, else from the tool cal
 and scores, and the stage's totals; `--split` compares the runs before and after a time. Read-only. The session files are in
 `~/.claude/projects/<the studio folder, every / and . turned into ->/`.
 
+## Before the critic: the free checks
+After every change, in this order (each takes seconds):
+1. `blender_run.py <script> -- --film $FILM --facts` (or the `--check` / `--panels` / take that is due: they write the facts too).
+2. `.venv/bin/python tools/previz/precheck.py $FILM <G> --write`: writes the kit's line into every shot of the scene file
+   (`*Previz numbers (kit, <time>): size of SUBJECT (n frame heights) · lens · camera place, height, distance, facing, tilt, move ·
+   in frame: who, where · who looks where*`, replaced on every run; the builder writes only what numbers cannot say) and the
+   board's camera lines, then prints the checks: `size` (the size against the scene file's word), `sight` (named faces and hands
+   in use in frame, big enough, not covered; an unnamed figure cut by the edge), `lens` (a face under 5° off the lens the shot
+   does not ask for), `line` (screen sides kept across a cut and across the seam from the scene before; two people who look at each
+   other look opposite ways), `reach` (a held prop within 6 cm of the palm), `inside` (no body in furniture), `timing` (each line's
+   words at the scene file's "n words a second", else film.json `speech_wps`, default 2.6; a move mostly off screen), `panels`
+   (the panels of a shot that show an action differ), `claims` (every screen left / right in the shot text and the captions
+   checked by projection; names in "In shot" the camera never sees; film.json `"aliases": {"the captain": "MAREN"}` lets it read
+   the text's names), `plate` (a shot off the plate its view was painted over), `stale` (the take or boards older than a change to
+   what the scene is built from), `carried` (captions not yet written again). Exit 1 with any WARN; `--json <out>` keeps the list.
+3. Write the captions again from the new frames (never patch them), run `precheck.py` once more, then the critic.
+- `.venv/bin/python tools/previz/views_cams.py $FILM --write [--plates-from <film folder>]`: the camera of every painted view's plate
+  in a Camera column of `locations/views.md` (from the plate's own record, else from the take nearest in time, marked "~").
+- `.venv/bin/python tools/previz/qc_recheck.py $FILM <G> [--qc-dir <folder>]`: every miss an earlier QC round marked fixed, in
+  `<qc-dir>/previz-<G>-fixed-misses.json`; the critic of round 2 and on looks at each first, and a miss that is back keeps its
+  id, open and `"reopened": true`.
+
 ## Left for later
 - **One trip for several modes**: one Blender run doing `--check --mannequin`, or `--take --panels`, on the scene it built. With
   reuse a second trip costs about a second of opening, so this matters less than it did.
-- **The arithmetic check before renders**: each line's words against the seconds its shot gives it, shot lengths against the
-  scene's, each scene's end state against the next one's start; not built.
 - **Colour plates, fitting renders and a plan legend in the kit itself**: today they live in the views example.
 
 ## Known limits
-Mannequins are blockouts: no finger curl (props ride the fist), no face animation, no hair or clothing. IK elbows and knees
+Mannequins are blockouts: no finger curl (props ride the fist), no face animation, no hair or clothing; the eyes are dots fixed in
+the head (a look is the head's turn). precheck's text reading is a heuristic: it reads "screen left / right" phrases and names,
+and says what it found; a claim it misreads is a false alarm to ignore, not a reason to rewrite good text. IK elbows and knees
 follow their poles; an extreme reach can flip an elbow (key the pole). Round and arched openings are boolean cuts in a straight
 wall; walls must be axis-aligned to be named by compass (a numbered wall works on any outline). Screen-traced reflections only
 mirror what is on screen. 16 samples leave soft-shadow grain.

@@ -1,5 +1,5 @@
 """Get Higgsfield media ids for a film's local files without a signed link ever reaching the chat, a log or a command line.
-Flow v3.2 - 7 Takes, step 3. The registry is <film>/generations/upload-registry.json: film-relative path -> {media_id, sha1, size,
+Flow v3.3 - 7 Takes, step 3. The registry is <film>/generations/upload-registry.json: film-relative path -> {media_id, sha1, size,
 type, uploaded}. A film made before generations/ keeps blocks/upload-registry.json, read and written in place; its older
 entries are a bare media id with no sha1.
 
@@ -181,8 +181,8 @@ def may_upload(film, p):
 
 
 def put_one(path, ct, url):
-    if not isinstance(url, str) or re.search(r'\s', url):
-        return 'refused'                        # a space or a line break would end the url line of curl's config
+    if not isinstance(url, str) or re.search(r'\s', url) or '\0' in url or not url.startswith('https://'):
+        return 'refused'                        # one https:// line only: a space or a line break would end curl's url line
     cfg = 'url = "' + url.replace('\\', '\\\\').replace('"', '\\"') + '"\n'
     code = '000'
     for _ in range(3):
@@ -224,11 +224,12 @@ def cmd_put(A):
             sys.exit(f'slot {i + 1} is {s["content_type"]} but {it["file"]} is {it["content_type"]}: the order differs from the plan; nothing uploaded')
         if (s.get('method') or 'PUT').upper() != 'PUT':
             sys.exit(f'slot {i + 1} asks for {s.get("method")}, not PUT; nothing uploaded')
-        if not isinstance(s['upload_url'], str) or re.search(r'\s', s['upload_url']):
-            sys.exit(f'slot {i + 1}\'s upload_url has a space or a line break; nothing uploaded')
+        if not isinstance(s['upload_url'], str) or re.search(r'\s', s['upload_url']) or not s['upload_url'].startswith('https://'):
+            sys.exit(f'slot {i + 1}\'s upload_url is not a single https:// line; nothing uploaded')
     reg_p = in_film(film, pend.get('registry') or os.path.relpath(registry_path(film), film))
-    if not reg_p:
-        sys.exit(f'{os.path.relpath(pend_p, film)} names a registry outside the film folder; nothing uploaded')
+    allowed = [os.path.realpath(os.path.join(film, d, 'upload-registry.json')) for d in ('generations', 'blocks')]
+    if not reg_p or os.path.realpath(reg_p) not in allowed:
+        sys.exit(f'{os.path.relpath(pend_p, film)} names a registry other than the film\'s own; nothing uploaded')
     reg = load(reg_p, {})
     done, failed, ok_files = {}, 0, set()
     today = datetime.date.today().isoformat()
@@ -245,7 +246,7 @@ def cmd_put(A):
         h, size = sha1(p), os.path.getsize(p)
         code = put_one(p, it['content_type'], s['upload_url'])
         if code not in ('200', '201', '204'):
-            print(f'FAILED {it["file"]}: ' + ('its upload_url has a space or a line break' if code == 'refused' else f'HTTP {code}'))
+            print(f'FAILED {it["file"]}: ' + ('its upload_url is not a single https:// line' if code == 'refused' else f'HTTP {code}'))
             failed += 1
             continue
         t = it['content_type'].split('/')[0]

@@ -1,8 +1,8 @@
 <!-- Read by: no script; every stage reads it by hand (the cast, locations, props and every decision the user made for this film).
-     Described in: Flow v3.2 - 1 Setup and story (step 5); the Cast, Locations and Props entries grow in Flow v3.2 - 2 Characters, Flow v3.2 - 3 Voices and video elements and Flow v3.2 - 4 Locations and props. -->
+     Described in: Flow v3.3 - 1 Setup and story (step 5); the Cast, Locations and Props entries grow in Flow v3.3 - 2 Characters, Flow v3.3 - 3 Voices and video elements and Flow v3.3 - 4 Locations and props. -->
 # <Film> (<named by the user on <YYYY-MM-DD> | working title>; the folder is <film-slug>)
 
-Started <YYYY-MM-DD>. Film Flow v3.2: Seedance 2.5 video built from character video elements; every paid job on Higgsfield through the `higgsfield` MCP server.
+Started <YYYY-MM-DD>. Film Flow v3.3: Seedance 2.5 video built from character video elements; every paid job on Higgsfield through the `higgsfield` MCP server.
 
 - Title: <Film>
 - Code: <CODE> (Higgsfield element and upload names start with `<CODE>-`)

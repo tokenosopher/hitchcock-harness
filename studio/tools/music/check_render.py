@@ -1,6 +1,6 @@
 """Check a master the Hitchcock Harness rendered (or any mixed film) against the film without music: where the music plays, where it
 stops, how loud the whole thing is, and (with --approved) whether everything outside the stops still matches the mix the
-user approved. Use it to say back what the user changed on the timeline (Flow v3.2 - 11 Sound and music).
+user approved. Use it to say back what the user changed on the timeline (Flow v3.3 - 11 Sound and music).
 Music = render minus the music-free film, level per window. Re-encoded dialogue leaves a residue in that difference, so
 read it for stops and relative changes only, never as the bed's level (lay_song.py measures the bed itself).
     .venv/bin/python tools/music/check_render.py RENDER.mp4 PICTURE_NO_MUSIC.mp4 [--approved APPROVED_MIX.mp4] [--frames N]

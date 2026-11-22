@@ -1,6 +1,6 @@
 # tools/music
 
-The score and the music checks. The rules are in `flow/Flow v3.2 - 11 Sound and music.md`. Every paid job (a composed
+The score and the music checks. The rules are in `flow/Flow v3.3 - 11 Sound and music.md`. Every paid job (a composed
 take, a sound effect) is a Higgsfield call Alma makes through the `higgsfield` MCP server; these scripts work on the
 files. Run them from the studio folder with `.venv/bin/python` (numpy); `S=tools/music`.
 

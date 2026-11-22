@@ -3,7 +3,7 @@
 Local, free helpers for character sheets and other stills: they measure, mask and composite pictures on this Mac with
 Pillow and numpy. Every paid still (faces, looks, sheets, edits, outpaints, the skin pass) is made on Higgsfield by Alma
 through the `higgsfield` MCP server, and a cutout comes from Higgsfield `remove_background`; the rules are in
-`flow/Flow v3.2 - 2 Characters.md`. Run from the studio folder with `.venv/bin/python`; every path is given on the
+`flow/Flow v3.3 - 2 Characters.md`. Run from the studio folder with `.venv/bin/python`; every path is given on the
 command line. All of them are unproven on a film of this flow: check their output by eye.
 
 | Script | Command | What it does |

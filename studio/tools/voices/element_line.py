@@ -1,9 +1,10 @@
 """Cut the element line, "This is how I look and this is how I sound.", from the picked candidate itself, exactly as
-it sounds: no new take, no tags, no speed change, no clean-up (Flow v3.2 - 3 Voices and video elements, step 7).
+it sounds: no new take, no tags, no speed change, no clean-up (Flow v3.3 - 3 Voices and video elements, step 7).
     FILM=<film> .venv/bin/python tools/voices/element_line.py C02 [--option N | --preview FILE] [--dry-run] [--force]
         [--out-dir DIR] [--transcribe]
 The candidate is the chosen option's file in voices/options.json (or option N of it, or FILE: a picked preset speaks the
-line in a take of its own, voices/options/<CID>-<name>-element-take.mp3). Its word times come from <file>.stt.json
+line in a take of its own, voices/options/<CID>-<name>-element-take.mp3), else the picked preview pick.py recorded in
+voices/cast.json ("preview": a pick from another character's options or the library). Its word times come from <file>.stt.json
 beside it (what `transcribe.py --audio <file> --words-out <file>.stt.json` writes: a list of words, or {"words": [...]});
 without one, Whisper runs here on this Mac (free) and writes it. The cut runs from 0.1 s before
 "This" to 0.35 s after "sound", or to the middle of the pause when the next word starts sooner, with a 40 ms fade at each
@@ -43,8 +44,10 @@ else:
     o = next((x for x in O.get('options', []) if x['option'] == n), None) if n else None
     if o:
         src, how = os.path.join(F, o['file']), f'option {n}' + ('' if num else ' (the chosen one in options.json)')
+    elif C.get('preview'):
+        src, how = film.path_of(F, C['preview']), 'the picked preview in voices/cast.json'
     else:
-        sys.exit(f'{cid}: no picked option in voices/options.json: give --option N or --preview FILE')
+        sys.exit(f'{cid}: no picked option in voices/options.json and no preview in voices/cast.json: give --option N or --preview FILE')
 if not os.path.exists(src): sys.exit(f'missing preview {src}')
 name = C.get('name') or O.get('name') or cid
 n_opt = None if pv else (int(num) if num else (O.get('chosen') or {}).get('option'))

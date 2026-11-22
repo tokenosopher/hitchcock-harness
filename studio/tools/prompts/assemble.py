@@ -1,7 +1,7 @@
-"""Assemble a block's Seedance 2.5 prompt (Flow v3.2 - 6 Scene prompts, steps 12 and 13) from what already exists, and write its media list.
+"""Assemble a block's Seedance 2.5 prompt (Flow v3.3 - 6 Scene prompts, steps 12 and 13) from what already exists, and write its media list.
     .venv/bin/python tools/prompts/assemble.py <film> <block> [--version vN]
 Sources (nothing here is typed twice):
-  blocks/<B>/<B>-scene.md         the shots (the *Builder* lines dropped) and the ACTING TASKS
+  blocks/<B>/<B>-scene.md         the shots (the *Builder* lines and the kit's *Previz numbers* lines dropped) and the ACTING TASKS
   previz/<B>/storyboard/<latest>  the panels per shot (PANELS a TO b) and the pages
   previz/<B>/<B>-previz-take-N    the block's length (the check script compares the shot list and the duration against it; no per-second timings)
   blocks/<B>/<B>-prompt-spec.md   the hand-written parts: ## MEDIA (one reference per line: KIND | TAG | file | description; KIND is VIDEO, IMAGE, VIEW (a location view) or AUDIO),
@@ -47,7 +47,7 @@ def clean_md(s):
     s = s.replace('**', '')
     lines = []
     for ln in s.splitlines():
-        if ln.strip().startswith('*Builder'): continue
+        if ln.strip().startswith(('*Builder', '*Previz numbers (kit')): continue   # notes for the previz, never the prompt
         st = ln.strip()
         if st.startswith('- '): st = st[2:]
         lines.append(st)

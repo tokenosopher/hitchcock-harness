@@ -1,5 +1,5 @@
 <!-- Read by: no script; written at release, before the first post, as film-records/<Film>.md at the studio root. Only what is in the final video, last versions only; listed = in use, nothing deleted without the user's yes on that exact name.
-     Described in: Flow v3.2 - 12 Release (the film record). -->
+     Described in: Flow v3.3 - 12 Release (the film record). -->
 # <Film>
 
 <One line: what the film is (after <source>, if any), the ratio, the length.>
@@ -22,7 +22,7 @@ Folder shorthand used below (relative to the studio folder):
 
 | Character | Higgsfield voice name | voice_id (voice_type) | How it was made | Speech model/settings | Where it's used | Recordings on disk |
 |---|---|---|---|---|---|---|
-| <CID> <Name> | <Film> – <Name>, or the preset's name | `<voice id>` (<preset or element>) | <preset, from the face (seed_audio) or a variant of a preset (qwen_audio_tts); round and option; saved from its sample> | <elevenlabs_v4, settings> | <the element line; the generations it speaks in> | `FILM/cast/<CID>-<name>/voice/`, `FILM/voices/` |
+| <CID> <Name> | <Film> – <Name>, the preset's name, or (not saved) | `<voice id>` (<preset or element>), or the picked preview `FILM/voices/options/<file>` when the voice was never saved | <preset, from the face (seed_audio) or a variant of a preset (qwen_audio_tts); round and option; saved from its sample> | <elevenlabs_v4, settings> | <the element line; the generations it speaks in> | `FILM/cast/<CID>-<name>/voice/`, `FILM/voices/` |
 
 ## Characters and references (the official/final ones)
 

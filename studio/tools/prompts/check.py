@@ -1,4 +1,4 @@
-"""The pre-submit check (Flow v3.2 - 6 Scene prompts and 8 Redos): a script, not a read-through. Exits 1 and prints STOP lines
+"""The pre-submit check (Flow v3.3 - 6 Scene prompts and 8 Redos): a script, not a read-through. Exits 1 and prints STOP lines
 on any failure; the last line reads PASS when there is none.
     .venv/bin/python tools/prompts/check.py <film> <generation> [--version vN] [--media FILE] [--explain]
     .venv/bin/python tools/prompts/check.py --explain          (what every STOP means, one line each)
@@ -7,7 +7,7 @@ prompt/<G>-media-vN.json (or the same names at the folder root, as pick-ups made
 <G>-prompt-spec.md, and the take medias <G>-take-medias-vN.json in prompt/ or at the root (both are read).
 A pick-up (generations/FIX-<name>/) has the same layout. Its media list's `previz_take` is its own previz json, or a parent
 generation's with "span": ["4","5"]: the shot plan, the lines and the length are then that span's, and the generation may run
-from the span's length rounded down to 2 s over it (Flow v3.2 - 8 Redos, step 2: a second or two of room). Without its own
+from the span's length rounded down to 2 s over it (Flow v3.3 - 8 Redos, step 2: a second or two of room). Without its own
 shots file it uses the parent's. Shots numbered 1..k against a span of k shots are matched in order (noted).
 Stops the submit on:
   0. a file the check needs is missing (prompt, media list, shots file, previz take, a media file), or more than 30 images
@@ -28,7 +28,7 @@ Stops the submit on:
   11. a '## ' section in <G>-prompt-spec.md that assemble.py does not know (read from assemble.py's `order`): its text would
       never reach the prompt
   12. a template placeholder left in the prompt (<G>, <CID>, <Film>, <Something>) or an @KEY that did not resolve
-The prompt's length is reported, not limited: its size (Flow v3.2 - 6 Scene prompts, step 2) is checked in the manual read."""
+The prompt's length is reported, not limited: its size (Flow v3.3 - 6 Scene prompts, step 2) is checked in the manual read."""
 import argparse, ast, json, os, re, subprocess, sys
 sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -40,7 +40,7 @@ EXPLAIN = {
     1: 'a reference the scene never shows: in the media list, but no shot names its [TAG] (or a voice audio never named in AUDIO).',
     2: 'a Blender panel, plate or frame sent on its own: it becomes the look of the clip; panels go in only on storyboard pages.',
     3: "the storyboard pages lack the 'Position only' line beside their IMAGE REFERENCES numbers.",
-    4: 'the reference videos add up to more than 30 s, the model\'s limit, or there are more than three reference videos (Flow v3.2 - 6 Scene prompts, step 11).',
+    4: 'the reference videos add up to more than 30 s, the model\'s limit, or there are more than three reference videos (Flow v3.3 - 6 Scene prompts, step 11).',
     5: 'a shot names something outside its frame (a tag not in its in_frame list) or says behind the camera / off screen / out of frame: the camera turns to what is named.',
     6: "a character is in a shot's frame (in_frame in <G>-shots.json) but the shot never names its [TAG].",
     7: 'a [TAG] with no reference behind it, or a REFERENCE n that is not the n-th of its kind in the media list.',
@@ -193,7 +193,7 @@ def main():
         f = os.path.join(FILM, m['file'])
         if not os.path.exists(f): stop(0, f"missing file {m['file']}")
         if BLENDER.search(m['file']): stop(2, f"Blender still on its own: {m['file']}")
-        if is_film_frame(m['file']) and not m.get('page'): stop(10, f"a frame of the film as a reference: {m['file']} (never, Flow v3.2 - 8 Redos, step 5)")
+        if is_film_frame(m['file']) and not m.get('page'): stop(10, f"a frame of the film as a reference: {m['file']} (never, Flow v3.3 - 8 Redos, step 5)")
     if len(kinds['IMAGE']) > 30: stop(0, f"{len(kinds['IMAGE'])} images, over the 30 ceiling")
     # ---- 4: video length
     tot = 0.0
@@ -206,7 +206,7 @@ def main():
         stop(4, f"{len(kinds['VIDEO'])} reference videos ({', '.join('[' + str(m.get('tag')) + ']' for m in kinds['VIDEO'])}): at most three. "
                 'Keep the video elements of the three characters who act most in the scene; give each one beyond them as a '
                 'picture (an IMAGE line) and a voice reference (an AUDIO line) in ## MEDIA, then assemble again '
-                '(Flow v3.2 - 6 Scene prompts, step 11)')
+                '(Flow v3.3 - 6 Scene prompts, step 11)')
     # ---- 3: pages carry their line
     pg = [m for m in media if m.get('page')]
     if pg:
@@ -393,7 +393,7 @@ def main():
     size = ('inside the aim of about 8,000 to 10,000' if len(P) <= 10000 else
             'over the aim of about 8,000 to 10,000, under the ceiling of about 15,000' if len(P) <= 15000 else
             'PAST the ceiling of about 15,000: cut the acting tasks down to the least the note allows before sending')
-    note(f'{len(P)} characters, {size} (Flow v3.2 - 6 Scene prompts, step 2; said here, not a STOP)')
+    note(f'{len(P)} characters, {size} (Flow v3.3 - 6 Scene prompts, step 2; said here, not a STOP)')
     if M:
         header = (f"{B} {VER}: {len(P)} chars | {len(kinds['VIDEO'])} videos ({tot:.1f} s) | {len(kinds['IMAGE'])} images ({len(pg)} pages) | "
                   f"{len(kinds['AUDIO'])} audio | {M['settings']['duration']} s generation" + (f" | span {', '.join(span)} of {plan['previz_take']}" if span else ''))

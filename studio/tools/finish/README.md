@@ -1,6 +1,6 @@
 # tools/finish
 
-The 1080p of a film, and the checks on it. The rules are in `flow/Flow v3.2 - 10 Finish and 1080p.md`; this README gives
+The 1080p of a film, and the checks on it. The rules are in `flow/Flow v3.3 - 10 Finish and 1080p.md`; this README gives
 the exact steps of both routes. Run from the studio folder; `$FILM` is the film folder, `TK` a take folder
 `$FILM/generations/<G>/takes/take<N>`. Every Higgsfield call goes through the `higgsfield` MCP server; never print a
 signed link or a result URL. Both routes are untested in this studio: check every result at full size.

@@ -1,8 +1,8 @@
 {
  "_about": [
   "Written by tools/prompts/assemble.py as generations/<G>/prompt/<G>-media-<v>.json beside <G>-prompt-<v>.txt; read by tools/prompts/check.py (media[]: kind, tag, n, file, desc, view, page, role; settings.duration; previz_take). Hand-write one only for a set assemble.py does not build, in exactly this shape; never a start_image or end_image role.",
-  "Described in: Flow v3.2 - 6 Scene prompts (steps 11 and 13: the reference list, numbered per kind in media order) and Flow v3.2 - 7 Takes (the media sent with the generation).",
-  "A character with a video element has only its VIDEO entry, never its sheet beside it; an IMAGE is for what has no element (the extras' group picture cropped to this scene, a prop), or one of the exceptions of Flow v3.2 - 6 Scene prompts, step 11 (a faceless sheet variant tagged <NAME> SHEET, a second look's sheet, the picture of a character beyond the three with a video element). At most three VIDEO entries (check.py STOP 4)."
+  "Described in: Flow v3.3 - 6 Scene prompts (steps 11 and 13: the reference list, numbered per kind in media order) and Flow v3.3 - 7 Takes (the media sent with the generation).",
+  "A character with a video element has only its VIDEO entry, never its sheet beside it; an IMAGE is for what has no element (the extras' group picture cropped to this scene, a prop), or one of the exceptions of Flow v3.3 - 6 Scene prompts, step 11 (a faceless sheet variant tagged <NAME> SHEET, a second look's sheet, the picture of a character beyond the three with a video element). At most three VIDEO entries (check.py STOP 4)."
  ],
  "block": "<G>",
  "version": "v1",

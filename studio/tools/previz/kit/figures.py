@@ -1,4 +1,5 @@
-"""Plain grey mannequins: one neutral body (a nose and brow so the face direction reads, no hair, costume or colour), scaled
+"""Plain grey mannequins: one neutral body (a nose, a brow and two dark eyes so the face direction reads, no hair, costume or
+colour; the limbs are capsules, round at both ends, so no flat cap shows at a joint in a close shot), scaled
 to each character's height from the cast, rigged and posed as before: stand, sit, kneel, lie, walk, turn, hands, head.
 Local body coords (for tgt): rest pose faces -Y, the figure's left = +X, feet on z 0, in 1.70 m body units (a taller figure
 is the same rig scaled). The hand target is where the FINGERTIPS go, the foot target the ANKLE (z 0.09 standing). Poles:
@@ -32,10 +33,13 @@ def _hand(n, s, m):
     return [('hand.' + s, o) for o in P]
 
 
-def figure(name, height=None):
+def figure(name, height=None, build=None):
     """A rigged plain grey mannequin for cast member `name` (its key in film.json's cast; height from there, else `height`,
     else 1.70 m). Returns (arm, T): T holds the IK targets 'hand.L/R' (fingertips), 'foot.L/R' (ankles) and the poles
-    'elbow.L/R', 'knee.L/R', in local body coords. Every helper takes the figure as its name, the armature or the tuple."""
+    'elbow.L/R', 'knee.L/R', in local body coords. Every helper takes the figure as its name, the armature or the tuple.
+    build = (wide, deep): a broader or slighter body (1 = the plain one): the torso and limbs thicker or thinner, the skeleton
+    and the head as they are. Never scale the armature in x or y for this: the limbs shear and tear at the shoulders and
+    elbows in close shots (run() turns such a scale into a build and says so)."""
     key = str(name).upper(); cast = S.film.character(key)
     if key in FIGS:            # already there: loaded from the location's shared file (location()), never built twice
         f = FIGS[key]
@@ -59,6 +63,10 @@ def figure(name, height=None):
     parts = [('head', ell(n + '-skull', (0, 0.01, 1.59), (0.08, 0.095, 0.105), m)), ('head', ell(n + '-face', (0, -0.04, 1.555), (0.068, 0.06, 0.085), m)),
              ('head', ell(n + '-jaw', (0, -0.035, 1.51), (0.058, 0.062, 0.05), m)), ('head', ell(n + '-chin', (0, -0.08, 1.478), (0.022, 0.016, 0.016), m)),
              ('head', ell(n + '-nose', (0, -0.096, 1.558), (0.011, 0.02, 0.024), m)), ('head', ell(n + '-brow', (0, -0.078, 1.603), (0.056, 0.018, 0.012), m)),
+             # two dark eyes: where a figure looks is plain in every panel; they keep their dark
+             # grey in --grey
+             ('head', ell(n + '-eyeL', (0.029, -0.089, 1.577), (0.011, 0.008, 0.009), grey('eye'), seg_=12)),
+             ('head', ell(n + '-eyeR', (-0.029, -0.089, 1.577), (0.011, 0.008, 0.009), grey('eye'), seg_=12)),
              ('neck', seg(n + '-neck', (0, 0.005, 1.37), (0, 0.005, 1.49), 0.043, m)),
              ('spine', ell(n + '-chest', (0, 0, 1.26), R_['chest'], m)), ('spine', ell(n + '-belly', (0, 0, 1.1), R_['belly'], m)),
              ('hips', ell(n + '-pelvis', (0, 0, 0.95), R_['pelvis'], m))]
@@ -66,14 +74,14 @@ def figure(name, height=None):
         x = 1 if s == 'L' else -1
         parts += [('head', ell(n + '-ear' + s, (x * 0.08, 0.01, 1.565), (0.01, 0.02, 0.028), m)),
                   ('spine', ell(n + '-shoulder' + s, (x * 0.165, 0, 1.335), (0.065, 0.06, 0.06), m)),
-                  ('uarm.' + s, seg(n + '-uarm' + s, B['uarm.' + s][0], B['uarm.' + s][1], R_['uarm'], m)),
+                  ('uarm.' + s, seg(n + '-uarm' + s, B['uarm.' + s][0], B['uarm.' + s][1], R_['uarm'], m, ends=True)),
                   ('uarm.' + s, ell(n + '-elbow' + s, B['uarm.' + s][1], (R_['uarm'],) * 3, m)),
-                  ('farm.' + s, seg(n + '-farm' + s, B['farm.' + s][0], B['farm.' + s][1], R_['farm'], m))]
+                  ('farm.' + s, seg(n + '-farm' + s, B['farm.' + s][0], B['farm.' + s][1], R_['farm'], m, ends=True))]
         parts += _hand(n, s, m)
         fx = B['foot.' + s][0][0]
-        parts += [('thigh.' + s, seg(n + '-thigh' + s, B['thigh.' + s][0], B['thigh.' + s][1], R_['thigh'], m)),
+        parts += [('thigh.' + s, seg(n + '-thigh' + s, B['thigh.' + s][0], B['thigh.' + s][1], R_['thigh'], m, ends=True)),
                   ('shin.' + s, ell(n + '-knee' + s, B['shin.' + s][0], (R_['knee'],) * 3, m)),
-                  ('shin.' + s, seg(n + '-shin' + s, B['shin.' + s][0], B['shin.' + s][1], R_['shin'], m)),
+                  ('shin.' + s, seg(n + '-shin' + s, B['shin.' + s][0], B['shin.' + s][1], R_['shin'], m, ends=True)),
                   ('shin.' + s, ell(n + '-ankle' + s, (fx, 0.005, 0.075), (0.036, 0.04, 0.04), m)),
                   ('foot.' + s, ell(n + '-foot' + s, (fx, -0.05, 0.04), (0.045, 0.12, 0.04), m)),
                   ('foot.' + s, ell(n + '-toes' + s, (fx - x * 0.004, -0.145, 0.025), (0.042, 0.032, 0.022), m))]
@@ -88,8 +96,62 @@ def figure(name, height=None):
     arm.hide_render = True
     sc_ = h / 1.70; arm.scale = (sc_, sc_, sc_)
     FIGS[key] = dict(arm=arm, T=T, scale=sc_, height=h, props={})
+    if build and (abs(float(build[0]) - 1) > 1e-3 or abs(float(build[1]) - 1) > 1e-3): girth(arm, float(build[0]), float(build[1]))
     bpy.context.view_layer.update()
     return arm, T
+# the parts a build makes broader: the torso about the body's axis, the limbs and joints about their own bone (feet, hands and
+# the head stay as they are)
+_TORSO = ('-chest', '-belly', '-pelvis')
+_LIMBS = ('-shoulder', '-uarm', '-elbow', '-farm', '-thigh', '-knee', '-shin', '-neck')
+def girth(fig, wide, deep):
+    """make a built figure broader (wide, along its left-right) and deeper (front-back): each torso and limb part's mesh is
+    scaled about its own bone in the rest pose, so nothing shears when the limbs turn (a scaled armature tears them)"""
+    arm = _fig(fig)[0]
+    for o in arm.children:
+        if o.type != 'MESH' or o.parent_type != 'BONE': continue
+        nm = o.name[len(arm.name):] if o.name.startswith(arm.name) else o.name
+        if nm.startswith(_TORSO): ax = None
+        elif nm.startswith(_LIMBS): ax = BONES.get(o.parent_bone)
+        else: continue
+        if nm.startswith(('-shoulder', '-elbow', '-knee')):          # a joint ball: about its own centre
+            c_ = sum((v.co for v in o.data.vertices), Vector()) / max(1, len(o.data.vertices)); ax = ((c_.x, c_.y, c_.z), (c_.x, c_.y, c_.z + 1))
+        h_, t_ = (Vector((0, 0, 0)), Vector((0, 0, 1))) if ax is None else (Vector(ax[0]), Vector(ax[1]))
+        d_ = (t_ - h_); d_ = d_.normalized() if d_.length > 1e-6 else Vector((0, 0, 1))
+        for v in o.data.vertices:
+            p_ = h_ + d_ * (v.co - h_).dot(d_); r_ = v.co - p_     # the point on the bone's line, and the offset from it
+            v.co = p_ + Vector((r_.x * wide, r_.y * deep, r_.z))
+        o.data.update()
+    arm['build'] = [round(wide, 3), round(deep, 3)]
+def fix_scaled_builds():
+    """a figure whose armature was scaled unevenly (x or y unlike z) to make it broader: the scale made even again and the
+    breadth moved into the parts (girth), the IK targets and poles kept where they were in the world. run() calls it."""
+    fixed = []
+    for n in list(FIGS):
+        arm = FIGS[n]['arm']; sx, sy, sz = arm.scale
+        if abs(sx - sz) < 1e-4 and abs(sy - sz) < 1e-4: continue
+        wx, wy = sx / sz, sy / sz
+        for o in arm.children:
+            if o.type != 'EMPTY' or o.parent_type == 'BONE': continue
+            o.location = (o.location.x * wx, o.location.y * wy, o.location.z)
+            for fc in fcurves(o):
+                if fc.data_path != 'location' or fc.array_index > 1: continue
+                f_ = wx if fc.array_index == 0 else wy
+                for kp in fc.keyframe_points:
+                    kp.co.y *= f_; kp.handle_left.y *= f_; kp.handle_right.y *= f_
+        arm.scale = (sz, sz, sz); girth(arm, wx, wy); fixed.append('%s (%.2f x %.2f)' % (n, wx, wy))
+    if fixed:
+        print('previz kit: figures scaled unevenly made broader without shearing (a scaled armature tears shoulders and elbows in '
+              'close shots; use figure(..., build=(w, d)) or a people file\'s "build"): %s' % ', '.join(fixed))
+    return fixed
+def focus_target(fig):
+    """an empty between the figure's eyes, riding its head: a camera focuses on it (the kit's default focus for a face)"""
+    arm = _fig(fig)[0]; nm = arm.name + '-focus'
+    o = bpy.data.objects.get(nm)
+    if o is None:
+        o = bpy.data.objects.new(nm, None); bpy.context.collection.objects.link(o); o.empty_display_size = 0.02
+        o.parent = arm; o.parent_type = 'BONE'; o.parent_bone = 'head'
+        o.location = (0.0, 0.118 - arm.data.bones['head'].length, 0.085)       # from the head bone's tail: between the eyes
+    return o
 def _fig(x):
     """(arm, T) from a figure name, an armature, or the (arm, T) tuple figure() returned"""
     if isinstance(x, str): f = FIGS[x.upper()]; return f['arm'], f['T']
@@ -104,8 +166,14 @@ def remove_figure(fig):
     """take a figure (and the props it holds) out of the scene altogether: for someone of the location's shared file who is not
     in this scene. Cheaper than hiding: a hidden rig is still evaluated on every frame change."""
     arm = _fig(fig)[0]; nm = arm.name; pr = [o for o in bpy.data.objects if o.get('fig') == nm]
+    seen = set()
     for o in list(arm.children_recursive) + [c for p_ in pr for c in p_.children_recursive] + pr + [arm]:
-        if o.name in bpy.data.objects: bpy.data.objects.remove(o, do_unlink=True)
+        try:
+            k_ = o.as_pointer()
+            if k_ in seen or o.name not in bpy.data.objects: continue
+            seen.add(k_); bpy.data.objects.remove(o, do_unlink=True)
+        except ReferenceError:          # already removed with an earlier entry (a prop that is also a child of the rig)
+            pass
     FIGS.pop(nm, None)
 def group(tag):
     """the figures of a group of the location's shared file ('CROWD', 'QUEUE'), as (arm, T) tuples, in their file order"""

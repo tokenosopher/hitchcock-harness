@@ -22,7 +22,7 @@ from .core import S, MATS, ARGV, has, scene_settings
 from . import saved
 
 TEXT = 'previz-reuse'
-MODE_FLAGS = {'--check': 0, '--shots': 1, '--panels': 0, '--version': 1, '--only': 1, '--panel-start': 1, '--panel-times': 1,
+MODE_FLAGS = {'--check': 0, '--facts': 0, '--shots': 1, '--panels': 0, '--version': 1, '--only': 1, '--panel-start': 1, '--panel-times': 1,
               '--project': 2, '--plate': 2, '--mannequin': 0, '--mq-time': 1, '--shots-file': 0, '--build': 0, '--grey': 0,
               '--res': 1, '--samples': 1}
 BUILD_FLAGS = {'--film': 1, '--exposure': 1}
@@ -47,6 +47,23 @@ def script_path():
 
 def paths():
     b = os.path.join(S.outdir, 'built', '%s-built.blend' % S.gen); return b, b + '.json'
+
+
+def inputs_now():
+    """{file: hash} of what this run's scene was built from: the saved build's stamp when the script reuses its build (the
+    script, every file it and the kit read, its helper modules), else the script, film.json and the location's files. The
+    take json and the storyboard version keep it, so precheck.py can say a take is older than a change to a shared file."""
+    bp, jp = paths(); j = saved.read_json(jp)
+    if S.reuse is None and j and j.get('inputs') and os.path.exists(bp): return j['inputs']
+    fs = [f for f in [script_path(), S.film.config_path] if f]
+    if S.location:
+        from . import shared
+        fs += [p for p in shared.stamp(S.location['lid'])['inputs'] if not p.startswith(saved.KIT_DIR)]
+    roots = [os.path.abspath(S.film_dir) + os.sep]
+    for m in list(sys.modules.values()):
+        f = getattr(m, '__file__', None)
+        if f and f.endswith('.py') and any(os.path.abspath(f).startswith(r) for r in roots): fs.append(os.path.abspath(f))
+    return saved.file_hashes(fs)
 
 
 def _stamp(files, locations, flags):
@@ -134,10 +151,15 @@ def save(kwargs):
         st = _stamp(files, locations, r['flags'])
         kw = dict(kwargs); pts = dict(kw.get('points') or {}); callables = sorted(k for k, v in pts.items() if callable(v))
         kw['points'] = {k: v for k, v in pts.items() if not callable(v)}
+        saved.DROPPED[:] = []
         out = ''.join(r['tee'].buf).splitlines()
         state = dict(figs=saved.enc(dict(FIGS)), lights=saved.enc(dict(LIGHTS)), props=saved.enc(dict(PROPS)),
                      room=shared._enc_room(S.room) if S.room is not None else None, shots=saved.enc(list(SHOTS)), plan=saved.enc(list(PLAN)),
                      kwargs=saved.enc(kw), out=out, location=S.location, built=time.strftime('%H:%M:%S'), build_s=round(t_build, 2))
+        if saved.DROPPED:
+            print('previz kit: %d registered object(s) were deleted by the script after the location loaded (a room part, a light, '
+                  'a prop); the saved build leaves them out (hide a shared object rather than delete it, so every scene keeps the '
+                  'same room)' % len(saved.DROPPED))
         saved.put_text(TEXT, state)
         try:
             saved.save_copy(bp)

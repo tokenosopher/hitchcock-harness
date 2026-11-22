@@ -1,7 +1,7 @@
 {
  "_about": [
   "Read by: tools/prompts/check.py (shots[].id = the SHOT number in <G>-scene.md; shots[].in_frame = every [TAG] that shot names except location views, a note in brackets allowed; duration), tools/prompts/assemble.py (duration, when the previz take has none) and the generation's previz scene script (the camera fields, the states, the moves).",
-  "Described in: Flow v3.2 - 5 Previz and storyboards (steps 1-4 and 7) and Flow v3.2 - 6 Scene prompts (Checks: what a shot names must be in its in_frame list). The seconds here are the previz plan; they never reach a prompt."
+  "Described in: Flow v3.3 - 5 Previz and storyboards (steps 1-4 and 7) and Flow v3.3 - 6 Scene prompts (Checks: what a shot names must be in its in_frame list). The seconds here are the previz plan; they never reach a prompt."
  ],
  "block": "<G>",
  "title": "<generation name>",
