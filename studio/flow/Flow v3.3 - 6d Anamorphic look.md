@@ -1,6 +1,6 @@
 ---
 tags: [ai-filmmaking, film-flow, film-flow-v3, verbatim-skill]
-version: 3.2
+version: 3.3
 date: 2026-11-05
 status: live
 source: the anamorphic-look skill

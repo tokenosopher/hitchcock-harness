@@ -1,22 +1,22 @@
 ---
-tags: [ai-filmmaking, film-flow, film-flow-v3-2]
-version: 3.2
+tags: [ai-filmmaking, film-flow, film-flow-v3-3]
+version: 3.3
 status: live
 ---
 # 12 · Release
 
-**Purpose.** Turn the approved 1080p cut into the release: subtitles that land on the words, laid as lines on the cut's subtitle track and burnt into the master the app renders; the final the user names on the Release page; the FINAL files in the film's `Social kit` in its delivery folder, named from the public title; the copy for every platform on its own Release page, the cover frames and each platform's posting time; and the film's records at the studio root.
+**Purpose.** Turn the approved 1080p cut into the release: subtitles that land on the words, laid as lines on the cut's subtitle track and burnt into the master the app renders; the final the user names on the Release page; the FINAL files in the film's `Social kit` in its delivery folder, named from the public title; the copy for every platform on its own Release page, the cover frames and each platform's posting time; the film's records at the studio root; and, last, the debrief, where Alma asks why the user changed what she proposed and the answers become lessons.
 
 ## Inputs
-- The cut on the Edit page, as this stage finds it: approved at 480p ([[Flow v3.2 - 9 Edit]]), moved to 1080p on the same timeline ([[Flow v3.2 - 10 Finish and 1080p]]), with its music and effects on its own tracks ([[Flow v3.2 - 11 Sound and music]]). Here the subtitles go on its subtitle track, and the master the app renders from it carries them.
+- The cut on the Edit page, as this stage finds it: approved at 480p ([[Flow v3.3 - 9 Edit]]), moved to 1080p on the same timeline ([[Flow v3.3 - 10 Finish and 1080p]]), with its music and effects on its own tracks ([[Flow v3.3 - 11 Sound and music]]). Here the subtitles go on its subtitle track, and the master the app renders from it carries them.
 - The final: the master the user names on the Release page. The harness records it in `social/release.json` (`final`) with its companions: the copy without subtitles, the 480p phone preview, the `.srt` of the lines and the smaller file for posting. The harness makes them; you never write `final` (the app's release recipe, `recipes/release.md` in the app's folder; its full path is in your instructions).
 - The app's edit recipe, `recipes/edit.md` in the app's folder ("Subtitle lines", "Renders with options"), for how lines go on the subtitle track and which renders the Edit page asks for.
-- The public title, in `$FILM/brief.md` (`- Title:`), asked for at setup ([[Flow v3.2 - 1 Setup and story]]). The slug and every release file name come from it.
+- The public title, in `$FILM/brief.md` (`- Title:`), asked for at setup ([[Flow v3.3 - 1 Setup and story]]). The slug and every release file name come from it.
 - `$FILM/script.md`, current: its `## Script` holds every line as the final cut speaks it, under a `### S<n>` heading per generation, one `**NAME:** "words"` row per line, names spelt as the script spells them. `audio/lines.json` instead when the film has a line table.
-- The film's delivery folder `assets/final-cuts/<YYYY-MM-DD> <Title>/` under the studio folder, named in `brief.md` ([[Flow v3.2 - 1 Setup and story]]).
-- The Higgsfield account's transactions, net of refunds, the film's spend log for anything else, and the price per credit the user confirms from their own plan (`show_plans_and_credits`; [[Flow v3.2 - 13 Services and costs]]), for the cost line.
+- The film's delivery folder `assets/final-cuts/<YYYY-MM-DD> <Title>/` under the studio folder, named in `brief.md` ([[Flow v3.3 - 1 Setup and story]]).
+- The Higgsfield account's transactions, net of refunds, the film's spend log for anything else, and the price per credit the user confirms from their own plan (`show_plans_and_credits`; [[Flow v3.3 - 13 Services and costs]]), for the cost line.
 - Templates: `templates/social/script.json`, `templates/records/film-record.md`, `templates/records/voices-row.md`.
-- Standing rules: [[Flow v3.2 - 0 Standing rules]]
+- Standing rules: [[Flow v3.3 - 0 Standing rules]]
 
 ## Steps
 
@@ -60,11 +60,11 @@ status: live
     ```bash
     awk 'BEGIN{RS="";FS="\n"}{t=$2;sub(/ --> .*/,"",t);l=$3;if($4!="")l=l" / "$4;print t"  "l}' social/<slug>-w30.srt
     ```
-7. Lay the lines on the subtitle track. Where a word inside a spoken line was replaced after a refusal ([[Flow v3.2 - 0 Standing rules#Moderation]]), the line shows the word that was spoken in the take that is in the film. "Create subtitles" on the Edit page puts a request in your box that names the cut's version and lists the dialogue it knows. Write every cue of `social/<slug>-w30.srt` as one line on `C1 Subtitles`, with the cue's words, its two rows at most and its times on whole frames, in one drop (the app's edit recipe, "Subtitle lines"). When the request says the lines there are to be replaced, replace them.
+7. Lay the lines on the subtitle track. Where a word inside a spoken line was replaced after a refusal ([[Flow v3.3 - 0 Standing rules#Moderation]]), the line shows the word that was spoken in the take that is in the film. "Create subtitles" on the Edit page puts a request in your box that names the cut's version and lists the dialogue it knows. Write every cue of `social/<slug>-w30.srt` as one line on `C1 Subtitles`, with the cue's words, its two rows at most and its times on whole frames, in one drop (the app's edit recipe, "Subtitle lines"). When the request says the lines there are to be replaced, replace them.
     - The app draws the lines as cards in the film's caption style, the gold style: Poppins Medium 46 px at 1080 wide, champagne gold, a thin dark outline, the block's bottom edge at 0.79 of the frame height. The 480p and the master burn them in. Never ask about style or position.
     - Put only dialogue on the subtitle track: no headline, no hook sticker, no "AI film" band. A small series card ("Part N of M") is the most text to add.
     - The user moves, trims, splits and retypes lines on the Edit page. Read the version notes before you write lines again, and keep the user's words unless asked.
-    - The master with the lines in it is rendered on the user's word ([[Flow v3.2 - 10 Finish and 1080p]]). The user names it the final on the Release page; the app then makes its companions.
+    - The master with the lines in it is rendered on the user's word ([[Flow v3.3 - 10 Finish and 1080p]]). The user names it the final on the Release page; the app then makes its companions.
 8. Read the final's true peak in dBTP. A render with the loudness option records it (the app's edit recipe). Over -1 dBTP, report the reading to the user; the trim is the user's call, so change nothing.
 9. Grab four captioned frames from the final, by frame index, on the busiest backgrounds, and show them on a card at Release (the app's show recipe):
     ```bash
@@ -160,8 +160,9 @@ status: live
     - Use your own web search and page reads: the top recent posts for searches such as "ai short film", "ai film", "seedance", "ai comedy sketch" on TikTok, r/aivideo's top posts of the week and month, and the posts of a few small accounts in the niche on X. No paid data service is part of this copy.
     - Score each post against its own account where the page shows the numbers (views over the account's median). Check accounts that posted both kinds before believing a gap, because a gap can be genre.
     - Write the findings to `$FILM/social/research-<YYYY-MM-DD>.md`, with the numbers and the links to the posts behind them. Say plainly where a page could not be read.
-26. **GATE:** write the candidates for each platform's fields into `social/release.json`, with the cover frames. The user writes or picks every line on the platform's Release page, platform by platform, and picks the cover frame there. To offer another candidate for a text already in a box, write a note under its field, with its buttons (the app's release recipe). Wait for each pick: the text that is posted is only what the user picked or wrote.
-    - Every release choice the user makes (a title, a line, the tags, the thumbnail) gets a row in `taste.md` at the studio root. From the next film on, each release round is shown with a prediction of the user's pick, as every other round is ([[Flow v3.2 - 0 Standing rules]]).
+26. **GATE:** write the candidates for each platform's fields into `social/release.json`, with the cover frames. The user writes or picks every line, on the platform's Release page or in the chat, platform by platform, and picks the cover frame there. To offer another candidate for a text already in a box, write a note under its field, with its buttons (the app's release recipe). Wait for each pick: the text that is posted is only what the user picked or wrote.
+    - A text the user gives in the chat (a title, a description, the tags, or which text goes on which platforms) is written straight into those platforms' boxes in `social/release.json`, word for word; say what you wrote. Never put it behind a note with buttons or ask for a confirmation: candidates and notes with buttons are only for texts the user has not given or picked. The go for posting stays its own gate, one platform at a time.
+    - Every release choice the user makes (a title, a line, the tags, the thumbnail) gets a row in `taste.md` at the studio root. From the next film on, each release round is shown with a prediction of the user's pick, as every other round is ([[Flow v3.3 - 0 Standing rules]]).
     - One cover frame serves every platform that takes one (YouTube Shorts, TikTok, Instagram Reels). The thumbnail the user picks for one platform is the pick for all of them. Use a different cover on one platform only when the user asks for it.
 27. Deliver the picked thumbnails into the Social kit:
     ```bash
@@ -194,12 +195,12 @@ status: live
 
 34. Before the first post, write the film record `film-records/<Title>.md` at the studio root, from `templates/records/film-record.md`:
     - The final video: the FINAL files' paths and length, the picture lock (the cut version the final is a master of), the 1080p route and the mix; the published links once posted.
-    - Every voice heard in the final cut: its Higgsfield voice name and voice id (a preset or the user's own voice), how it was made (the preset, the face, or the sample it was made from), the characters and the recordings folder.
+    - Every voice heard in the final cut: its Higgsfield voice name and voice id only for a preset or a voice that was saved ([[Flow v3.3 - 3 Voices and video elements]], step 6), otherwise the picked candidate's file, which is the record; how it was made (the preset, the face, or the sample it was made from), the characters and the recordings folder.
     - The official references, last versions only: each character's sheet and video element with their Higgsfield element ids; each location view and prop with its Higgsfield media id.
     - The notes: the takes and pick-ups in the cut, each with its prompt version; the cut version on the Edit page; anything not checked, marked unverified.
     - Only what is in the final video, never the candidates.
     - Then the finished script note `finished-scripts/<Title>.md` at the studio root: every line matches `social/script.json` word for word and in order (fix the note, listing each change under `## Changes at the lock and after`); set `released` to the first post's date and `length` to the FINAL file's length.
-35. Add one row per voice heard in the final cut to `film-records/voices.md` at the studio root, from `templates/records/voices-row.md` (voice, voice id, idea, film, character, status). Listed means in use: nothing in the film records is deleted without the user's yes on that exact name.
+35. Add one row per voice heard in the final cut to `film-records/voices.md` at the studio root, from `templates/records/voices-row.md` (voice, voice id, idea, film, character, status). Write a voice id only for a preset or a voice that was saved; for any other, write the picked candidate's file in its place. Listed means in use: nothing in the film records is deleted without the user's yes on that exact name.
 36. Keep `published-links.md` at the studio root, the posting record the Release page reads: a section per film, newest film first, a row per platform.
     - The section's heading is `## <Title> (<the first post's date>)`, the public title first, so the page finds it. Under it, one line on the film (its length, what it is after) and the table `| Platform | Account | Title or first line | Link | Posted |`, as the file's own example shows.
     - Open the film's section with "add" rows when posting starts, the same moment as its film record: `add` in the Link cell is a link still to come.
@@ -209,7 +210,27 @@ status: live
     - The user posts by hand on each platform. On the go, show the exact text and the file to upload on the go card of the app's release recipe ("By hand"), with the platform's steps by hand in order, and wait for the user to say it is posted.
     - When the user sends the link (on the Release page or in the chat), the record takes it (the app's release recipe), and it goes into `published-links.md` at once.
     - Keep the steps by hand to what the platform needs: the settings of step 16 and the platform's own steps on its Release page. A thing that went through once needs no check each time.
-38. After the release, write down what happened (views, what worked, what did not): the rule into this note, its evidence into [[Film Flow v3.2 - record]].
+38. After the release, write down what happened (views, what worked, what did not): the rule into this note, its evidence into [[Film Flow v3.3 - record]].
+
+### The debrief
+At the end of every film, once it is released, ask the user why they made the changes they made to your proposals, so the next film's first proposals come closer to how the user works.
+
+39. **Read what changed between your proposals and the finished film:**
+    - the AI editor's first cut against the user's final cut, change by change, from the cut's history ([[Flow v3.3 - 9 Edit]], step 4);
+    - the sound variations the user picked and the ones passed over, with their prompts ([[Flow v3.3 - 11 Sound and music]], step 34);
+    - the previz and storyboard corrections;
+    - the takes redone, and why;
+    - anything the user rewrote in a prompt or a script line.
+    Read first the reasons already given during the work (the answers on the why cards and the reasons kept with the History tab's steps, [[Flow v3.3 - 9 Edit]], step 8), and ask nothing they already answer.
+40. **Ask only where the reason is not plain.** At most about a dozen questions, in the film's order, grouped by kind (cutting, sound, previz, prompts). Each question names the change and shows it:
+    - the change in frames, or the two prompts side by side;
+    - a frame, or a play button;
+    - a few likely answers to tap, and a box for the user's own words.
+    Put them on the app's debrief page for the film: write them to `$FILM/review/debrief.json` as the app's show recipe says ("The debrief page"). It is answerable from the phone, every question skippable; the answers come back in one message and stay in `review/debrief-answers.json`. Say in the thread that it is up.
+41. **The answers become lessons and fixes, through the user's word.** Keep each answer in the user's words, with the film and the change it explains.
+    - A lesson for the AI editor goes into its lessons in `tools/edit/AI_EDITOR.md` at once, and a lesson for the sound designer into its lessons in `tools/sound/SOUND_DESIGNER.md`: those are taste, not flow rules.
+    - A change to the flow itself goes into `flow-fixes.md` at the studio root ([[Flow v3.3 - 0 Standing rules]], The flow's text), and is decided with the user before it is written into a stage note.
+42. **What the debrief measures**, film by film, written into the film's record: the number of changes the user made to the AI editor's first cut and the time the edit took; the sounds re-picked ("none of these"); the redos. They go down when the lessons work.
 
 ## Checks
 - **The caption script:** `social/script.json` has every line the final cut speaks, in film order, in the words the cut speaks, names spelt as the script spells them, no stage directions or stress capitals left.
@@ -233,6 +254,7 @@ status: live
     - `YouTube thumbnail - <name>.jpg`: one per picked option.
 - On cards at Release: the four checked frames, the thumbnail sheet, any second-post clip.
 - At the studio root: `film-records/<Title>.md`, the film's rows in `film-records/voices.md`, `finished-scripts/<Title>.md`, and the film's section in `published-links.md`.
+- The debrief: the film's debrief page in the app with the user's answers; each lesson added to `tools/edit/AI_EDITOR.md` or `tools/sound/SOUND_DESIGNER.md`; each change to the flow added to `flow-fixes.md`; the debrief's counts in the film's record.
 
 ## Tools
 Run with `$PY` (`.venv/bin/python` in the studio folder) from `$FILM`, the paths set as in step 2; the release scripts are in `tools/release/` (`$S`). `--film` takes the film folder's full path; relative paths in the film-aware scripts are read from it.
