@@ -1,4 +1,4 @@
-"""Check that a job ran the prompt file (Flow v3.2 - 7 Takes, step 11): the prompt Higgsfield stored for the job against the
+"""Check that a job ran the prompt file (Flow v3.3 - 7 Takes, step 11): the prompt Higgsfield stored for the job against the
 prompt file, identical apart from trailing newlines at the end. The agent fetches the stored prompt through the connector
 and saves it to a text file; this script only compares, and calls no service.
 

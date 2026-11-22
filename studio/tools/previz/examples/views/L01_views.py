@@ -1,5 +1,5 @@
 """A worked example of a location's views script: the empty place through its view cameras, for the plates the views are
-painted over, the colour plates, and the fitting renders (Flow v3.2 - 4 Locations and props, steps 3 to 10). Copy it to
+painted over, the colour plates, and the fitting renders (Flow v3.3 - 4 Locations and props, steps 3 to 10). Copy it to
 $FILM/previz/scenes/L0N_<name>_views.py and change the cameras, the colour table and the key points to the location's own.
 The place here is a made-up walled courtyard (L01-room.json beside this file): a stage with steps on the south side, an
 arcade of four columns on the east, a fountain, a tree, two benches, a gate in the north wall, a door in the west.

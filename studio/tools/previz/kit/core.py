@@ -79,8 +79,15 @@ def set_exposure(v):
     if not S.expo_locked: S.sc.view_settings.exposure = v
 def world(rgb=(0, 0, 0), strength=1.0):
     bg = S.sc.world.node_tree.nodes['Background']; bg.inputs['Color'].default_value = (*rgb, 1); bg.inputs['Strength'].default_value = strength
-def haze(density, rgb=(1, 1, 1), anisotropy=0.0, end=None):
-    """world volume scatter (the haze that shows light shafts); end = how far it reaches (m)"""
+def haze(density, rgb=(1, 1, 1), anisotropy=0.0, end=None, outdoor=None, extent=None):
+    """the haze that shows light shafts. Indoors: a world volume scatter (end = how far it reaches, m).
+    Outdoors (an open place: the room has no ceiling, or outdoor=True): in Blender 5.2 EEVEE a world volume is endless, so it
+    swallows the sky behind it and blacks out an open exterior. There the haze is a box
+    volume instead, `extent` m each way round the room's centre (default 300) and 60 m high, and the sky shows through it,
+    hazed by its depth. Returns the scatter node."""
+    if outdoor is None: outdoor = S.room is not None and getattr(S.room, 'ceil_t', 1.0) <= 0
+    if outdoor:
+        return _haze_box(density, rgb, anisotropy, extent, end)
     nt = S.sc.world.node_tree; vs = nt.nodes.get('haze') or nt.nodes.new('ShaderNodeVolumeScatter'); vs.name = 'haze'
     vs.inputs['Density'].default_value = density; vs.inputs['Color'].default_value = (*rgb, 1)
     try: vs.inputs['Anisotropy'].default_value = anisotropy
@@ -89,6 +96,24 @@ def haze(density, rgb=(1, 1, 1), anisotropy=0.0, end=None):
     if end:
         try: S.sc.eevee.volumetric_end = end
         except Exception: pass
+    return vs
+def _haze_box(density, rgb, anisotropy, extent, end, bounds=None):
+    """an open place's haze: a scatter volume in a big box (the sky stays visible behind it), not a world volume"""
+    old = bpy.data.objects.get('haze-outdoor')
+    if old is not None: bpy.data.objects.remove(old, do_unlink=True)
+    lo, hi = bounds or (S.room.bounds if S.room is not None else ((-1, -1, -1), (1, 1, 20)))
+    c = (Vector(lo) + Vector(hi)) / 2; half = [float(extent or 300.0)] * 2       # an open place's floor outline is often a token
+    m = bpy.data.materials.get('haze-outdoor') or bpy.data.materials.new('haze-outdoor'); m.use_nodes = True; nt = m.node_tree
+    nt.nodes.clear(); out = nt.nodes.new('ShaderNodeOutputMaterial'); vs = nt.nodes.new('ShaderNodeVolumeScatter'); vs.name = 'haze'
+    vs.inputs['Density'].default_value = density; vs.inputs['Color'].default_value = (*rgb, 1)
+    try: vs.inputs['Anisotropy'].default_value = anisotropy
+    except Exception: pass
+    nt.links.new(vs.outputs[0], out.inputs['Volume'])
+    o = box('haze-outdoor', (c.x, c.y, 25.0), (2 * half[0], 2 * half[1], 60.0), m); noshadow(o)
+    o['previz_volume'] = True
+    try: S.sc.eevee.volumetric_end = max(float(end or 0), 2.0 * max(half))
+    except Exception: pass
+    print('previz kit: haze %.4g outdoors as a box volume %.0f x %.0f x 60 m (a world volume would black out the open sky)' % (density, 2 * half[0], 2 * half[1]))
     return vs
 def haze_to_box(lo, hi, gain=1.5):
     """move the world haze into a box volume lo..hi. Needed before any object volume (smoke): in Blender 5.2 EEVEE a world
@@ -106,8 +131,12 @@ def haze_to_box(lo, hi, gain=1.5):
 
 # ================================================================ materials (everything grey; glows keep their light)
 GREYS = {'floor': 0.16, 'wall': 0.30, 'ceiling': 0.22, 'furniture': 0.24, 'prop': 0.20, 'figure': 0.42}
-def mat(name, rgb=(0.25, 0.25, 0.25), rough=0.6, metal=0.0, emit=None, strength=0.0, alpha=1.0):
-    """cached Principled material (same name -> same material)"""
+# Surfaces that keep their own grey in --grey (every other surface takes the one grey): still water darker than sand, foam
+# and breaking water white, the mannequins' eyes dark.
+OWN_GREY = {'water': 0.07, 'foam': 0.80, 'eye': 0.03}
+def mat(name, rgb=(0.25, 0.25, 0.25), rough=0.6, metal=0.0, emit=None, strength=0.0, alpha=1.0, grey=None):
+    """cached Principled material (same name -> same material). grey: the grey (0..1) it keeps in --grey, where every other
+    surface takes the one grey (water, foam: see OWN_GREY); or set m['previz_grey'] on any material"""
     if name in MATS: return MATS[name]
     m = bpy.data.materials.new(name); m.use_nodes = True
     b = m.node_tree.nodes['Principled BSDF']
@@ -118,10 +147,15 @@ def mat(name, rgb=(0.25, 0.25, 0.25), rough=0.6, metal=0.0, emit=None, strength=
         b.inputs['Alpha'].default_value = alpha
         try: m.surface_render_method = 'BLENDED'
         except Exception: m.blend_method = 'BLEND'
+    if grey is not None: m['previz_grey'] = float(grey)
     MATS[name] = m; return m
 def grey(kind='prop', alpha=1.0, rough=None):
-    """the kit's plain grey for a class of surface: floor wall ceiling furniture prop figure. rough: its roughness
-    (default 0.75, matte; a polished floor 0.3) - the sheen is part of the lighting, so it stays in --grey"""
+    """the kit's plain grey for a class of surface: floor wall ceiling furniture prop figure, and water foam eye (these three
+    keep their own grey in --grey). rough: its roughness (default 0.75, matte; a polished floor 0.3; water 0.05) - the sheen is
+    part of the lighting, so it stays in --grey"""
+    if kind in OWN_GREY:
+        g = OWN_GREY[kind]; r = (0.05 if kind == 'water' else 0.75) if rough is None else float(rough)
+        return mat('grey-%s%s%s' % (kind, '' if alpha >= 1 else '-a%.2f' % alpha, '' if rough is None else '-r%.2f' % r), (g, g, g), r, alpha=alpha, grey=g)
     g = GREYS.get(kind, 0.25); r = 0.75 if rough is None else float(rough)
     return mat('grey-%s%s%s' % (kind, '' if alpha >= 1 else '-a%.2f' % alpha, '' if rough is None else '-r%.2f' % r), (g, g, g), r, alpha=alpha)
 def glow_mat(name, strength, rgb=(1, 1, 1)):
@@ -160,9 +194,18 @@ def ell(name, loc, radii, m, seg_=20):
     L = Vector(loc)
     for v_ in bm.verts: v_.co = Vector((v_.co.x * radii[0], v_.co.y * radii[1], v_.co.z * radii[2])) + L
     return _mesh_obj(name, bm, (0, 0, 0), (0, 0, 0), m, True)
-def seg(name, a, b, r, m, v=16):
-    """a cylinder from point a to point b"""
+def seg(name, a, b, r, m, v=16, ends=False):
+    """a cylinder from point a to point b; ends=True rounds both ends (a capsule: the mannequins' limbs, so no
+    flat cap shows at a shoulder, elbow, hip or knee when the limb turns)"""
     a, b = Vector(a), Vector(b); d = b - a
+    if ends and not OPS_PRIMS:
+        bm = bmesh.new(); L = d.length
+        bmesh.ops.create_cone(bm, cap_ends=False, cap_tris=False, segments=v, radius1=r, radius2=r, depth=L, calc_uvs=True)
+        for zz in (-L / 2, L / 2):
+            bmesh.ops.create_uvsphere(bm, u_segments=v, v_segments=max(4, (v // 2) // 2 * 2), radius=r, matrix=Matrix.Translation((0, 0, zz)), calc_uvs=True)
+        bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Vector((0, 0, 1)).rotation_difference(d.normalized()).to_matrix())
+        bmesh.ops.translate(bm, verts=bm.verts, vec=(a + b) / 2)
+        return _mesh_obj(name, bm, (0, 0, 0), (0, 0, 0), m, True)
     if OPS_PRIMS:
         o = cyl(name, (a + b) / 2, r, d.length, m, v=v)
         o.rotation_mode = 'QUATERNION'; o.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(d.normalized())
@@ -272,16 +315,20 @@ def loop(o, path, idx, v0, v1, period, phase=0.0):
 # ================================================================ grey mode (--grey)
 def grey_world(g=0.25):
     """--grey: every surface one neutral grey g, every light and glow white; positions, sizes, strengths and keys untouched,
-    so the lighting keeps its shape. Pictures on emissive surfaces turn to their own greyscale."""
-    n_, kept = 0, []
+    so the lighting keeps its shape. Pictures on emissive surfaces turn to their own greyscale. A material with
+    m['previz_grey'] (water, foam, the mannequins' eyes: grey('water'), mat(..., grey=)) keeps that grey instead."""
+    n_, kept, own = 0, [], []
     for m in bpy.data.materials:
         if not m.use_nodes or not m.node_tree: continue
         nt = m.node_tree; fcs_ = fcurves(nt)
+        gm = m.get('previz_grey')
+        gm = g if gm is None else float(gm)
+        if gm != g: own.append('%s %.2f' % (m.name, gm))
         for b in [n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED']:
             es = b.inputs['Emission Strength']
             if es.is_linked or es.default_value > 0 or any(fc.data_path == 'nodes["%s"].inputs[%d].default_value' % (b.name, list(b.inputs).index(es)) for fc in fcs_):
                 kept.append(m.name)
-            for nm, v in (('Base Color', (g, g, g, 1)), ('Metallic', 0.0), ('Subsurface Weight', 0.0), ('Coat Weight', 0.0), ('Sheen Weight', 0.0)):
+            for nm, v in (('Base Color', (gm, gm, gm, 1)), ('Metallic', 0.0), ('Subsurface Weight', 0.0), ('Coat Weight', 0.0), ('Sheen Weight', 0.0)):
                 if nm not in b.inputs: continue
                 for l in list(b.inputs[nm].links): nt.links.remove(l)
                 dp = 'nodes["%s"].inputs[%d].default_value' % (b.name, list(b.inputs).index(b.inputs[nm]))
@@ -315,4 +362,5 @@ def grey_world(g=0.25):
             c_ = nd.inputs.get('Color') if nd.type in ('BACKGROUND', 'VOLUME_SCATTER') else None
             if c_ is not None and not c_.is_linked:
                 v_ = sum(c_.default_value[:3]) / 3; c_.default_value = (v_, v_, v_, 1) if nd.type == 'BACKGROUND' else W
-    print('previz kit: grey: %d surfaces grey; lights, glows and haze white; glows kept: %s' % (n_, ', '.join(sorted(set(kept))) or 'none'))
+    print('previz kit: grey: %d surfaces grey; lights, glows and haze white; glows kept: %s; own greys: %s' % (
+        n_, ', '.join(sorted(set(kept))) or 'none', ', '.join(sorted(set(x for x in own if not x.startswith('grey-eye')))) or 'none'))

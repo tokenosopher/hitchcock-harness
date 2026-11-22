@@ -1,6 +1,6 @@
 # Published links
 
-Every post of every film, newest film first: a section per film, a row per platform. Alma opens a film's section when posting starts and adds each link as you share it; "add" marks a link still to come. The Release page reads this file (Flow v3.2 - 12 Release, step 36).
+Every post of every film, newest film first: a section per film, a row per platform. Alma opens a film's section when posting starts and adds each link as you share it; "add" marks a link still to come. The Release page reads this file (Flow v3.3 - 12 Release, step 36).
 
 <!-- The shape of a film's section, kept exactly, because the Release page reads it:
 - the heading starts with the film's public title, then the first post's date;

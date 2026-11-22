@@ -5,7 +5,7 @@ fix (for example `$FILM/audio/fixes/<G>-<word>/`), change the settings, and run 
 `FILM="$FILM" .venv/bin/python <the copy>`. They call no service: the word or line in the character's voice is a Higgsfield
 call Alma makes (a voice saved from the take's voice stem with `create_voice_from_confirmed_audio`, then the line in it),
 saved as a file; the take's voice and background stems come from `tools/stems/split.py`; word times from
-`tools/stt/transcribe.py --audio`. The method: `flow/Flow v3.2 - 3 Voices and video elements.md`. All are unproven in this
+`tools/stt/transcribe.py --audio`. The method: `flow/Flow v3.3 - 3 Voices and video elements.md`. All are unproven in this
 studio: listen to every result.
 
 | Template | What it does |

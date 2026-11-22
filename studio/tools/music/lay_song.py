@@ -13,7 +13,7 @@ only behind --fx lofi (or SONG_FX=lofi); never use it unless the user asks for a
         [--preview 30] [--lowres] [--size 480:854] [--bed-db 4.5] [--black 0.45]
 Relative paths are taken from the film root. --preview N also writes OUT-first<N>-480p.mp4 (the first N s, low-res,
 1 s fade); --lowres also writes OUT-480p.mp4 (the whole film, same sound). --bed-out writes the bed exactly as mixed
-(level, dip, stops, fade) as a 24-bit WAV, the file laid on the cut's music track (Flow v3.2 - 11 Sound and music).
+(level, dip, stops, fade) as a 24-bit WAV, the file laid on the cut's music track (Flow v3.3 - 11 Sound and music).
 Every run prints the measured bed level under speech and in gaps."""
 import argparse, os, shutil, subprocess, sys, tempfile
 import numpy as np

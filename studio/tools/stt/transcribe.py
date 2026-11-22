@@ -1,4 +1,4 @@
-"""Transcribe a landed take with Whisper on this Mac (free) and check its lines (Flow v3.2 - 7 Takes, step 12 and Checks):
+"""Transcribe a landed take with Whisper on this Mac (free) and check its lines (Flow v3.3 - 7 Takes, step 12 and Checks):
 every line word for word, each once, in order; no word missing, no extra word, no line repeated.
 
     .venv/bin/python tools/stt/transcribe.py $FILM <take folder or mp4> [--lines <json of expected lines>] [--again]

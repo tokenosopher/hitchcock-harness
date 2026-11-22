@@ -3,14 +3,30 @@ a camera line, the frame and a caption, a footer). Three panels a page, one row.
 every page; board.json carries none.
 The frame's ratio (9:16 or 16:9) comes from the film config (<film>/previz/film.json or brief.md; the film is the folder above
 previz/, or --film), else from board.json's "ratio", else from the first panel image; the header, when board.json has none, from the
-film's title. Reads <dir>/board.json + <dir>/panels.json, writes <dir>/page-N.png.
+film's title. Reads <dir>/board.json + <dir>/panels.json, writes <dir>/page-N.png. A version folder with no board.json starts
+from the newest earlier hand-edited one (kit/board.py: its layout note and header kept, each caption carried to the panel of the
+same shot and time and marked "carried_from" until it is written again from the new frame).
     .venv/bin/python tools/previz/storyboard.py $FILM/previz/<G>/storyboard/v2 [--film $FILM]"""
 import sys, os, json, textwrap, re
 from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kit.film import Film, find_film, RATIOS
 if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'): print(__doc__); sys.exit(0)
-D = sys.argv[1]; B = json.load(open(os.path.join(D, 'board.json'))); P = json.load(open(os.path.join(D, 'panels.json')))
+D = sys.argv[1]; P = json.load(open(os.path.join(D, 'panels.json')))
+if not os.path.exists(os.path.join(D, 'board.json')):
+    # a version without a board: start from the newest earlier hand-edited one, carried forward panel by panel
+    from kit import board as _bd
+    prev = _bd.previous_hand_board(D)
+    if not prev: sys.exit('storyboard: no board.json in %s and no earlier hand-edited one to carry forward' % D)
+    oldcap = {c['n']: c['caption'] for c in prev[1].get('captions', [])}
+    kitb = dict(header=prev[1].get('header'), ratio=prev[1].get('ratio'), shots=prev[1].get('shots', []),
+                captions=[dict(n=p['n'], caption='(caption)') for p in P])
+    B, note = _bd.carry(kitb, prev[1], prev[2], [(p['n'], str(p['shot']), float(p['t']), None) for p in P], prev[0])
+    json.dump(B, open(os.path.join(D, 'board.json'), 'w'), indent=1); print('storyboard: board.json', note)
+else:
+    B = json.load(open(os.path.join(D, 'board.json')))
+for c in B.get('captions', []):
+    if c.get('carried_from'): print('storyboard: panel %s caption carried from %s: write it again from its new frame' % (c['n'], c['carried_from']))
 FD = sys.argv[sys.argv.index('--film') + 1] if '--film' in sys.argv else find_film(D)
 FILM = Film(FD) if FD and os.path.isdir(FD) else None
 if FILM: AW, AH = FILM.aspect

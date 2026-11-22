@@ -1,7 +1,7 @@
 {
  "_about": [
   "Read by: no script; the agent looks up the element ids, media ids and job ids here for every prompt, every finalize and the film record.",
-  "Described in: Flow v3.2 - 1 Setup and story (step 12), Flow v3.2 - 2 Characters (step 47: the image element) and Flow v3.2 - 3 Voices and video elements (step 26: the video element's draft and 1080p jobs)."
+  "Described in: Flow v3.3 - 1 Setup and story (step 12), Flow v3.3 - 2 Characters (step 47: the image element) and Flow v3.3 - 3 Voices and video elements (step 26: the video element's draft and 1080p jobs)."
  ],
  "elements": {
   "<CID>": {

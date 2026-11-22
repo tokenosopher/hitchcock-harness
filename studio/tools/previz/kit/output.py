@@ -6,7 +6,10 @@
                               panels.json and board.json beside them (board.json only if missing or written by the kit); the shots file
   --project <id> t1,t2        prints PROJECT {...}: where each figure's head and hips and every `points` entry land in that shot's camera
   --plate <id> <t>            the empty set through a shot's camera (figures and what they hold hidden) -> OUTDIR/plates/
-  --mannequin [--mq-time t]   close-ups and full views of every figure -> OUTDIR/check/mq-<name>-<view>.png
+  --mannequin [--mq-time t]   close-ups and full views of every figure at t -> OUTDIR/check/mq-<name>-<view>.png
+  --facts                     only the scene's facts -> OUTDIR/<G>-facts.json (nothing rendered; precheck.py reads it)
+  (--check, --panels and the take also write the facts; --check prints the sight check: covered or too small heads, the
+  hands in use out of frame or covered)
   --shots-file                only write the generation's shots file
   --build                     only build the scene (with setup(reuse=True): and save it for the next runs); prints BUILD DONE
   (none)                      the take: frames -> OUTDIR/<G>-previz-take-N.mp4 (+ .json: shots, shot_plan, moves, lines) + .blend; the shots file
@@ -17,7 +20,7 @@ kept; shots this previz no longer has move to "retired_shots")."""
 import bpy, json, math, os, subprocess, sys
 from mathutils import Vector
 from .core import S, F, sec, ARGV, arg, has, grey_world
-from .figures import FIGS, fig_objects, head_world, facing_now, fig_tag, clear_probes
+from .figures import FIGS, fig_objects, head_world, facing_now, fig_tag, clear_probes, fix_scaled_builds
 from .cameras import SHOTS, PLAN, make_cameras, shot_plan, cam, _shot, cam_state, frame_on, lens_mm, vfov, camera_line, shot_record, _cam_data
 from .core import fcurve
 
@@ -150,13 +153,23 @@ def run(panels=None, moves=None, lines=None, points=None, extra=None, header=Non
     sc = S.sc; od = S.outdir; G = S.gen
     if not SHOTS: sys.exit('previz kit: no shots declared')
     clear_probes()              # the pose questions' side scenes go before anything is saved, checked or rendered
+    fix_scaled_builds()         # an armature scaled unevenly tears its shoulders and elbows: made even, the breadth in the parts
     make_cameras()
     if not PLAN: shot_plan()
+    clear_probes()              # (the default focus asks where the faces are)
     if S.reuse:                 # setup(reuse=True): the scene as built, saved before any mode changes it (reuse.py)
         from . import reuse as _reuse
         _reuse.save(dict(panels=panels, moves=moves, lines=lines, points=points, extra=extra, header=header))
     if has('--build'): print('BUILD DONE', G); sys.exit(0)
     moves = _norm_moves(moves); lines = _norm_lines(lines)
+    if has('--panel-times'):
+        panels = [(x.split(':')[0], float(x.split(':')[1])) for x in arg('--panel-times').split(',')]
+    if panels is None: panels = [(SHOTS[i]['id'], round(tt, 2)) for lab, i, t0, t1 in PLAN for tt in (t0 + 0.1, (t0 + t1) / 2, t1 - 0.1)]
+    panels = _norm_panels(panels)
+    numbered = [(n, sid, t, cap) for n, (sid, t, cap) in enumerate(panels, int(arg('--panel-start', 1)))]
+    if has('--facts'):          # the scene's facts only (fast lane, nothing rendered): <G>-facts.json for precheck.py
+        from .facts import write_facts
+        write_facts(numbered, moves, lines); sys.exit(0)
     if has('--grey'): grey_world()
     if has('--shots-file'): write_shots_file(); sys.exit(0)
     if has('--project'):
@@ -181,29 +194,42 @@ def run(panels=None, moves=None, lines=None, points=None, extra=None, header=Non
             fc = fcurve(o, 'hide_render')
             if fc: fc.mute = True
             o.hide_render = True
-        p = still(sid, tt, os.path.join(od, 'plates', 'cam%s-%05.2f-empty.png' % (sid, tt))); print('PLATE DONE', p); sys.exit(0)
-    if has('--panel-times'):
-        panels = [(x.split(':')[0], float(x.split(':')[1])) for x in arg('--panel-times').split(',')]
-    if panels is None: panels = [(SHOTS[i]['id'], round(tt, 2)) for lab, i, t0, t1 in PLAN for tt in (t0 + 0.1, (t0 + t1) / 2, t1 - 0.1)]
-    panels = _norm_panels(panels)
+        p = still(sid, tt, os.path.join(od, 'plates', 'cam%s-%05.2f-empty.png' % (sid, tt)))
+        pos, yaw, pitch, fd, diag = cam_state(_shot(sid), tt); from .cameras import lens_ff
+        cam_rec = dict(shot=sid, t=tt, cam=[round(v, 3) for v in pos], yaw=round(yaw % 360, 2), pitch=round(pitch, 2), diag=round(diag, 2),
+                       lens_ff_mm=round(lens_ff(diag), 1), ratio=S.ratio, script=os.path.basename(sys.argv[sys.argv.index('-P') + 1]) if '-P' in sys.argv else None)
+        with open(p[:-4] + '.json', 'w') as fh: json.dump(cam_rec, fh, indent=1)      # the plate's camera, for views.md (views_cams.py)
+        print('PLATE CAMERA', json.dumps(cam_rec)); print('PLATE DONE', p); sys.exit(0)
     if has('--panels'):
+        from .facts import write_facts
+        from . import board as _bd
+        from . import reuse as _r
+        facts = write_facts(numbered, moves, lines)          # also gives each shot its size for the camera lines
         vd = os.path.join(od, 'storyboard', arg('--version', 'v1')); pd = os.path.join(vd, 'panels'); os.makedirs(pd, exist_ok=True)
-        only = [int(x) for x in arg('--only', '').split(',') if x]; n0 = int(arg('--panel-start', 1))
-        numbered = [(n, sid, t, cap) for n, (sid, t, cap) in enumerate(panels, n0)]
+        only = [int(x) for x in arg('--only', '').split(',') if x]
         for n, sid, t, cap in numbered:
             if only and n not in only: continue
             still(sid, t, os.path.join(pd, '%02d-shot%s-%05.2f.png' % (n, sid, t)))
         with open(os.path.join(vd, 'panels.json'), 'w') as fh:
             json.dump([dict(n=n, shot=sid, cam=cam(sid).name, t=t, file='panels/%02d-shot%s-%05.2f.png' % (n, sid, t)) for n, sid, t, cap in numbered], fh, indent=1)
-        bj = os.path.join(vd, 'board.json'); keep = False
+        bj = os.path.join(vd, 'board.json'); kitb = _board(numbered, moves, lines, header)
+        old_b = None
         if os.path.exists(bj):
-            with open(bj) as fh: keep = json.load(fh).get('generated_by') != 'previz kit'
-        if keep: print('previz kit: board.json kept (written by hand); delete it to have the kit write one')
+            with open(bj) as fh: old_b = json.load(fh)
+        if old_b is not None and old_b.get('generated_by') != 'previz kit':
+            nb, changed = _bd.refresh_cameras(old_b, kitb)        # a hand-edited board: its words kept, the camera lines from the scene
+            print('previz kit: board.json kept (written by hand); %s' % ('camera lines written again from the scene: shots ' + ', '.join(changed) if changed else 'its camera lines already match the scene'))
         else:
-            with open(bj, 'w') as fh: json.dump(_board(numbered, moves, lines, header), fh, indent=1)
+            prev = _bd.previous_hand_board(vd)
+            if prev:                                           # carry the hand-edited board of the version before forward
+                nb, note = _bd.carry(kitb, prev[1], prev[2], numbered, prev[0]); print('previz kit: board.json %s' % note)
+            else: nb = kitb
+        with open(bj, 'w') as fh: json.dump(nb, fh, indent=1)
+        with open(os.path.join(vd, 'built-from.json'), 'w') as fh: json.dump(dict(written=facts['written'], built_from=facts['built_from']), fh, indent=1)
         write_shots_file(); print('PANELS DONE', pd); sys.exit(0)
     if has('--mannequin'):
         md = os.path.join(od, 'check'); tt = float(arg('--mq-time', 0)); _no_markers()
+        sc.frame_set(F(tt))          # the pose at --mq-time, never whatever frame the file was on
         keep = set(fig_objects())
         for o in bpy.data.objects:   # the set out of the way (walls would block the full views); its lights stay
             if o.type in ('MESH', 'CURVE') and o not in keep: o.hide_render = True
@@ -216,16 +242,23 @@ def run(panels=None, moves=None, lines=None, points=None, extra=None, header=Non
                 hp = head_world(arm, tt, up=up); a = fac + ang
                 pos = Vector((hp.x + dist * math.cos(math.radians(a)), hp.y + dist * math.sin(math.radians(a)), hp.z + 0.05)); yaw, pitch = frame_on(pos, hp, diag)
                 cd.lens = lens_mm(diag); c.location = pos; c.rotation_euler = (math.radians(90 + pitch), 0, math.radians(yaw - 90))
-                sc.render.filepath = os.path.join(md, 'mq-%s-%s.png' % (n, view)); bpy.ops.render.render(write_still=True)
-        print('MANNEQUIN DONE', md); sys.exit(0)
+                sc.frame_set(F(tt)); sc.render.filepath = os.path.join(md, 'mq-%s-%s.png' % (n, view)); bpy.ops.render.render(write_still=True)
+        clear_probes(); print('MANNEQUIN DONE %s (at %.2f s)' % (md, tt)); sys.exit(0)
     blend = os.path.join(od, '%s-previz.blend' % G)
     if has('--check'):
+        from .facts import write_facts, warn_lines
         _in_frame_check()
+        f_ = write_facts(numbered, moves, lines)
+        wl = warn_lines(f_)
+        for l in wl: print('previz kit: WARN', l)
+        print('SIGHT CHECK', 'ok' if not wl else '%d warning(s): fix them, or say in the scene file why the shot wants it' % len(wl))
         cd_ = os.path.join(od, 'check'); only = [x for x in arg('--shots', '').split(',') if x]
         for j, (lab, i, t0, t1) in enumerate(PLAN, 1):
             if only and lab not in only and str(j) not in only: continue
             for tt in (t0 + 0.1, (t0 + t1) / 2, t1 - 0.1): still(SHOTS[i]['obj'], tt, os.path.join(cd_, 'shot%02d-%s-%05.2f.png' % (j, lab, tt)))
         bpy.ops.wm.save_as_mainfile(filepath=blend); print('CHECK DONE', cd_); sys.exit(0)
+    from .facts import write_facts
+    facts = write_facts(numbered, moves, lines)
     take = 1
     while os.path.exists(os.path.join(od, '%s-previz-take-%d.mp4' % (G, take))): take += 1
     fd = os.path.join(od, 'frames-take-%d' % take); os.makedirs(fd, exist_ok=True)
@@ -239,7 +272,8 @@ def run(panels=None, moves=None, lines=None, points=None, extra=None, header=Non
                 res=[sc.render.resolution_x, sc.render.resolution_y], grey=has('--grey'),
                 shots=[shot_record(lab, i, t0, t1) for lab, i, t0, t1 in PLAN],
                 shot_plan=[dict(label=lab, cam=SHOTS[i]['obj'].name, t0=t0, t1=t1) for lab, i, t0, t1 in PLAN],
-                moves=moves, lines=lines, script=os.path.abspath(sys.argv[sys.argv.index('-P') + 1]) if '-P' in sys.argv else None)
+                moves=moves, lines=lines, script=os.path.abspath(sys.argv[sys.argv.index('-P') + 1]) if '-P' in sys.argv else None,
+                built_from=facts['built_from'])
     data.update(extra or {})
     with open(mp4[:-4] + '.json', 'w') as fh: json.dump(data, fh, indent=1)
     write_shots_file(); print('WROTE', mp4)

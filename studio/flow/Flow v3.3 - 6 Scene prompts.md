@@ -1,6 +1,6 @@
 ---
-tags: [ai-filmmaking, film-flow, film-flow-v3-2]
-version: 3.2
+tags: [ai-filmmaking, film-flow, film-flow-v3-3]
+version: 3.3
 status: live
 ---
 # 6 · Scene prompts
@@ -9,24 +9,24 @@ status: live
 
 ## Inputs
 - `$FILM`: the full path to the film folder, in every command and path below.
-- The generation's scene file `$FILM/generations/<G>/<G>-scene.md`, started in [[Flow v3.2 - 5 Previz and storyboards]] from `templates/generation/scene.md` and approved with the previz: the scene, the geography with its compass, `## START STATE`, `## END STATE`, `## Shots` with one `### SHOT <n>: <name> (CAM FACING: <compass>)` heading per shot, `## ACTING TASKS`, and `## FIGHT BEATS` when the generation has a fight. `assemble.py` reads only `## Shots`, `## ACTING TASKS` and `## FIGHT BEATS`, by those exact headings.
+- The generation's scene file `$FILM/generations/<G>/<G>-scene.md`, started in [[Flow v3.3 - 5 Previz and storyboards]] from `templates/generation/scene.md` and approved with the previz: the scene, the geography with its compass, `## START STATE`, `## END STATE`, `## Shots` with one `### SHOT <n>: <name> (CAM FACING: <compass>)` heading per shot, `## ACTING TASKS`, and `## FIGHT BEATS` when the generation has a fight. `assemble.py` reads only `## Shots`, `## ACTING TASKS` and `## FIGHT BEATS`, by those exact headings.
 - The shots file `$FILM/generations/<G>/<G>-shots.json` (shape: `templates/generation/shots.json`): each shot's `id` is its SHOT number, and its `in_frame` list holds every `[TAG]` the shot names except the location views.
-- The previz approved at its gate ([[Flow v3.2 - 5 Previz and storyboards]]): the latest `$FILM/previz/<G>/<G>-previz-take-<N>.json` (the shots, the moves in order, the lines, the generation's length) and the latest storyboard folder `$FILM/previz/<G>/storyboard/v<N>/` (`panels.json`, `page-*.png`).
-- The generation's continuity sheet, written from the previz ([[Flow v3.2 - 5 Previz and storyboards]]): who stands where, what is in frame and what must not be, what the previous scene's last frame shows and what the next needs, costume sides, the sun.
-- The approved character sheets ([[Flow v3.2 - 2 Characters]]); the video elements with their voices, finalized to 1080p on the user's say-so ([[Flow v3.2 - 3 Voices and video elements]]); the approved props and the empty views behind the cameras, every wide included, each measured against its plate; the views are approved with the go for the video ([[Flow v3.2 - 4 Locations and props]]).
+- The previz approved at its gate ([[Flow v3.3 - 5 Previz and storyboards]]): the latest `$FILM/previz/<G>/<G>-previz-take-<N>.json` (the shots, the moves in order, the lines, the generation's length) and the latest storyboard folder `$FILM/previz/<G>/storyboard/v<N>/` (`panels.json`, `page-*.png`).
+- The generation's continuity sheet, written from the previz ([[Flow v3.3 - 5 Previz and storyboards]]): who stands where, what is in frame and what must not be, what the previous scene's last frame shows and what the next needs, costume sides, the sun.
+- The approved character sheets ([[Flow v3.3 - 2 Characters]]); the video elements with their voices, finalized to 1080p on the user's say-so ([[Flow v3.3 - 3 Voices and video elements]]); the approved props and the empty views behind the cameras, every wide included, each measured against its plate; the views are approved with the go for the video ([[Flow v3.3 - 4 Locations and props]]).
 - Shared descriptions in `$FILM/generations/prompt-common.md` (step 10).
-- Standing rules: [[Flow v3.2 - 0 Standing rules]]
+- Standing rules: [[Flow v3.3 - 0 Standing rules]]
 
 ## Steps
-1. Read the generation's continuity sheet, then the method note the generation needs, before you write. The previz is the source of camera, blocking and screen direction; the prompt agrees with it and with the continuity sheet. Where the prompt block or the wording of [[Flow v3.2 - 6b Acting]] differs from steps 2, 6 and 7 of this note, these steps hold: the scene direction and the line about the eyes are written once for the generation, not under each character; a visible change in the face is written; and the least acting text of step 2 is allowed when the prompt would pass its ceiling.
-   - [[Flow v3.2 - 6a Prompt engine]]: to build or audit the generation's scene text, and whenever a scene does not work.
-   - [[Flow v3.2 - 6b Acting]]: for every acting task, and whenever a face reads dead, flat or over-acted. Its line on facial beats points here; step 7 is the rule.
-   - [[Flow v3.2 - 6c Fight scene]]: for any fight, hold, throw or weapon. A fight follows it in full (step 9).
-   - [[Flow v3.2 - 6d Anamorphic look]]: for the anamorphic character in OPTICS and for STYLE, in degrees, not millimetres. Its focal-length table is for still plates; the video's lens degrees are the table in step 3.
+1. Read the generation's continuity sheet, then the method note the generation needs, before you write. The previz is the source of camera, blocking and screen direction; the prompt agrees with it and with the continuity sheet. Where the prompt block or the wording of [[Flow v3.3 - 6b Acting]] differs from steps 2, 6 and 7 of this note, these steps hold: the scene direction and the line about the eyes are written once for the generation, not under each character; a visible change in the face is written; and the least acting text of step 2 is allowed when the prompt would pass its ceiling.
+   - [[Flow v3.3 - 6a Prompt engine]]: to build or audit the generation's scene text, and whenever a scene does not work.
+   - [[Flow v3.3 - 6b Acting]]: for every acting task, and whenever a face reads dead, flat or over-acted. Its line on facial beats points here; step 7 is the rule.
+   - [[Flow v3.3 - 6c Fight scene]]: for any fight, hold, throw or weapon. A fight follows it in full (step 9).
+   - [[Flow v3.3 - 6d Anamorphic look]]: for the anamorphic character in OPTICS and for STYLE, in degrees, not millimetres. Its focal-length table is for still plates; the video's lens degrees are the table in step 3.
 2. Plan **one prompt per generation**: every shot of the generation in one Seedance job, the hard cuts inside.
    - The length is the lines spoken at each character's pace plus about 1 s a shot. Keep it tight, so the model does not pad by repeating lines.
    - Seedance takes whole seconds, 4 to 30, and the check stops outside that range. A stretch under 4 s goes into one generation with its neighbour.
-   - `assemble.py` takes the length from the latest previz take, rounded up. If that length is off, fix it in the previz plan ([[Flow v3.2 - 5 Previz and storyboards]]) before you assemble.
+   - `assemble.py` takes the length from the latest previz take, rounded up. If that length is off, fix it in the previz plan ([[Flow v3.3 - 5 Previz and storyboards]]) before you assemble.
    - **The prompt's size.** Aim at about 8,000 to 10,000 characters. Never go past about 15,000.
    - **Written to size, never cut down to it.** The scene file holds all the thinking and is as long as it needs to be; it is never sent. Write the prompt from it to fit the size. Never write a long prompt and then cut it down. Fill the prompt in this order: the shots and the spoken lines, word for word; the acting (below); the references by their tags, saying only what differs in this scene; placement only where the storyboard cannot show it; each constraint once. Say a fact once, in the section it belongs to.
    - A character with a video element or a sheet is named by its tag. What the references already show is not described again; only what differs in this scene is said (step 11).
@@ -41,8 +41,8 @@ status: live
    - Size: state it, and say it holds ("a close-up exactly as framed there").
    - Placement: place the camera by landmarks: what it looks at, where it stands relative to the set and to what is in frame.
    - Lens: the diagonal field of view for the shot size, the same as the previz camera: **extreme close-up 30°, close-up 47°, medium 63°, wide 84°**. Never 84° on a face. The Lens lines are the only place the prompt gives degrees.
-   - Sizes, heights and angles are the previz's designed camera ([[Flow v3.2 - 5 Previz and storyboards]]): dialogue in close-ups (47°) and tight mediums (63°); a wide only where an object or the whole party needs it, brief, at most one a generation; physical action from the body's level; height and angle changing from shot to shot. Never change a size or an angle in the text alone; a shot that breaks this goes back to the previz.
-   - Name the location view behind the shot by its `[TAG]` in the Placement line. A wide stands on its own view ([[Flow v3.2 - 4 Locations and props]], step 8); its Placement line reads "exactly [<LOC> WIDE], the same camera, lens, framing and look, with the people in it".
+   - Sizes, heights and angles are the previz's designed camera ([[Flow v3.3 - 5 Previz and storyboards]]): dialogue in close-ups (47°) and tight mediums (63°); a wide only where an object or the whole party needs it, brief, at most one a generation; physical action from the body's level; height and angle changing from shot to shot. Never change a size or an angle in the text alone; a shot that breaks this goes back to the previz.
+   - Name the location view behind the shot by its `[TAG]` in the Placement line. A wide stands on its own view ([[Flow v3.3 - 4 Locations and props]], step 8); its Placement line reads "exactly [<LOC> WIDE], the same camera, lens, framing and look, with the people in it".
 4. Write what is in each shot.
    - **A shot names only what is in its frame.** Never "behind the camera", "behind the lens", "off screen", "out of frame": the camera turns to what is named, and the check stops on them.
    - Describe an off-camera source only by its effect on what is in frame, or not at all. Give a gaze toward someone off camera as a direction only ("straight into the lens").
@@ -56,13 +56,13 @@ status: live
    - Any crowd in frame moves: heads turn, people shift and lean to each other, a ripple at a joke. Never a frozen backdrop.
    - Beats written as separate steps play as separate steps. When an action leads into a line, write that it flows straight into the line.
    - State the intent and keep the hard facts: who, where, which line, which reference, which camera. Leave the small choices to the model. The prompt's size is in step 2.
-   - A blocking change in the text needs boards that show it, because the model follows the picture over the words. Re-render the previz and the panels ([[Flow v3.2 - 5 Previz and storyboards]]), then reassemble.
+   - A blocking change in the text needs boards that show it, because the model follows the picture over the words. Re-render the previz and the panels ([[Flow v3.3 - 5 Previz and storyboards]]), then reassemble.
 5. Write the **close-up continuity lock** wherever a shot cuts to a close-up of the same person or the same object.
    - The wider shot ends with that person or object locked in the pose the close-up opens on: head position, eyeline, hands.
    - Write it on both sides of the cut in the scene file, so it is in the prompt on both sides.
-   - The panels either side of the cut show the same pose. If they do not, the previz goes back to [[Flow v3.2 - 5 Previz and storyboards]].
-   - In a redo of the wider shot, the pose comes from re-rendered grey boards on both sides of the cut, never from a frame of the film and never as an end image ([[Flow v3.2 - 8 Redos]]).
-6. Write the scene file's `## ACTING TASKS`: one for every character in frame, listeners and silent characters included. Each gives the inner direction: scene direction, motive, goal, obstacle, tactic, then moment to moment ([[Flow v3.2 - 6b Acting]]).
+   - The panels either side of the cut show the same pose. If they do not, the previz goes back to [[Flow v3.3 - 5 Previz and storyboards]].
+   - In a redo of the wider shot, the pose comes from re-rendered grey boards on both sides of the cut, never from a frame of the film and never as an end image ([[Flow v3.3 - 8 Redos]]).
+6. Write the scene file's `## ACTING TASKS`: one for every character in frame, listeners and silent characters included. Each gives the inner direction: scene direction, motive, goal, obstacle, tactic, then moment to moment ([[Flow v3.3 - 6b Acting]]).
    - Write "fully invested in the tactic; the work happens in the eyes" once for the scene, with the SCENE DIRECTION, never after each character's ACTING TASK heading.
 7. Write **the faces**, the same way for speakers and listeners.
    - Write the face beats only in `## ACTING TASKS`, in each character's moment to moment. The `In shot:` lines hold the actions and the lines, never a face beat.
@@ -79,8 +79,8 @@ status: live
    - Where a short line leaves spare time, write "she says it once, then holds, silent", so the time is not filled with speech.
    - A generation that opens on a line says it starts on the very first frame: no silence, no in-breath, no pause before it.
    - **Never write a beat before a line.** A pause lives inside a line only.
-   - When a generation continues the one before, each gets only its own lines. Split a line that runs across two generations at the cut; each generation speaks only what its shots show. The join: [[Flow v3.2 - 9 Edit]].
-9. Write a fight from [[Flow v3.2 - 6c Fight scene]], following it in full.
+   - When a generation continues the one before, each gets only its own lines. Split a line that runs across two generations at the cut; each generation speaks only what its shots show. The join: [[Flow v3.3 - 9 Edit]].
+9. Write a fight from [[Flow v3.3 - 6c Fight scene]], following it in full.
    - Two to four beats, each one to two seconds, in order, in the scene file's `## FIGHT BEATS`. Each beat: its shot and its timing in seconds, read from the previz take json; the position; the strike, limb and target; the physical reaction; the new position. FIGHT BEATS is the only place the prompt may hold seconds, besides the total length.
    - The same beats go, in order and without seconds, into the shots' `In shot:` lines.
    - POSITIVE CONSTRAINTS hold the style (for example: every kick below the belt; the first visible motion is the strike).
@@ -97,10 +97,10 @@ status: live
     - Call it as `@KEY` in a MEDIA description or a TAGS line, the only two places it resolves. The longest key wins, so `@MAYA SHEET` is not read as `@MAYA`. An `@KEY` anywhere else stays in the prompt and stops the check.
     - Write `{IMAGE:TAG}`, `{VIDEO:TAG}` or `{AUDIO:TAG}` wherever text in the spec or the scene file needs a reference number. Nothing is typed twice.
 11. Build **the reference list** in `## MEDIA`. Seedance numbers references per kind in media-list order (VIDEO REFERENCE n, IMAGE REFERENCE n, AUDIO REFERENCE n), and the prompt uses those numbers.
-    - **VIDEO**: the video element of each character in the generation, at its 1080p finalize; an element still at 480p goes back to its finalize gate in [[Flow v3.2 - 3 Voices and video elements]]. The description is `@<NAME>`, which carries "VOICE: the voice heard in this reference", then what differs here: what the character holds, in which hand, the state of the clothes. Never describe again what the element or a sheet already shows, here or in the `@<NAME>` sections of `prompt-common.md`. The exact character-reference line: [[Flow v3.2 - 3 Voices and video elements]]. The `@SHEETS ONLY` line in TAGS declares them character sheets only.
-    - **A character with a video element gets ONLY the element. The one case beyond that: a fourth such character in a scene goes in as a picture and a voice reference (the limits below).** Never put its sheet beside it: the two compete. There are two exceptions. One is a faceless sheet variant for a costume or prop state the element does not show. The other is a character's second look (other clothes, some years on): the same video element plus that look's sheet, and the prompt says which clothes he wears in place of the clip's. A second element is made only if the first look's clothes come back in the take ([[Flow v3.2 - 3 Voices and video elements]]). A voice that comes out off does not call for a new element.
+    - **VIDEO**: the video element of each character in the generation, at its 1080p finalize; an element still at 480p goes back to its finalize, which goes out on the user's yes to its draft ([[Flow v3.3 - 3 Voices and video elements]], step 25). The description is `@<NAME>`, which carries "VOICE: the voice heard in this reference", then what differs here: what the character holds, in which hand, the state of the clothes. Never describe again what the element or a sheet already shows, here or in the `@<NAME>` sections of `prompt-common.md`. The exact character-reference line: [[Flow v3.3 - 3 Voices and video elements]]. The `@SHEETS ONLY` line in TAGS declares them character sheets only.
+    - **A character with a video element gets ONLY the element. The one case beyond that: a fourth such character in a scene goes in as a picture and a voice reference (the limits below).** Never put its sheet beside it: the two compete. There are two exceptions. One is a faceless sheet variant for a costume or prop state the element does not show. The other is a character's second look (other clothes, some years on): the same video element plus that look's sheet, and the prompt says which clothes he wears in place of the clip's. A second element is made only if the first look's clothes come back in the take ([[Flow v3.3 - 3 Voices and video elements]]). A voice that comes out off does not call for a new element.
     - **Every person seen in a shot has a reference.** A character with a video element has the element. Everyone else has a picture, extras included. Only the background crowd has none.
-    - **IMAGE**, then **VIEW**, in this order: a sheet only for a character with no element, and any sheet the exceptions above allow; for extras, their group picture cropped to this scene, holding only the people the scene shows, in the order the camera sees them; a reference each for extras who look alike; the props in frame; **the empty view behind each camera, always** (front, back, or a view made from that camera's own plate), each saying what it controls. Cameras close together share one view; a camera that sees a really different side of the place has its own ([[Flow v3.2 - 4 Locations and props]]). The script adds the storyboard pages after them.
+    - **IMAGE**, then **VIEW**, in this order: a sheet only for a character with no element, and any sheet the exceptions above allow; for extras, their group picture cropped to this scene, holding only the people the scene shows, in the order the camera sees them; a reference each for extras who look alike; the props in frame; **the empty view behind each camera, always** (front, back, or a view made from that camera's own plate), each saying what it controls. A shot shares a view only when that view shows its background well; any other shot has its own, and when the views would pass the 30 images, those that matter most go in and the pages carry the rest ([[Flow v3.3 - 4 Locations and props]], step 8). The script adds the storyboard pages after them.
     - Beside the pages' reference numbers the script writes: "Position only: 3D previz, mannequins and placeholder models that give camera, framing, placement and screen direction; no look is taken from them."
     - A wide's view: its description says the picture shows the set EMPTY, and who is where in it for this shot ("in this shot the woman sits at the table, the man starts at the door"), or the empty view empties the frame.
     - A picture given only for a look (for a view that has no picture of its own) is said to be only the look far behind ("only the look of the house fronts far behind"). The people and the action go in the shot's own lines.
@@ -110,9 +110,9 @@ status: live
     - Never a previz video: it carries motion and look, not only staging. The pages replace it.
     - Never a panel, plate or Blender frame on its own: a single full-size grey panel becomes the look of the clip. Panels go in only on pages.
     - At most 30 images. Reference videos at most 30 s in total. At most three reference videos.
-    - When more than three characters with a video element are in the scene, the three who act most get their video elements. When two tie, the third element goes to the one who speaks more in that scene ([[Flow v3.2 - 3 Voices and video elements]], step 35). Each one beyond them is given as a picture and a voice reference (AUDIO).
+    - When more than three characters with a video element are in the scene, the three who act most get their video elements. When two tie, the third element goes to the one who speaks more in that scene ([[Flow v3.3 - 3 Voices and video elements]], step 35). Each one beyond them is given as a picture and a voice reference (AUDIO).
     - The cap on the total number of references is not known yet. Find it with a few cheap probes on the next film.
-    - How a redo's set is built: [[Flow v3.2 - 8 Redos]].
+    - How a redo's set is built: [[Flow v3.3 - 8 Redos]].
     - **Tags, the way `check.py` reads them:**
       - A tag is capitals, digits, spaces and underscores, starting with a capital (`[A-Z][A-Z0-9_ ]*`), in square brackets wherever the text names it.
       - A character's VIDEO tag is the tag the shots name them by (`VIDEO | MAYA | …` and `[MAYA]` in the shots). A faceless sheet variant beside the element takes that tag plus ` SHEET` (`IMAGE | MAYA SHEET | …`); it counts as shown wherever `[MAYA]` is.
@@ -137,7 +137,7 @@ status: live
     | 12 | PHYSICS | spec `## PHYSICS` | how each moving thing moves with weight; what is one rigid piece |
     | 13 | LIGHTING | spec `## LIGHTING` | the practical sources and their colours; what changes, by the action |
     | 14 | AUDIO | spec `## AUDIO` | English only; every line numbered in order with its shot and speaker, word for word; who never speaks; the sounds in order; no music of any kind, no narration, no subtitles; one AUDIO LOCK line per speaker on their reference (`{VIDEO:<NAME>}`, or `{AUDIO:<VOICE TAG>}`) |
-    | 15 | STYLE | spec `## STYLE` | the film stock, grain, blacks, palette and anamorphic marks ([[Flow v3.2 - 6d Anamorphic look]]) |
+    | 15 | STYLE | spec `## STYLE` | the film stock, grain, blacks, palette and anamorphic marks ([[Flow v3.3 - 6d Anamorphic look]]) |
     | 16 | QUALITY | spec `## QUALITY` | readable faces and hands at held moments, natural motion blur, stable anatomy |
     | 17 | POSITIVE CONSTRAINTS | spec `## POSITIVE CONSTRAINTS` | say what is there: exactly who is in frame by shot, what stays the same, the number of hard cuts; who is seen from behind (step 4) |
     | 18 | FIGHT STYLE LOCK | spec `## FIGHT STYLE LOCK` | fights only: the style's lock line, word for word (step 9) |
@@ -153,10 +153,10 @@ status: live
 17. Put the generation on a card on its scene's page, as the app's show recipe says (the card says it is about the generation): the prompt text, the media list in reference order with every image and video shown at its number and tag, the storyboard pages, the generation length, the check output ending PASS, and the QC score.
 18. **GATE: Go for the video?** When every asset is ready and every generation's prompt and media list has passed steps 14 to 16, stop.
     - Put every generation in one place for the user's review: each generation's card on its scene's page, the Scenes page listing them all, each card with its scene, its prompt and the exact assets fed into it. Say in the thread that they are up, the Scenes page named as a link.
-    - Quote the first take of every generation with `get_cost: true` ([[Flow v3.2 - 7 Takes]]), and give the quote per generation and the total.
+    - Quote the first take of every generation with `get_cost: true` ([[Flow v3.3 - 7 Takes]]), and give the quote per generation and the total.
     - Ask "Go for the video?" once, as one card that asks for a go with the quote on it; the app lists it on the Go page. One answer covers the first take of every generation; there is no separate yes per prompt.
-    - A change, before or after the go, makes the next version of that prompt: edit the sources, assemble, check, manual read and QC again, put it on its card, and show it to the user again before it is submitted.
-19. After the go, submit the first take of every generation, `count: 1` each, without asking again. Takes for different scenes are all submitted at the same time; takes for the same scene go one at a time: [[Flow v3.2 - 7 Takes]]. A second take, a redo or a pick-up keeps its own quote and its own go: [[Flow v3.2 - 8 Redos]].
+    - A change, before or after the go, makes the next version of that prompt: edit the sources, assemble, check, manual read and QC again, put it on its card, and show it to the user again before it is submitted. The one exception: a change after the go needed only to get a first take through (a refusal, a filter, Higgsfield's limit of references) is sent under the go and reported, as [[Flow v3.3 - 7 Takes]], step 6 says.
+19. After the go, submit the first take of every generation, `count: 1` each, without asking again. Takes for different scenes are all submitted at the same time; takes for the same scene go one at a time: [[Flow v3.3 - 7 Takes]]. A second take, a redo or a pick-up keeps its own quote and its own go: [[Flow v3.3 - 8 Redos]].
 
 ## Checks
 **The pre-submit check is a script, not a read-through.** `check.py` prints one numbered STOP line per failure, then `<n> STOP(S): do not submit`, and exits 1; `--explain` adds what each of those STOPs means below that line. With none, its last line reads PASS and it exits 0.
@@ -176,11 +176,11 @@ status: live
 
 It reports the prompt's length and says where it sits against the sizes of step 2 (inside the aim, over the aim, past the ceiling); it does not stop on it. The manual read checks the size (step 2).
 
-**After a refusal** ([[Flow v3.2 - 7 Takes]]). Nothing is banned beforehand. When a prompt is refused, read it for words that are not safe for work, or lean that way ("bare", "weeping"), and replace those. Then make the next version: steps 13 to 16. When the risky word is in a spoken line, replace it there too, send again, and tell the user what was changed. The script and the subtitles follow: they show the word that was spoken in the take that is in the film. This is the one case where a line's words change without a new go.
+**After a refusal** ([[Flow v3.3 - 7 Takes]]). Nothing is banned beforehand. When a prompt is refused, read it for words that are not safe for work, or lean that way ("bare", "weeping"), and replace those. Then make the next version: steps 13 to 16. When the risky word is in a spoken line, replace it there too, send again, and tell the user what was changed. The script and the subtitles follow: they show the word that was spoken in the take that is in the film. This is the one case where a line's words change without a new go.
 
 **The manual read**, for what the script cannot see. Do it before the QC and the gate:
 - the prompt is about 8,000 to 10,000 characters and never past about 15,000; no character with an element or a sheet is described beyond its tag and what differs in this scene;
-- open every storyboard page and every view in the media list and compare them with the text shot by shot: each shot's Size and Placement lines, the locks either side of each cut, the order of the action, FIRST FRAME against panel 1, the view behind each camera against the panel's background. Fix the text to the boards; a board that is the error goes back to [[Flow v3.2 - 5 Previz and storyboards]];
+- open every storyboard page and every view in the media list and compare them with the text shot by shot: each shot's Size and Placement lines, the locks either side of each cut, the order of the action, FIRST FRAME against panel 1, the view behind each camera against the panel's background. Fix the text to the boards; a board that is the error goes back to [[Flow v3.3 - 5 Previz and storyboards]];
 - the prompt agrees with the continuity sheet: who stands where, what is in frame and what must not be, costume sides, the sun;
 - hunt for repeats and competing details and cut them: each fact in its one home (step 12), no fact said twice in different words, no detail that fights another;
 - every character the boards show from behind is said to be from behind in every place step 4 names;
@@ -190,7 +190,7 @@ It reports the prompt's length and says where it sits against the sizes of step 
 - every move is in camera terms and in the previz json's order; props are placed after moves; rigid props are one piece; any crowd moves;
 - off-camera things only by their effect; no body part outside a close-up's frame;
 - FIRST FRAME AND SPATIAL BLOCKING matches panel 1 and the scene file's START STATE;
-- **the seam** ([[Flow v3.2 - 5 Previz and storyboards]], step 4): when the generation follows the one before in the same place with no time passing, FIRST FRAME and the first action lines put every character who is in both where the last lines of the prompt before left them: the same place, facing, posture and what each holds (step 12). The take is judged by eye ([[Flow v3.2 - 7 Takes]]). A broken seam is fixed ahead of most other faults; a previz that breaks it goes back to [[Flow v3.2 - 5 Previz and storyboards]];
+- **the seam** ([[Flow v3.3 - 5 Previz and storyboards]], step 4): when the generation follows the one before in the same place with no time passing, FIRST FRAME and the first action lines put every character who is in both where the last lines of the prompt before left them: the same place, facing, posture and what each holds (step 12). The take is judged by eye ([[Flow v3.3 - 7 Takes]]). A broken seam is fixed ahead of most other faults; a previz that breaks it goes back to [[Flow v3.3 - 5 Previz and storyboards]];
 - every close-up lock is written on both sides of its cut, and the panels either side show the same pose;
 - each shot's size, lens degrees (step 3) and view agree, and no face is shot at 84°; each wide view carries its EMPTY sentence and its Placement line;
 - a fight has two to four beats of one to two seconds, no martial-arts term and no prohibition in the body, and its FIGHT STYLE LOCK word for word, once;

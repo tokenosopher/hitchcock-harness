@@ -21,7 +21,20 @@ def long_fov(diag): return _part(diag, max(_wh()))
 def lens_mm(diag): return 12.0 / math.tan(math.radians(long_fov(diag) / 2))     # 24 mm sensor along the long side
 def lens_ff(diag): return 21.633 / math.tan(math.radians(diag / 2))             # full-frame (36 x 24) equivalent
 def size_word(diag):
+    """the lens's own word (its field of view), not the shot's size: the size is how much of the frame the subject fills
+    (shot_size), which the board's camera line uses when it is known"""
     return 'wide' if diag >= 75 else 'medium' if diag >= 55 else 'close-up' if diag >= 40 else 'extreme close-up'
+# The shot's size from how much of the frame the subject's height fills: fill = the subject's height /
+# the height the frame covers at the subject's distance. 6.5 frame heights is a face; 3.4 head and shoulders; 2.3 to the
+# chest; 1.45 to the waist or hips; 0.85 the whole figure; below that the place holds the figure.
+SIZES = (('extreme close-up', 6.5), ('close-up', 3.4), ('medium close-up', 2.3), ('medium', 1.45), ('full', 0.85), ('wide', 0.0))
+def shot_size(fill):
+    for w_, lo in SIZES:
+        if fill >= lo: return w_
+    return 'wide'
+def fill_of(height, depth, diag):
+    """how many frame heights a figure of `height` m makes at `depth` m in front of a lens of `diag` degrees"""
+    return height / max(1e-6, 2.0 * depth * math.tan(math.radians(vfov(diag) / 2)))
 def compass8(yaw):
     return ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'][int(((yaw % 360) + 22.5) // 45) % 8]
 def frame_on(pos, pt, diag, fx=0.0, fy=0.0):
@@ -34,13 +47,16 @@ def shot(id, t0, t1, diag, pos, pt, in_frame=(), name=None, fx=0.0, fy=0.0, focu
          jolts=(), exposure=None, board=None, seed=None):
     """Declare shot `id` ('1', '5A', ...) from t0 to t1 s: camera at pos framing world point pt at (fx, fy) with lens diag (deg).
     in_frame: what the frame shows, as the prompt names it (cast keys, props, set pieces: ['NIA', 'SWORD', 'DOOR']); it goes into
-    the generation's shots file for the pre-submit check. focus: the focus point (default pt); DOF f/2 at 47 deg and under, else
+    the generation's shots file for the pre-submit check. focus: a world point, or a figure's name ('NIA': the point between
+    its eyes, followed as it moves); by default the nearest face in frame turned toward the lens among the
+    shot's in_frame figures (else the nearest head in frame, else pt), followed as it moves. DOF f/2 at 47 deg and under, else
     f/2.8 (fstop overrides). handheld: True or an amplitude (seed varies the breathing); jolts: times of bumps.
     move = dict(pos=, pt=, fx=, fy=, focus=, diag=, t0=, t1=, ease='both'|'in'|'out'|'linear'): travels and re-aims between
     move t0 and t1 (default the shot's). exposure: this shot's EV (keyed at its cut). board: the storyboard camera line
     (default: written from the camera). Returns id."""
     SHOTS.append(dict(id=str(id), name=name or str(id), t0=float(t0), t1=float(t1), diag=float(diag), pos=Vector(pos), pt=Vector(pt), fx=fx, fy=fy,
-                      focus=Vector(focus if focus is not None else pt), handheld=float(handheld), move=move, fstop=fstop, jolts=list(jolts),
+                      focus=(Vector(focus) if focus is not None and not isinstance(focus, str) else Vector(pt)),
+                      focus_fig=(str(focus).upper() if isinstance(focus, str) else None), focus_auto=focus is None, handheld=float(handheld), move=move, fstop=fstop, jolts=list(jolts),
                       in_frame=[str(x).strip().upper().replace(' ', '_') for x in in_frame], exposure=exposure, board=board,
                       seed=seed if seed is not None else len(SHOTS) + 1, obj=None))
     return str(id)
@@ -63,6 +79,27 @@ def cam_state(s_, t):
         foc = L_(foc, Vector(m.get('focus', m.get('pt', foc)))); diag = L_(diag, m.get('diag', diag))
     yaw, pitch = frame_on(pos, pt, diag, fx, fy)
     return pos, yaw, pitch, (foc - pos).length, diag
+def project(s_, t, p):
+    """(x, y, depth) of world point p in shot s_'s frame at t, from the camera's numbers (x, y 0..1 from the top-left)"""
+    pos, yaw, pitch, fd, diag = cam_state(s_, t); y_, p_ = math.radians(yaw), math.radians(pitch)
+    f = Vector((math.cos(p_) * math.cos(y_), math.cos(p_) * math.sin(y_), math.sin(p_)))
+    r = Vector((math.sin(y_), -math.cos(y_), 0.0)); u = r.cross(f)
+    d = Vector(p) - pos; z = d.dot(f)
+    if z <= 1e-6: return (0.5, 0.5, z)
+    return (0.5 + 0.5 * d.dot(r) / (z * math.tan(math.radians(hfov(diag) / 2))), 0.5 - 0.5 * d.dot(u) / (z * math.tan(math.radians(vfov(diag) / 2))), z)
+def focus_subject(s_):
+    """the figure a shot focuses on by default: among its in_frame figures, the nearest whose face is in frame and turned
+    toward the lens (within 100 deg) at the shot's middle; else the nearest head in frame; None when no named face is in frame"""
+    from .figures import FIGS, fig_tag, eyes_world, head_world
+    t = (s_['t0'] + s_['t1']) / 2; pos = cam_state(s_, t)[0]; best = []
+    for n in s_['in_frame']:
+        if n not in FIGS or fig_tag(FIGS[n]['arm']) != n: continue
+        e = eyes_world(n, t); h = head_world(n, t); x, y, z = project(s_, t, e)
+        if z <= 0.05 or not (0.02 <= x <= 0.98 and 0.02 <= y <= 0.98): continue
+        face = (e - h).normalized(); to_cam = (pos - e).normalized()
+        ang = math.degrees(face.angle(to_cam)) if face.length > 0 else 180.0
+        best.append((0 if ang < 100 else 1, z, n))
+    return sorted(best)[0][2] if best else None
 def _cam_data(name, diag):
     cd = bpy.data.cameras.new(name); cd.sensor_fit = 'VERTICAL' if S.aspect[1] > S.aspect[0] else 'HORIZONTAL'
     if cd.sensor_fit == 'VERTICAL': cd.sensor_height = 24.0
@@ -74,6 +111,12 @@ def make_cameras():
         if s_['obj'] is not None: continue
         cd = _cam_data('cam-' + s_['id'], s_['diag']); cd.dof.use_dof = True; cd.dof.aperture_fstop = s_['fstop'] or (2.0 if s_['diag'] <= 47 else 2.8)
         c = bpy.data.objects.new('cam-' + s_['id'], cd); S.sc.collection.objects.link(c); s_['obj'] = c
+        subj = s_.get('focus_fig') or (focus_subject(s_) if s_.get('focus_auto') else None)
+        s_['subject'] = subj
+        if subj:
+            from .figures import focus_target, FIGS
+            if subj in FIGS: cd.dof.focus_object = focus_target(subj)
+            else: print('previz kit: WARN shot %s focus %s is not a figure here; focus on its aim point' % (s_['id'], subj)); s_['subject'] = None
         pos, yaw, pitch, fd, diag = cam_state(s_, s_['t0'])
         c.location = pos; c.rotation_euler = (math.radians(90 + pitch), 0.0, math.radians(yaw - 90)); cd.lens = lens_mm(diag); cd.dof.focus_distance = fd
         s_['yaw'], s_['pitch'], s_['lens'] = yaw, pitch, cd.lens
@@ -88,7 +131,8 @@ def make_cameras():
                         if 0 <= t - bt < 0.2: rx += 0.008 * a
                 c.location = pos; c.keyframe_insert('location', frame=f); c.rotation_euler = (rx, 0, rz); c.keyframe_insert('rotation_euler', frame=f)
                 if s_['move']:
-                    cd.lens = lens_mm(diag); cd.keyframe_insert('lens', frame=f); cd.dof.focus_distance = fd; cd.dof.keyframe_insert('focus_distance', frame=f)
+                    cd.lens = lens_mm(diag); cd.keyframe_insert('lens', frame=f)
+                    if cd.dof.focus_object is None: cd.dof.focus_distance = fd; cd.dof.keyframe_insert('focus_distance', frame=f)
     if S.sc.camera is None and SHOTS: S.sc.camera = SHOTS[0]['obj']
     return [s_['obj'].name for s_ in SHOTS]
 def cam(x):
@@ -135,6 +179,9 @@ def camera_line(s_):
         if abs(d2 - diag) > 2: mount.append('zooms %s' % ('out' if d2 > diag else 'in'))
     if s_['handheld']: mount.append('handheld')
     tilt = '' if abs(pitch) < 8 else ', tilted %s %d°' % ('up' if pitch > 0 else 'down', round(abs(pitch)))
+    if s_.get('size'):            # the size from the scene's numbers (facts), the lens separately
+        sz = '%s of %s' % (s_['size'], s_['size_of'].replace('_', ' ').title()) if s_.get('size_of') else s_['size']
+        return 'CAM FACING %s | %s, %g° lens | %.2f m%s | %s' % (compass8(yaw), sz, s_['diag'], pos.z, tilt, ', '.join(mount) or 'locked off')
     return 'CAM FACING %s | %g° %s | %.2f m%s | %s' % (compass8(yaw), s_['diag'], size_word(s_['diag']), pos.z, tilt, ', '.join(mount) or 'locked off')
 def shot_record(lab, i, t0, t1):
     """a cut's entry for the take json"""

@@ -1,5 +1,5 @@
 <!-- Read by: tools/prompts/assemble.py (## MEDIA, ## TAGS and the text sections below; a heading it does not know is dropped without a word), then tools/prompts/check.py on the assembled prompt and media list.
-     Described in: Flow v3.2 - 6 Scene prompts (steps 10-12: the spec, the reference list, the section order); OPTICS and STYLE with Flow v3.2 - 6d Anamorphic look; the VOICE line and the sheets-only sentence in Flow v3.2 - 3 Voices and video elements. -->
+     Described in: Flow v3.3 - 6 Scene prompts (steps 10-12: the spec, the reference list, the section order); OPTICS and STYLE with Flow v3.3 - 6d Anamorphic look; the VOICE line and the sheets-only sentence in Flow v3.3 - 3 Voices and video elements. -->
 # <G> · <generation name>: prompt spec
 
 <!-- The prompt comes out in this order: SCENE CONTEXT, ACTIVE REFERENCES (written from MEDIA and TAGS), LOCATION MAP, GEOGRAPHY, COMPASS (fixed backdrop), FIRST FRAME AND SPATIAL BLOCKING, FORMAT MODE, OPTICS, CAMERA, CAMERA STYLE, the SHOT blocks (from <G>-scene.md ## Shots), ACTING TASKS (scene file), FIGHT BEATS (scene file, fights only), PHYSICS, LIGHTING, AUDIO, STYLE, QUALITY, POSITIVE CONSTRAINTS, STORYBOARD (the closing line, written by assemble.py).
@@ -7,7 +7,7 @@
      One home per fact (step 12): what a character holds, its MEDIA line; start positions, FIRST FRAME; lens degrees, the shots' Lens lines; readable faces, QUALITY; face beats, the scene file's ACTING TASKS. -->
 
 ## MEDIA
-# @ One reference per line: KIND | TAG | file (film-relative) | description. KIND is VIDEO (a character's video element, with its voice), IMAGE (a sheet for what has no element, the extras' group picture cropped to this scene, a prop; Flow v3.2 - 6 Scene prompts, step 11), VIEW (the empty location view behind each camera, every wide included; cameras close together share one) or AUDIO (only a voice no element carries).
+# @ One reference per line: KIND | TAG | file (film-relative) | description. KIND is VIDEO (a character's video element, with its voice), IMAGE (a sheet for what has no element, the extras' group picture cropped to this scene, a prop; Flow v3.3 - 6 Scene prompts, step 11), VIEW (the empty location view behind each camera, every wide included; cameras close together share one) or AUDIO (only a voice no element carries).
 # @ A character with a video element gets ONLY the element, never its sheet beside it. The one exception: a faceless sheet variant for a costume or prop state the element does not show, as IMAGE | <NAME> SHEET | <variant file> | @<NAME> SHEET.
 # @ Lines starting with # are skipped. Order inside a kind = reference number. The storyboard pages are added by the script, after the images. Never a panel, plate or Blender frame on its own; never a start or end image; at most 30 images, at most 30 s of video.
 VIDEO | <NAME> | elements/<CID>/takes/take<N>/E-<CID>-take<N>-1080p.mp4 | @<NAME> <What differs in this generation: what they hold, in which hand; the state of their clothes.>
@@ -80,7 +80,7 @@ AUDIO LOCK (<NAME>): the voice in {VIDEO:<NAME>}, the same timbre, register, acc
 AUDIO LOCK (<VOICE TAG>): the voice in {AUDIO:<VOICE TAG>}, <the same timbre and register; the delivery>.
 
 ## STYLE
-<!-- @ Film stock, grain, blacks, the palette, the anamorphic marks (Flow v3.2 - 6d Anamorphic look). -->
+<!-- @ Film stock, grain, blacks, the palette, the anamorphic marks (Flow v3.3 - 6d Anamorphic look). -->
 Shot on 35mm film, <tungsten-balanced 500-speed>, fine grain; rich blacks with detail; <the palette>; anamorphic vertical oval bokeh on <the practical lights>.
 
 ## QUALITY

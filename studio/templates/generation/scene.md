@@ -1,5 +1,5 @@
 <!-- Read by: tools/prompts/assemble.py, which copies only ## Shots (each ### SHOT block, the *Builder* lines dropped), ## ACTING TASKS and ## FIGHT BEATS into the prompt; tools/prompts/check.py then checks that prompt against <G>-shots.json and the previz take.
-     Described in: Flow v3.2 - 5 Previz and storyboards (steps 1-4) and Flow v3.2 - 6 Scene prompts (steps 3-9); the methods in Flow v3.2 - 6a Prompt engine, 6b Acting and 6c Fight scene. -->
+     Described in: Flow v3.3 - 5 Previz and storyboards (steps 1-4) and Flow v3.3 - 6 Scene prompts (steps 3-9); the methods in Flow v3.3 - 6a Prompt engine, 6b Acting and 6c Fight scene. -->
 # <G> · <generation name>
 
 **Location:** <LID> <location>  
@@ -7,7 +7,7 @@
 **Shots:** <n>  
 **Characters:** <TAG>, <TAG> (<TAG> is present but out of every frame)  
 **Lines:** word for word from script v<N> (LOCKED).  
-**Fight:** <none: delete ## FIGHT BEATS | yes: ## FIGHT BEATS from Flow v3.2 - 6c Fight scene>
+**Fight:** <none: delete ## FIGHT BEATS | yes: ## FIGHT BEATS from Flow v3.3 - 6c Fight scene>
 
 ## The scene (prompt engine)
 

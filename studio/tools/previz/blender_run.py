@@ -10,7 +10,7 @@ for that run).
 
 First come, first served: each waiting run takes a numbered ticket (<studio>/scratch.nosync/previz-blender/line-queue/), and only the lowest waiting
 number may take a freed slot, so a new run never jumps one that has waited longer.
-A fast lane for runs that render nothing: --project, --shots-file, --build and tools/previz/build_location.py only build
+A fast lane for runs that render nothing: --project, --shots-file, --build, --facts and tools/previz/build_location.py only build
 the scene and print or write text. They never take a render slot: they have their own FAST_SLOTS (default 3, slot files
 line-fast-N, their own queue), so a camera question is not stuck behind takes.
 Every run ends with one line: `blender_run: <lane> slot N, waited W s, ran R s, exit E` (timing.py reads it).
@@ -27,7 +27,7 @@ A render also prints `blender_run: memory: <free> GB free at the start, waited M
 run adds one line to <studio>/scratch.nosync/previz-blender/blender-runs.log, so the limit can be set from what was measured.
 Every file of the line lives in the studio folder (<studio> is the folder that holds tools/), never in /tmp, so every agent
 of this studio shares one line; BLENDER_RUN_PREFIX and BLENDER_RUN_LOG choose other places."""
-import fcntl, json, os, resource, subprocess, sys, time
+import ctypes, fcntl, json, os, resource, struct, subprocess, sys, threading, time
 
 BLENDER = os.environ.get('BLENDER_BIN', '/Applications/Blender.app/Contents/MacOS/Blender')
 SLOTS = int(os.environ.get('SLOTS', 8))
@@ -44,7 +44,7 @@ MEM_NEED_GB = float(os.environ.get('MEM_NEED_GB', 3))
 MEM_RAMP_S = float(os.environ.get('MEM_RAMP_S', 45))
 MEM_MIN_PARALLEL = int(os.environ.get('MEM_MIN_PARALLEL', 4))
 RUN_LOG = os.environ.get('BLENDER_RUN_LOG', os.path.join(LINE_DIR, 'blender-runs.log'))
-FAST_FLAGS = ('--project', '--shots-file', '--build')
+FAST_FLAGS = ('--project', '--shots-file', '--build', '--facts')
 FAST_SCRIPTS = ('build_location.py',)
 LANES = {'render': dict(slot=PREFIX + '-slot-%d', queue=PREFIX + '-queue'),
          'fast': dict(slot=PREFIX + '-fast-%d', queue=PREFIX + '-queue-fast')}
@@ -118,6 +118,26 @@ def memory_now():
         return free, int(lv) if lv.isdigit() else 1
     except Exception:
         return None, 1
+
+
+def footprint_gb(pid):
+    """the memory a process really holds, in GB: macOS's physical footprint, which counts what it has compressed or
+    swapped as well as what is in RAM (the figure Activity Monitor shows). The resident size alone reads low on a busy
+    Mac: a grey previz once held 1.9 GB by this figure and 0.7 GB resident. None when it cannot be read."""
+    try:
+        buf = ctypes.create_string_buffer(1024)
+        if ctypes.CDLL('/usr/lib/libproc.dylib').proc_pid_rusage(int(pid), 0, buf) != 0: return None
+        return struct.unpack_from('Q', buf.raw, 72)[0] / 2 ** 30
+    except Exception:
+        return None
+
+
+def watch_peak(pid, out, stop):
+    """keeps the highest footprint seen in out[0], read every 2 s while the run lasts"""
+    while not stop.is_set():
+        f = footprint_gb(pid)
+        if f is not None and f > out[0]: out[0] = f
+        stop.wait(2)
 
 
 def need_gb():
@@ -198,10 +218,11 @@ def main():
     lane = lane_of(script, rest)
     fh, n, waited, mem_wait, free = acquire(lane)
     print(f'slot {n}: {os.path.basename(script)} {" ".join(rest)}' + (' (fast lane)' if lane == 'fast' else ''), flush=True)
-    t1 = time.time(); rc = None
+    t1 = time.time(); rc = None; seen = [0.0]; done = threading.Event()
     try:
         p = subprocess.Popen([BLENDER, '-b', '--disable-autoexec', '-P', script] + rest, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                              env=dict(os.environ, PREVIZ_SLOT='%s%d' % ('fast-' if lane == 'fast' else '', n)))   # the kit (kit/core.py) refuses a headless run without it
+        threading.Thread(target=watch_peak, args=(p.pid, seen, done), daemon=True).start()
         for line in p.stdout:
             if not line.strip() or any(k in line for k in NOISE): continue
             print(line.rstrip(), flush=True)
@@ -211,8 +232,10 @@ def main():
         fcntl.flock(fh, fcntl.LOCK_UN); fh.close()
         try: os.remove(os.path.join(RUNNING, str(os.getpid())))
         except OSError: pass
+        done.set()
         ran = time.time() - t1
-        peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 2 ** 30     # bytes on macOS: the most memory Blender held in RAM
+        # the highest footprint seen while it ran; for a run too short to be read, the most it held in RAM (bytes on macOS)
+        peak = seen[0] or resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 2 ** 30
         if lane == 'render':
             print('blender_run: memory: %s GB free at the start, waited %.0f s for memory, peak %.1f GB' % ('%.1f' % free if free is not None else '?', mem_wait, peak), flush=True)
         try:

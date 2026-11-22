@@ -1,7 +1,7 @@
 # tools/release
 
 The release scripts: the caption script, the SRT laid on the cut's subtitle track, and the thumbnail options. The rules
-are in `flow/Flow v3.2 - 12 Release.md`; the app burns the subtitles into the master and renders the finals, and every
+are in `flow/Flow v3.3 - 12 Release.md`; the app burns the subtitles into the master and renders the finals, and every
 text for posting is written by Alma and posted by the user by hand.
 
 Run from the film folder, as note 12 does: `STUDIO` the studio folder, `PY="$STUDIO/.venv/bin/python"`,

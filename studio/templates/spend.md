@@ -1,5 +1,5 @@
-<!-- Read by: no script; the film record and the cost line on the Release page (with the Higgsfield account's transactions, Flow v3.2 - 12 Release, step 15) are added up from it by hand.
-     Described in: Flow v3.2 - 0 Standing rules (log every paid job the moment it is submitted, a blocked job at 0) and Flow v3.2 - 13 Services and costs (units, rates, how to quote). -->
+<!-- Read by: no script; the film record and the cost line on the Release page (with the Higgsfield account's transactions, Flow v3.3 - 12 Release, step 15) are added up from it by hand.
+     Described in: Flow v3.3 - 0 Standing rules (log every paid job the moment it is submitted, a blocked job at 0) and Flow v3.3 - 13 Services and costs (units, rates, how to quote). -->
 # Spend: <Film>
 
 | date | stage | service | job id | units | rate | cost | version or take | purpose | the user's go |

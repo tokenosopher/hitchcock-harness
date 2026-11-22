@@ -1,7 +1,7 @@
 {
  "_about": [
   "Written by the generation's previz scene script (previz/scenes/<G>_<name>.py, the kit's run() with no mode flag) as previz/<G>/<G>-previz-take-<N>.json; read by tools/prompts/assemble.py (duration), tools/prompts/check.py (shot_plan, or shots: label, t0, t1; lines: who, text, word for word; duration) and tools/previz/assemble_film.py. Change the scene script and render the next take; never edit a take by hand.",
-  "Described in: Flow v3.2 - 5 Previz and storyboards (steps 7-8 and 12: every move keyed and passed to run(moves=...)) and Flow v3.2 - 6 Scene prompts (step 2: the generation length comes from here, rounded up)."
+  "Described in: Flow v3.3 - 5 Previz and storyboards (steps 7-8 and 12: every move keyed and passed to run(moves=...)) and Flow v3.3 - 6 Scene prompts (step 2: the generation length comes from here, rounded up)."
  ],
  "block": "<G>",
  "take": 1,

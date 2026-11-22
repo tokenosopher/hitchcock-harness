@@ -1,6 +1,6 @@
 ---
 tags: [ai-filmmaking, film-flow, film-flow-v3, verbatim-skill]
-version: 3.2
+version: 3.3
 date: 2026-11-05
 status: live
 source: the higgsfield-acting-skill skill
@@ -90,7 +90,7 @@ Moment to moment:
 
 Rules:
 - Verbs directed at the partner; no adjectives of emotion as instruction ("sadly," "nervously").
-- Facial beats: the acting task gives the inner direction; physical beats then name the visible change of the face on each line, for speakers and listeners. Never a bare emotion word, never stillness words. Rule in full: [[Flow v3.2 - 6 Scene prompts]].
+- Facial beats: the acting task gives the inner direction; physical beats then name the visible change of the face on each line, for speakers and listeners. Never a bare emotion word, never stillness words. Rule in full: [[Flow v3.3 - 6 Scene prompts]].
 - Nobody plays the emotion; everyone plays the direction. The audience receives the feeling through the pressure.
 - One safety line against the frozen stare is allowed and recommended (AI-model necessity).
 - Every character in frame gets living eyes this way — including silent listeners: a listener's task is also real (e.g., "decide if he's serious," "wait for the punchline," "protect the mood").

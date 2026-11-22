@@ -1,4 +1,4 @@
-"""Render a harness cut version (cut/v<n>.json) at 480p: full quality, with or without the music (Flow v3.2 - 11 Sound and
+"""Render a harness cut version (cut/v<n>.json) at 480p: full quality, with or without the music (Flow v3.3 - 11 Sound and
 music, step 29: the dialogue the music is mixed against).
 
   .venv/bin/python tools/finish/cut_render.py "$FILM" cut/v<n>.json OUT.mp4 [--no-music] [--tracks IDS] [--size 480x854] [--crf 12]

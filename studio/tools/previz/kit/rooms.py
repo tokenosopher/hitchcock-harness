@@ -74,6 +74,7 @@ class Room(dict):
         self.bounds = ((min(xs) - self.wall_t, min(ys) - self.wall_t, -0.1), (max(xs) + self.wall_t, max(ys) + self.wall_t, self.H + self.ceil_t))
         if 'exposure' in plan: set_exposure(plan['exposure'])
         if 'world' in plan: world(tuple(plan['world']))
+        S.room = self                     # haze() asks whether the place is open (no ceiling: the haze is a box, not a world volume)
         if plan.get('haze'): haze(plan['haze'])
         self._shell(); self._openings(); self._levels(); self._furniture()
         self.lights = build_lights(plan.get('lights'), self)

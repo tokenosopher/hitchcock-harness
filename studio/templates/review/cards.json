@@ -1,7 +1,7 @@
 {
  "_about": [
   "Written by tools/film/new_film.py as review/cards.json (title, subtitle, delivery_folder, sections: []); read by the Hitchcock Harness, which shows every card on the page it belongs to. The card shapes (a card that asks, its answer, the page it is for) are in the app's show recipe, recipes/show.md in the app's folder, and nowhere else. tools/film/land.py adds a landed clip's card; tools/deliver.py reads delivery_folder (the folder's name inside assets/final-cuts/).",
-  "Described in: Flow v3.2 - 1 Setup and story (steps 6-8: the pages, cards newest first, a prompt in a pre drawer, never a card deleted) and Flow v3.2 - 7 Takes (step 10: a landed take's card goes first)."
+  "Described in: Flow v3.3 - 1 Setup and story (steps 6-8: the pages, cards newest first, a prompt in a pre drawer, never a card deleted) and Flow v3.3 - 7 Takes (step 10: a landed take's card goes first)."
  ],
  "title": "<Film>",
  "subtitle": "<one line> · <date>",

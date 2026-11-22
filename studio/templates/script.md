@@ -1,5 +1,5 @@
 <!-- Read by: no script; every generations/<G>/<G>-scene.md and social/script.json take their lines from it, word for word.
-     Described in: Flow v3.2 - 1 Setup and story (step 4 for the IDs, step 19 for the story, steps 20-29 for the script, the timing and the lock); the audit with Flow v3.2 - 6a Prompt engine. -->
+     Described in: Flow v3.3 - 1 Setup and story (step 4 for the IDs, step 19 for the story, steps 20-29 for the script, the timing and the lock); the audit with Flow v3.3 - 6a Prompt engine. -->
 # <Film>: script
 
 ## IDs (an ID never changes and is never reused; a cut shot leaves a gap)

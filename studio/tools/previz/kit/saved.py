@@ -16,10 +16,19 @@ class NotSaveable(Exception):
     pass
 
 
+DROPPED = []           # registry entries whose Blender data a script deleted (a shared script removing room objects)
+
+
 def enc(v):
-    """a registry value as JSON: Blender data by name, vectors and matrices as lists, tuples and non-string keys kept"""
+    """a registry value as JSON: Blender data by name, vectors and matrices as lists, tuples and non-string keys kept.
+    Blender data the script deleted after it was registered (a room object a shared script removed) is saved as None and
+    noted in DROPPED: the saved build no longer has it, and nothing can ask for it"""
     if v is None or isinstance(v, (bool, int, float, str)): return v
     if isinstance(v, bpy.types.ID):
+        try:
+            v.name
+        except ReferenceError:
+            DROPPED.append(v.__class__.__name__); return None
         c = COLL.get(v.id_type)
         if c is None: raise NotSaveable('a %s datablock (%s)' % (v.id_type, v.name))
         return {'__id__': [c, v.name]}

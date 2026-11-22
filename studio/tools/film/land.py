@@ -1,10 +1,12 @@
-"""Land a generated clip (Flow v3.2 - 7 Takes, step 10): put it in its place, write its job id and put its card at the very
-top of review/cards.json, the cards file the Hitchcock Harness reads. Nothing else comes before this.
+"""Land a generated clip (Flow v3.3 - 7 Takes, steps 10 and 19): put it in its place, write its job id, put its card at the
+very top of review/cards.json, the cards file the Hitchcock Harness reads, and, for a scene's take, put it in its boards'
+place on the film's timeline in the same step. Nothing else comes before this; the checks come after.
 
     .venv/bin/python tools/film/land.py <film folder> --kind take|element|pickup|pass --id <G or CID or FIX-name> --take N
         (--file <downloaded mp4> | --url-file <file holding the result URL on its first line>)
         --job <job id> --title "<card title>" --section "<section heading>"
         [--sub "<card sub line>"] [--credits N] [--section-sub "<section text>"] [--of take|element|pickup] [--no-check]
+        [--no-timeline] [--drop-wait SECONDS]
 
 Where each kind lands (one folder per take; every file name unique in the film; the job id beside the clip under the same
 name):
@@ -19,8 +21,20 @@ sits on a command line or in the output; the file is deleted after a good downlo
 A clip that is already in place with the same bytes is accepted (a re-run); a different file there is refused, as is a
 job-id file holding another job. The card goes first in its section and the section first in the file; no card is ever
 removed, and a card for the same file is not added twice. The clip has landed when it plays in the Hitchcock Harness.
---no-check is accepted and does nothing (kept so older commands still run)."""
-import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile
+--no-check is accepted and does nothing (kept so older commands still run).
+
+The timeline (--kind take only; a pick-up, an element clip and a 1080p pass never change the cut): the scene's boards,
+planned shots and planned lines leave the cut and the whole take goes in their place, as one picture clip and its sound,
+with what follows moved by the difference in length, exactly as the app's "A take in its boards' place" does. land.py
+writes it as an Alma drop (the app's edit recipe): it reads cut/working.json, keeps its rev, and writes
+cut/alma/<YYYYMMDD-HHMMSS>.json = {basedOnRev, note, tracks, markers} (a temp name, then a rename). The harness takes it in
+as one step the user can undo and saves it as the next version. land.py waits up to --drop-wait seconds (default 15) for
+the answer (cut/alma/<same>.answer.json): when the cut moved meanwhile it reads it again and writes a new drop (three
+tries); when the harness is not running the drop waits there and is taken in when it starts. Nothing is dropped when the
+scene has its take in the film already (a later take waits on the Takes view for the keeper pick or the user's word), when
+the scene has no boards or planned shots on the cut, or when the film has no cut yet. --no-timeline skips it (a test take).
+Exit 2: the take landed but the harness refused the drop (its reason is printed); run the app's call instead or ask."""
+import argparse, copy, datetime, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, time
 
 CHECKING = 'Checks running; this text gets the findings.'
 
@@ -84,6 +98,156 @@ def place(film, kind, gid, take, of):
     return kind_of, gid, folder, clip, jobid
 
 
+# ---- the timeline: the take in its boards' place (a port of the app's takeForBoards, components/edit/planned.ts)
+
+SCENE = re.compile(r'(?:^|[^A-Za-z0-9])(S\d+[A-Z]?)(?![A-Za-z0-9])')     # the app's scene of a take folder (server/edit/shots.ts)
+
+
+def r6(x):
+    return math.floor(x * 1e6 + 0.5) / 1e6
+
+
+def _len(c):
+    sp = c.get('speed')
+    return (c['out'] - c['in']) / (sp if sp and sp > 0 else 1)
+
+
+def _mains(tracks):
+    v = next((t for t in tracks if t.get('id') == 'V1'), None) or next((t for t in tracks if t.get('kind') == 'video'), None)
+    a = next((t for t in tracks if t.get('id') == 'A1'), None) or next((t for t in tracks if t.get('kind') == 'audio'), None)
+    return v, a
+
+
+def take_for_boards(tl0, scene, take):
+    """(tracks, markers, words) with the scene's planned clips replaced by the take, or a string saying why not."""
+    tl = copy.deepcopy(tl0)
+    v, a = _mains(tl['tracks'])
+    if not v or not a:
+        return 'The cut has no picture or dialogue track.'
+    if any(not c.get('plan') and (c.get('takeRef') or {}).get('scene') == scene for c in v['clips']):
+        return f'{scene} has its take in the film already.'
+    mine = [c for c in v['clips'] + a['clips'] if c.get('plan') and c.get('scene') == scene]
+    if not mine:
+        return f'{scene} has no boards or planned shots on the timeline.'
+    frm, to = min(c['at'] for c in mine), max(c['at'] + _len(c) for c in mine)
+    gone = {id(c) for c in mine}
+    v['clips'] = [c for c in v['clips'] if id(c) not in gone]
+    a['clips'] = [c for c in a['clips'] if id(c) not in gone]
+    fps = tl.get('fps') or 24
+    secs = r6(math.floor(take['seconds'] * fps + 0.5) / fps)
+    used = {c['id'] for t in tl['tracks'] for c in t['clips']}
+    base = cid = f'{scene.lower()}-take'
+    k = 2
+    while cid in used or cid + 'a' in used:
+        cid, k = f'{base}-{k}', k + 1
+    label = f"{scene} · {take['name']}"
+    pic = {'id': cid, 'src': take['src'], 'in': 0, 'out': secs, 'at': frm, 'label': label,
+           'takeRef': {'scene': scene, 'take': take['name']}}
+    d = secs - (to - frm)
+    if abs(d) >= 1e-6:
+        for t in tl['tracks']:
+            for c in t['clips']:
+                if c['at'] >= to - 1e-6:
+                    c['at'] = r6(max(0, c['at'] + d))
+        for m in tl.get('markers') or []:
+            if m['at'] >= to - 1e-6:
+                m['at'] = r6(max(0, m['at'] + d))
+    v['clips'] = sorted(v['clips'] + [pic], key=lambda c: c['at'])
+    if take.get('sound', True):
+        a['clips'] = sorted(a['clips'] + [dict(pic, id=cid + 'a')], key=lambda c: c['at'])
+    kind = 'boards' if any(c.get('plan') == 'board' for c in mine) else 'planned shots'
+    return tl['tracks'], tl.get('markers') or [], f'{scene} {take["name"]} took the place of its {kind} ({secs:.1f} s)', frm, fps
+
+
+def smpte(sec, fps):
+    f = int(math.floor(sec * fps + 0.5))
+    return f'{f // (3600 * fps):02d}:{f // (60 * fps) % 60:02d}:{f // fps % 60:02d}:{f % fps:02d}'
+
+
+def media_info(p):
+    """(seconds, has sound) of a clip, by ffprobe: the format's duration, as the app's takeInfo reads it."""
+    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', p],
+                       capture_output=True, text=True)
+    d = json.loads(r.stdout or '{}')
+    return float(d['format']['duration']), any(s.get('codec_type') == 'audio' for s in d.get('streams', []))
+
+
+def src_prefix(film):
+    """The form the timeline's clips use for a file of this film: assets/films/<slug>/..."""
+    for p in (film, os.path.realpath(film)):
+        m = re.search(r'(?:^|/)(assets/films/[^/]+)/?$', p)
+        if m:
+            return m.group(1)
+    return 'assets/films/' + os.path.basename(film.rstrip('/'))
+
+
+def write_drop(alma, body):
+    """cut/alma/<YYYYMMDD-HHMMSS>.json (-2, -3 … when the second is taken), written to a temp name and linked in."""
+    os.makedirs(alma, exist_ok=True)
+    stamp = datetime.datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    fd, tmp = tempfile.mkstemp(suffix='.json.tmp', dir=alma)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        json.dump(body, f, indent=1, ensure_ascii=False)
+        f.write('\n')
+    for k in range(1, 100):
+        name = os.path.join(alma, stamp + ('' if k == 1 else f'-{k}') + '.json')
+        if os.path.exists(name) or os.path.exists(name[:-5] + '.answer.json'):
+            continue
+        try:
+            os.link(tmp, name)           # never over another drop
+        except FileExistsError:
+            continue
+        os.remove(tmp)
+        return name
+    os.remove(tmp)
+    raise SystemExit('no free drop name in cut/alma/')
+
+
+def to_timeline(film, gid, take_n, dest, wait):
+    """Puts a scene's landed take in its boards' place by an Alma drop. Returns (exit code, message)."""
+    m = SCENE.search(gid)
+    if not m:
+        return 0, f'timeline: {gid} is not a scene of the cut; nothing put on the timeline'
+    scene = m.group(1)
+    wp = os.path.join(film, 'cut', 'working.json')
+    if not os.path.exists(wp):
+        return 0, 'timeline: this film has no cut yet (cut/working.json); nothing put on the timeline'
+    secs, sound = media_info(dest)
+    lead = '' if gid == scene else gid.replace('-', ' ').replace('_', ' ').strip()
+    name = (lead + ' · ' if lead else '') + f'take {take_n}'
+    rel = os.path.relpath(os.path.realpath(dest), os.path.realpath(film))
+    take = {'src': src_prefix(film) + '/' + rel, 'name': name, 'seconds': secs, 'sound': sound}
+    alma = os.path.join(film, 'cut', 'alma')
+    for attempt in range(3):
+        w = json.load(open(wp, encoding='utf-8'))
+        r = take_for_boards(w, scene, take)
+        if isinstance(r, str):
+            more = ' A later take waits on the Takes view until the keeper pick or the user\'s word puts it in.' if 'already' in r else ''
+            return 0, f'timeline: {r} Nothing dropped.{more}'
+        tracks, markers, words, at, fps = r
+        note = f'{words} at {smpte(at, fps)}, as it landed, before its checks'
+        drop = write_drop(alma, {'basedOnRev': w['rev'], 'note': note, 'tracks': tracks, 'markers': markers})
+        shown = os.path.relpath(drop, film)
+        ans_p = drop[:-5] + '.answer.json'
+        t_end = time.time() + wait
+        while time.time() < t_end and not os.path.exists(ans_p):
+            time.sleep(0.5)
+        if not os.path.exists(ans_p):
+            return 0, (f'timeline: {note}; the drop {shown} waits for the harness (no answer in {wait:g} s): '
+                       f'it is taken in when the harness runs; read {os.path.basename(ans_p)} beside it')
+        time.sleep(0.1)
+        ans = json.load(open(ans_p, encoding='utf-8'))
+        if ans.get('taken'):
+            ver = f", saved as {ans['version']}" if ans.get('version') else ''
+            return 0, f'timeline: {note} (rev {ans.get("rev")}{ver})'
+        if 'since' in ans and attempt < 2:
+            print(f'timeline: the cut moved while the drop was written ({shown}); reading it again')
+            continue
+        probs = ''.join(f'\n  {x}' for x in ans.get('problems') or [])
+        return 2, f'timeline: NOT taken ({shown}): {ans.get("why")}{probs}'
+    return 2, 'timeline: NOT taken: the cut kept moving; put the take in with the app\'s call ("A take in its boards\' place")'
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split('\n\n', 1)[1])
@@ -103,6 +267,8 @@ def main():
     ap.add_argument('--credits', help='credits for the sub line, e.g. 27')
     ap.add_argument('--of', choices=['take', 'element', 'pickup'], help='for --kind pass: whose take it is')
     ap.add_argument('--no-check', action='store_true', help='accepted for the commands in the stage notes; does nothing')
+    ap.add_argument('--no-timeline', action='store_true', help='--kind take: do not put the take on the timeline (a test take)')
+    ap.add_argument('--drop-wait', type=float, default=15, help='seconds to wait for the harness to answer the drop (default 15)')
     A = ap.parse_args()
 
     film = os.path.abspath(os.path.expanduser(A.film))
@@ -202,6 +368,13 @@ def main():
 
     print(f'landed {rel} ({secs:.2f} s, {size}); job {job} in {os.path.relpath(jobid_p, film)}')
     print(f'card first in "{A.section}"' + (' (new section)' if made_section else '') + ', section first in review/cards.json')
+
+    # the take in its boards' place on the timeline, in the same step, before any check (Flow v3.3 - 7 Takes, step 19)
+    if A.kind == 'take' and not A.no_timeline:
+        code, msg = to_timeline(film, gid, A.take, dest, A.drop_wait)
+        print(msg)
+        if code:
+            sys.exit(code)
 
 
 if __name__ == '__main__':

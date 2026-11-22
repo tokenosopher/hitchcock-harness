@@ -1,4 +1,4 @@
-"""Check a landed take before showing it to anyone (Flow v3.2 - 7 Takes, step 13 and Checks): the transcript against the generation's
+"""Check a landed take before showing it to anyone (Flow v3.3 - 7 Takes, step 13 and Checks): the transcript against the generation's
 lines, the cuts against the planned shots, the tail after the last word, and a contact sheet by frame index.
     .venv/bin/python tools/takes/verify_clip.py "$FILM/generations/S4/takes/take2" --film "$FILM" [--no-stt] [--out DIR]
     options: [--gen G] [--lines FILE] [--shots FILE] [--panels DIR] [--threshold 0.18]
@@ -15,7 +15,7 @@ path is taken from --film, else from the working directory. The film is --film, 
   there. --no-stt skips the words.
 - cuts: ffmpeg scene score > 0.18 (0.30 misses a real cut between two shots of one room) against the planned cuts, the
   shots' t1 in <G>-shots.json (the previz timings; prompts carry none), in seconds
-- the tail: seconds after the last word (0.45 s wanted, Flow v3.2 - 9 Edit, step 2) and the last second's mean loudness
+- the tail: seconds after the last word (0.45 s wanted, Flow v3.3 - 9 Edit, step 2) and the last second's mean loudness
 - a contact sheet: the first storyboard panel of each shot on top (panels.json of the storyboard named in the generation's
   newest *media*.json, or --panels DIR holding panels.json), the first frame and the middle frame of each detected shot
   below, taken by frame index (decoding from the start), never by -ss seeking

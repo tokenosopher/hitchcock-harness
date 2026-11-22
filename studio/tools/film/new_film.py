@@ -1,6 +1,6 @@
 """Start a new film: the folder tree, brief.md, spend.md, regeneration-log.md, the cards file the Hitchcock Harness reads
 (review/cards.json), the Higgsfield and element records, the upload registry; and the film's line in the studio's
-films.txt. Flow v3.2 - 1 Setup and story, done in one command. Never overwrites a file. Calls no service.
+films.txt. Flow v3.3 - 1 Setup and story, done in one command. Never overwrites a file. Calls no service.
 
     .venv/bin/python tools/film/new_film.py assets/films/<film> --title "<Public Title>" --code <ABC> [--ratio 9:16|16:9]
                                             [--budget-credits N] [--date YYYY-MM-DD]
@@ -15,7 +15,7 @@ TOOLS = os.path.dirname(HERE)
 STUDIO = os.path.dirname(TOOLS)
 DEFAULT_BUDGET = 2000
 
-# The tree of Flow v3.2 - 1 Setup and story, step 3, with generations/ in place of blocks/ (script.md, refs/README.md,
+# The tree of Flow v3.3 - 1 Setup and story, step 3, with generations/ in place of blocks/ (script.md, refs/README.md,
 # refs/characters/SOURCES.md and video/ come with the steps that fill them).
 TREE = [
     'story',           # story/v1.md, v2.md...: the short story, one file per version

@@ -1,7 +1,7 @@
 {
  "_about": [
   "Read by: tools/previz/storyboard.py <film>/previz/<G>/storyboard/v<N> (header; layout_note on page 1 when not empty; shots[].shot and .camera; captions[].n and .caption, one per panel), with panels.json from the scene script's --panels run; it writes page-N.png, three panels a page, and adds the fixed footer itself.",
-  "Described in: Flow v3.2 - 5 Previz and storyboards (steps 16-20: panels numbered by shot, never by second; no clip time on a panel; no arrows or labels)."
+  "Described in: Flow v3.3 - 5 Previz and storyboards (steps 16-20: panels numbered by shot, never by second; no clip time on a panel; no arrows or labels)."
  ],
  "header": "PROJECT: <FILM TITLE>  |  SCENE <n> · <GENERATION NAME>  |  <9:16>, <n> s",
  "layout_note": "<LAYOUT, as seen from the camera: where everything is and which way it faces; the grey figures are placeholders whose look is not used. Use an empty string for none.>",
