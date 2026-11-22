@@ -5,14 +5,14 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { harnessConfig, pythonBin } from '../config';
-import { helperEnv } from '../env';
+import { childEnv } from '../childEnv';
 import { getRegistry, invalidateRegistry, type FilmRefX } from '../films/registry';
 import type { AlmaModel } from '../types';
 import { isAlmaModel, setAlmaModel } from '../claude/model';
 import { CODE_RE, RATIOS, RESERVED_SLUGS, setupLine, slugOf, SETUP_DEFAULTS, type NewFilmSetup, type Ratio } from '@/lib/newFilm';
+import { defuse } from '@/lib/defuse';
 import { DRIVE_MISSING, driveConnected, showPathFor } from './film';
 import { Writer } from './writes';
-import { asTyped } from '../claude/typed';
 
 export class NewFilmError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -113,7 +113,7 @@ export function parseNewFilm(body: Record<string, unknown>): NewFilmInput {
 
 function run(cmd: string, args: string[], cwd: string): Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, env: helperEnv({ PYTHONDONTWRITEBYTECODE: '1' }), maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env: childEnv({ PYTHONDONTWRITEBYTECODE: '1' }), maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
       const e = err as (Error & { code?: unknown; signal?: NodeJS.Signals | null }) | null;
       resolve({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, signal: e?.signal ?? null, stdout: String(stdout), stderr: String(stderr) });
     });
@@ -187,11 +187,13 @@ export async function startFilm(input: NewFilmInput, opts: { repo?: string } = {
       elements: input.elements ?? SETUP_DEFAULTS.elements,
       upscale: input.upscale ?? SETUP_DEFAULTS.upscale,
     };
+    // everything after the harness's own tag is defused: the title, the idea and the setup are the user's words
     const message =
       `<harness-action kind="new-film" slug="${slug}"/> ` +
-      `A new film: ${asTyped(input.title)}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film); the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
+      defuse(
+      `A new film: ${input.title}. The folder was made with new_film.py (output below). Start stage 1 with the studio-film skill (the one in this studio's .claude/skills; never a skill named plain film); the story comes first, as story/v1.md, for the user to read and edit before any script. ` +
       `Setup defaults are taken at face value: ${setupLine(setup)}. The idea, in the user's words:\n\n` +
-      `${asTyped(input.idea || '(the user gave no idea text yet)')}\n\n${output}`;
+      `${input.idea || '(the user gave no idea text yet)'}\n\n${output}`);
     if (input.model) await setAlmaModel(slug, input.model);
     const { sendToAlma } = await import('../claude/thread');
     await sendToAlma(slug, message);

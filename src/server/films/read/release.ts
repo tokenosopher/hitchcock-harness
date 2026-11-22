@@ -10,6 +10,7 @@ import { harnessConfig } from '../../config';
 import type { FilmStateX } from '../state';
 import { abs, list, listSlow, natCmp, readText, redact, Warnings, type FilmCtx } from '../util';
 import { fileFact, reviewSections, sentences } from './record';
+import { childEnv } from '../../childEnv';
 
 /** The rules folder the checklist cites (read-only; the rules live there): HARNESS_FLOW_DIR, else <studio>/flow. */
 export const FLOW_DIR = process.env.HARNESS_FLOW_DIR || path.join(/*turbopackIgnore: true*/ harnessConfig().filmRepo, 'flow');
@@ -63,7 +64,7 @@ export interface ReleaseInfo {
 
 function run(cmd: string, args: string[], opts: { cwd?: string; ms?: number } = {}): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd: opts.cwd, signal: AbortSignal.timeout(opts.ms ?? 5000), maxBuffer: 4 << 20 }, (err, stdout) => resolve(err ? undefined : String(stdout)));
+    execFile(cmd, args, { cwd: opts.cwd, env: childEnv(), signal: AbortSignal.timeout(opts.ms ?? 5000), maxBuffer: 4 << 20 }, (err, stdout) => resolve(err ? undefined : String(stdout)));
   });
 }
 

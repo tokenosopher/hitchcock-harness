@@ -1,5 +1,6 @@
 // What the user is looking at, sent to Alma ahead of their words: the <harness-context> block.
 import type { Chip, HarnessContext } from './types';
+import { defuse } from '../lib/defuse';
 
 const OPEN = '<harness-context';
 export const isUpload = (c: Chip): boolean => c.id.startsWith('upload:');
@@ -21,7 +22,7 @@ export function buildContextBlock(ctx: HarnessContext): string {
   open += '>';
   // a chip whose id starts "upload:" is a file the user pasted or attached; its ref is the file's full path
   // a ref of several lines (the takes marked for Seedance) is a list in itself: it follows the label on lines of its own
-  const line = (c: Chip) => `- ${c.label.replace(/\n/g, ' ')}${c.ref ? (c.ref.includes('\n') ? `:\n${c.ref}` : ` (${c.ref})`) : ''}`;
+  const line = (c: Chip) => defuse(`- ${c.label.replace(/\n/g, ' ')}${c.ref ? (c.ref.includes('\n') ? `:\n${c.ref}` : ` (${c.ref})`) : ''}`);
   const lines = ctx.selected.filter((c) => !isUpload(c)).map(line);
   const files = ctx.selected.filter(isUpload).map(line);
   const body = (lines.length ? `\nThe user selected:\n${lines.join('\n')}\n` : '')

@@ -1,6 +1,7 @@
 // "Save to the library" (Flow v3.3 - 2 Characters step 11): copies one candidate of a film into the library
 // across films, with its meta.json. Shared by POST /api/library/save and its unit check (scripts/library-save-test.ts).
 // The film's own files and its pick are never changed: the library gets a copy.
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { filmTarget } from '../actions/film';
 import { Writer } from '../actions/writes';
@@ -26,6 +27,14 @@ const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim()
 /** The note the user typed: one line, at most 400 characters. */
 export const cleanNote = (v: unknown): string | undefined => s(v)?.replace(/\s+/g, ' ').slice(0, 400);
 
+/** The file, with its symlinks resolved, lies inside the folder (resolved too). A missing file is not refused here. */
+async function realInside(file: string, dir: string): Promise<boolean> {
+  const real = await fs.realpath(file).catch(() => undefined);
+  if (!real) return true;
+  const rel = path.relative(await fs.realpath(dir), real);
+  return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 export async function saveToLibrary(body: SaveBody): Promise<SaveAnswer> {
   const kind = s(body.kind) as LibraryKind | undefined;
   if (!kind || !LIBRARY_KINDS.includes(kind)) return { ok: false, status: 400, error: `kind must be one of ${LIBRARY_KINDS.join(', ')}` };
@@ -38,6 +47,8 @@ export async function saveToLibrary(body: SaveBody): Promise<SaveAnswer> {
   const candidate = s(body.candidate) ?? idm?.[2];
   const fileAbs = !idm && ref ? path.join(ft.dir, path.normalize(ref)) : undefined;
   if (fileAbs && !fileAbs.startsWith(ft.dir + path.sep)) return { ok: false, status: 400, error: 'ref is outside the film folder' };
+  // a symlink inside the film that leads out of it is outside too
+  if (fileAbs && !(await realInside(fileAbs, ft.dir))) return { ok: false, status: 400, error: 'ref is outside the film folder' };
   if (!target) return { ok: false, status: 400, error: 'ref names no character or location ID' };
   let d: LibraryDraft | undefined;
   if (kind === 'face') {

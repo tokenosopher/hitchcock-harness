@@ -69,10 +69,12 @@ export function timelineHash(t: Pick<Timeline, 'fps' | 'width' | 'height' | 'tra
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const KINDS: TrackKind[] = ['video', 'audio', 'captions'];
 const FPS = [24, 25, 30];
-/** The largest cut the harness renders: a side of 4096 pixels and two hours, so a request cannot ask for a render
- *  that fills the disk or runs for days. */
+/** A track id becomes part of a stem's file name (render.ts) and so of an ffmpeg argument: a plain name only. */
+export const TRACK_ID = /^[A-Za-z0-9_-]{1,32}$/;
+/** The largest cut the harness renders: 4096 px a side, 20 minutes long (a short film is far below both), so a
+ *  request cannot ask for a render that fills the disk or runs for hours. */
 export const MAX_SIDE = 4096;
-export const MAX_SECONDS = 2 * 60 * 60;
+export const MAX_SECONDS = 20 * 60;
 /** What is wrong with a cut's width and height, if anything (also used by the routes that take them). */
 export function sizeProblem(width: unknown, height: unknown): string | undefined {
   if (!num(width) || !num(height) || width < 16 || height < 16) return 'width and height must be numbers';
@@ -110,7 +112,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
   for (const [ti, tr] of t.tracks!.entries()) {
     const where = `track ${tr?.id ?? ti + 1}`;
     if (!tr || typeof tr.id !== 'string' || !tr.id) { problems.push(`${where}: id missing`); continue; }
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(tr.id)) { problems.push(`${where}: id must be letters, digits, - or _ (it names files)`); continue; }
+    if (!TRACK_ID.test(tr.id)) { problems.push(`${where}: id must be 1 to 32 letters, digits, - or _ (it names files)`); continue; }
     if (ids.has(tr.id)) problems.push(`${where}: id used twice`);
     ids.add(tr.id);
     if (!KINDS.includes(tr.kind)) problems.push(`${where}: kind must be video, audio or captions`);
@@ -170,7 +172,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
     if (!m || !num(m.at) || typeof m.text !== 'string') problems.push('a marker needs at (seconds) and text');
     else markers.push(m);
   }
-  if (!problems.length && timelineLength({ tracks }) > MAX_SECONDS) problems.push(`the cut is longer than ${MAX_SECONDS / 3600} hours`);
+  if (!problems.length && timelineLength({ tracks }) > MAX_SECONDS) problems.push(`the cut is longer than ${MAX_SECONDS / 60} minutes`);
   if (opts.files !== false && !problems.length) problems.push(...(await checkFiles(film, tracks, fps, opts.base)));
   if (problems.length) return { problems };
   return { timeline: { ...(t as Timeline), tracks, markers }, problems };

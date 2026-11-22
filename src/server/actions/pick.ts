@@ -16,9 +16,10 @@
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { defuse, defuseFields } from '../../lib/defuse';
+import { childEnv } from '../childEnv';
 import { claudeConfig } from '../claude/config';
 import { pythonBin } from '../config';
-import { helperEnv } from '../env';
 import { natCmp, titleCase } from '../films/util';
 import { invalidateFilmState } from '../films/state';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
@@ -26,7 +27,6 @@ import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, loca
 import { filmTarget, type FilmTarget } from './film';
 import { appendTasteRow, candidatesCell, pickedWhere, type TasteRow } from './taste';
 import { isFile, nextVersion, Writer, type WriteRecord } from './writes';
-import { asTyped } from '../claude/typed';
 import { sfxPickArgs, soundAnswerKey } from '../films/read/sfx';
 
 export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take' | 'sfx';
@@ -137,7 +137,7 @@ async function runVoicePick(film: FilmTarget, w: Writer, args: string[]): Promis
   await backupVoiceFiles(film, w);
   await w.ran(shown, film.show(path.join(film.dir, 'voices', 'cast.json')), 'pick.py writes cast.json and options.json "chosen"');
   if (w.dryRun) return { cmd: shown, out: '(dry run: not run)' };
-  const env = helperEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
+  const env = childEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
   const r = await run(py, [script, ...args], env, film.repo);
   if (r.code !== 0) throw new PickError(`pick.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
   return { cmd: shown, out: r.out };
@@ -164,7 +164,8 @@ async function libraryRoundCopy(dir: string, id: string, files: { abs: string; r
 }
 
 /** Does the pick. Throws PickError with an HTTP status for anything the request got wrong. */
-export async function makePick(input: PickInput, film: string, opts: PickOptions = {}): Promise<PickResult> {
+export async function makePick(raw: PickInput, film: string, opts: PickOptions = {}): Promise<PickResult> {
+  const input = defuseFields(raw); // the user's words, the page name and the candidate reach Alma: a typed <harness-action> is defused
   const kind = input.kind;
   if (!PICK_KINDS.includes(kind)) throw new PickError(`kind must be one of ${PICK_KINDS.join(', ')}`);
   const target = (input.target ?? '').trim();
@@ -177,7 +178,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   const w = new Writer(`pick ${kind} ${target} ${fromLibrary ? `library:${input.libraryId}` : input.candidate}`, ft.show, !!opts.dryRun);
   const info: FilmInfo = { slug: ft.slug, title: ft.title, dir: ft.dir };
   const date = today();
-  const where = asTyped(input.from ?? 'the gate page');
+  const where = defuse(input.from ?? 'the gate page');
   let candidate = input.candidate ?? '';
   let choice = target;
   let candidatesText = '–';
@@ -344,7 +345,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   ].map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`).join(' ');
   const whose = kind === 'take' ? `${target}` : `${target}'s ${kind === 'location' ? 'master' : kind}`;
   const message = [
-    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : asTyped(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
+    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : defuse(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
     '',
     `The harness already wrote: ${[...wrote, 'the taste.md row', ...(lib ? [`the library entry ${lib.kind}s/${lib.id}`] : [])].join('; ')}.`,
     `Yours: the review card for this pick, the row's "What it says" cell and the score in taste.md${next.length ? `; ${next.join('; ')}` : ''}.`,
@@ -400,7 +401,7 @@ async function pickSound(input: PickInput, film: string, opts: PickOptions): Pro
     const shown = `${py === path.join(/*turbopackIgnore: true*/ ft.repo, '.venv', 'bin', 'python') ? '.venv/bin/python' : py} tools/sound/sfx.py ${['"$FILM"', ...args.slice(1)].map((a) => (/[\s'"]/.test(a) && a !== '"$FILM"' ? `'${a.replace(/'/g, "'\\''")}'` : a)).join(' ')}`;
     await w.ran(shown, ft.show(path.join(dir, 'pick.json')), 'sfx.py writes pick.json, prompts.json "picked" and the taste.md row');
     if (!w.dryRun) {
-      const r = await run(py, [tool, ...args], helperEnv({ FILM: ft.dir, PYTHONDONTWRITEBYTECODE: '1' }), ft.repo);
+      const r = await run(py, [tool, ...args], childEnv({ FILM: ft.dir, PYTHONDONTWRITEBYTECODE: '1' }), ft.repo);
       if (r.code !== 0) throw new PickError(`sfx.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
       script = { cmd: shown, out: r.out };
       tasteRow = /taste\.md row added/.test(r.out) ? 'written by sfx.py' : '';

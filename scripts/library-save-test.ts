@@ -6,7 +6,7 @@
 // a path outside the film is refused; that the film's later pick of the same face turns the entry to "picked"; and that
 // a later film uses the saved face from the library as its pick. Nothing reaches Alma, nothing is paid for.
 import { mkdtempSync } from 'node:fs';
-import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -91,6 +91,23 @@ async function main(): Promise<void> {
   // 4. refused
   const out = await saveToLibrary({ film: 'face-one', kind: 'face', ref: '../face-two/brief.md' });
   ok('a path outside the film is refused', !out.ok && out.status === 400, out);
+  // a symlink inside the film that leads out of it
+  await put('secret.txt', 'not the film\'s');
+  await symlink(path.join(root, 'secret.txt'), path.join(root, ONE, 'cast', 'C01-nia', 'r1-faces', 'C01-r1-9.png'));
+  const linked = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-nia/r1-faces/C01-r1-9.png' });
+  ok('a symlink in the film that leads out is refused', !linked.ok && linked.status === 400, linked);
+  // a path a film's JSON names (voices/options.json, element-lines-5s.json, elements.json) that leads out of the films
+  const { voiceDraft, inFilm } = await import('../src/server/library/sources');
+  await put(`${ONE}/voices/options.json`, JSON.stringify({ C01: { options: [{ option: 1, file: path.join(root, 'secret.txt') }, { option: 2, file: '../../../../secret.txt' }, { option: 3, file: 'voices/C01-3.mp3' }, { option: 4, file: 'voices/link.mp3' }] } }));
+  await put(`${ONE}/voices/C01-3.mp3`, 'mp3');
+  await symlink(path.join(root, 'secret.txt'), path.join(root, ONE, 'voices', 'link.mp3'));
+  const filmOne = { slug: 'face-one', title: 'Face One', dir: one };
+  ok('an absolute path out of the films is not copied', !(await voiceDraft(filmOne, 'C01', 1, 'saved')));
+  ok('a ../ path out of the films is not copied', !(await voiceDraft(filmOne, 'C01', 2, 'saved')));
+  ok('a symlink out of the films is not copied', !(await voiceDraft(filmOne, 'C01', 4, 'saved')));
+  ok('a path inside the film is copied', (await voiceDraft(filmOne, 'C01', 3, 'saved'))?.files[0]?.abs === path.join(one, 'voices', 'C01-3.mp3'));
+  ok('another film\'s file is not copied: only the film\'s own', !inFilm(filmOne, '../face-two/brief.md'));
+  ok('the films folder itself is not', !inFilm(filmOne, '..'));
   const none = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'C01 r9-9' });
   ok('a candidate that is not there is a 404', !none.ok && none.status === 404, none);
   const nofilm = await saveToLibrary({ film: 'no-such-film', kind: 'face', ref: 'C01 r1-1' });

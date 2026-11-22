@@ -4,6 +4,7 @@
 // review/debrief.json; the user answers on the film's one debrief page (tap a likely answer, write their own words, or
 // skip); the harness keeps each answer in review/debrief-answers.json as it is given, and "Send the answers to Alma"
 // sends them all as one message. Pure: the check of the questions file, the groups, the counts and the message.
+import { defuse } from '../../lib/defuse';
 
 export const DEBRIEF_REL = 'review/debrief.json';
 export const DEBRIEF_ANSWERS_REL = 'review/debrief-answers.json';
@@ -132,7 +133,7 @@ export function countsOf(d: Debrief, a: DebriefAnswers): { questions: number; an
   return { questions: d.questions.length, answered, skipped, open: d.questions.length - answered - skipped };
 }
 
-const q1 = (s: string): string => s.replace(/"/g, '”');
+const q1 = (s: string): string => defuse(s.replace(/"/g, '”'));
 
 /** The one message to Alma when the user sends the answers. Each answer in the user's words, with the question and
  *  the change it explains; the skipped ones named; what is Alma's to do from her stage note. */

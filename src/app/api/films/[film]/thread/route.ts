@@ -4,12 +4,12 @@
 // PATCH {model} → changes the model this film's Alma runs on; answers the new ThreadInfo
 // DELETE → interrupts Alma's current turn
 import { connection } from 'next/server';
+import { defuse } from '@/lib/defuse';
 import { getAlma } from '@/server/claude/process';
 import { isAlmaModel } from '@/server/claude/model';
 import { hasReserveKey, readReserve } from '@/server/claude/reserve';
 import { isMock, mockPost, mockThread } from '@/fixtures/mock';
-import { NON_FILM_THREADS, asTyped, parseContext, sendToAlma, threadHistory, threadInfo, validFilm } from '@/server/claude/thread';
-import { findFilm } from '@/server/films/registry';
+import { knownThread, parseContext, sendToAlma, threadHistory, threadInfo, validFilm } from '@/server/claude/thread';
 
 type Ctx = { params: Promise<{ film: string }> };
 
@@ -44,15 +44,15 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
     return Response.json({ error: 'body must be JSON {text, context}' }, { status: 400 });
   }
   const b = (body ?? {}) as { text?: unknown; context?: unknown };
-  const text = typeof b.text === 'string' ? asTyped(b.text.trim()) : '';
+  // a <harness-action> tag typed by hand is defused: only the harness's own buttons write the real one
+  const text = typeof b.text === 'string' ? defuse(b.text.trim()) : '';
   if (!text) return Response.json({ error: 'text is empty' }, { status: 400 });
   if (isMock()) {
     mockPost(film, text, parseContext(film, b.context));
     return Response.json({ ok: true }, { status: 202 });
   }
-  // a message starts an Alma (Claude Code with permissions off), so it goes only to a film that exists, or to the
-  // library's or Settings' own chat
-  if (!NON_FILM_THREADS.has(film) && !(await findFilm(film))) return Response.json({ error: 'unknown film' }, { status: 404 });
+  // only a film the registry knows (or the library or settings thread) gets an Alma
+  if (!(await knownThread(film))) return Response.json({ error: 'unknown film' }, { status: 404 });
   // "/compact" (alone, or followed by what to keep) is Claude Code's own command: it only works as the first thing
   // in the message, so it goes to Alma without the page context in front of it
   const command = /^\/compact(\s|$)/.test(text);

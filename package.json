@@ -46,6 +46,7 @@
     "sent:test": "tsx scripts/sent-test.ts",
     "layouts:test": "tsx scripts/layouts-test.ts",
     "shot-views:test": "tsx scripts/shot-views-test.ts",
+    "harden:test": "tsx scripts/harden-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

@@ -16,7 +16,7 @@ import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { claudeConfig } from '../claude/config';
 import { harnessConfig, pythonBin } from '../config';
-import { helperEnv } from '../env';
+import { childEnv } from '../childEnv';
 import type { FilmTarget } from '../actions/film';
 import { Writer } from '../actions/writes';
 import type { CutRenders, RenderKind, RenderOptions, RenderSmall, RenderState, Timeline, TimelineClip, TimelineTrack } from '../types';
@@ -366,7 +366,7 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
     const job = path.join(scratch, 'captions.json');
     await fs.writeFile(job, JSON.stringify({ width: w, height: h, duration: T, out_dir: path.join(scratch, 'captions'), font_roots: [film.repo, harnessConfig().filmRepo], cues }));
     const list = await new Promise<string>((resolve, reject) => {
-      execFile(pythonBin(), [CAPTION_SCRIPT, job], { timeout: 120000, env: helperEnv({ PYTHONDONTWRITEBYTECODE: '1' }) }, (err, stdout, stderr) =>
+      execFile(pythonBin(), [CAPTION_SCRIPT, job], { timeout: 120000, env: childEnv({ PYTHONDONTWRITEBYTECODE: '1' }) }, (err, stdout, stderr) =>
         err ? reject(new Error(`caption cards failed: ${String(stderr).slice(-300)}`)) : resolve(String(stdout).trim().split('\n').pop()!));
     });
     const i = addInput(['-f', 'concat', '-safe', '0', '-i', list]);

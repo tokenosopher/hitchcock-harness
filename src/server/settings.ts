@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { harnessConfig } from './config';
-import { helperEnv } from './env';
+import { childEnv } from './childEnv';
 import { claudeConfig } from './claude/config';
 import { readLastInit } from './claude/lastInit';
 import { reserveView, type ReserveView } from './claude/reserve';
@@ -35,7 +35,7 @@ export interface SettingsInfo {
 
 function run(cmd: string, args: string[], ms: number, env?: NodeJS.ProcessEnv): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { signal: AbortSignal.timeout(ms), maxBuffer: 1 << 20, env }, (err, stdout) => resolve(err ? undefined : String(stdout)));
+    execFile(cmd, args, { signal: AbortSignal.timeout(ms), maxBuffer: 1 << 20, env: env ?? childEnv() }, (err, stdout) => resolve(err ? undefined : String(stdout)));
   });
 }
 
@@ -44,7 +44,7 @@ const g = globalThis as unknown as { __harnessAuth?: { at: number; v: SettingsIn
 /** `claude auth status --json`, once per ten minutes, 15 s at most; only the account type is kept. */
 async function account(bin: string): Promise<SettingsInfo['account']> {
   if (g.__harnessAuth && Date.now() - g.__harnessAuth.at < 10 * 60_000) return g.__harnessAuth.v;
-  const env = helperEnv();
+  const env = childEnv();
   for (const k of Object.keys(env)) if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_')) delete env[k];
   const out = await run(bin, ['auth', 'status', '--json'], 15_000, env);
   const checkedAt = new Date().toISOString();
@@ -71,7 +71,7 @@ const gm = globalThis as unknown as { __harnessMcp?: { at: number; v: 'present' 
  *  once per ten minutes, 15 s at most: whether the Higgsfield MCP server is set up. Nothing about the login is kept. */
 async function higgsfieldMcp(bin: string, cwd: string): Promise<'present' | 'missing' | 'unknown'> {
   if (gm.__harnessMcp && Date.now() - gm.__harnessMcp.at < 10 * 60_000) return gm.__harnessMcp.v;
-  const env = helperEnv();
+  const env = childEnv();
   for (const k of Object.keys(env)) if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_')) delete env[k];
   const v = await new Promise<'present' | 'missing' | 'unknown'>((resolve) => {
     execFile(bin, ['mcp', 'get', 'higgsfield'], { cwd, env, signal: AbortSignal.timeout(15_000), maxBuffer: 1 << 20 }, (err, stdout, stderr) => {

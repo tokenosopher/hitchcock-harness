@@ -2,6 +2,7 @@
 import { setProgress } from '../actions/progress';
 import { pokeFilm } from '../films/watcher';
 import type { HarnessContext, ThreadEvent, ThreadInfo } from '../types';
+import { findFilm } from '../films/registry';
 import { FILM_SLUG } from './config';
 import { isOwnUpload } from '../uploads';
 import { getAlma } from './process';
@@ -11,10 +12,15 @@ export function validFilm(film: string): boolean {
   return FILM_SLUG.test(film);
 }
 
-export { asTyped } from './typed';
+/** Thread keys that are not films: the library's and the settings' own Alma. */
+export const NON_FILM_THREADS: ReadonlySet<string> = new Set(['library', 'settings']);
 
-/** The chats that belong to no film. */
-export const NON_FILM_THREADS = new Set(['library', 'settings']);
+/** A message may start an Alma only for a film the registry knows, or for the library or settings thread. */
+export async function knownThread(film: string, find: (slug: string) => Promise<unknown> = findFilm): Promise<boolean> {
+  if (!validFilm(film)) return false;
+  if (NON_FILM_THREADS.has(film)) return true;
+  return !!(await find(film));
+}
 
 export async function threadHistory(film: string): Promise<{ events: ThreadEvent[]; warnings: string[] }> {
   const alma = getAlma(film);
