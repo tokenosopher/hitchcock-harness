@@ -78,7 +78,7 @@ Then open **http://localhost:8800** in your browser. Leave the Terminal window o
 1. Press **New film** at the top left.
 2. Give it a title and paste your idea in your own words. The rest of the form (9:16, a budget of 2,000 credits, Higgsfield voices, 1080p by Seedance 2.5) is already filled in; change only what you want different.
 3. Press **Start the film**. Alma makes the film's folder and writes a first story. Read it on the Story page, change it yourself or ask her to, and tell her when it is settled. Then she writes the script.
-4. From then on, Alma puts every choice in front of you as a card under **Waiting for you**: pick a face, a voice, a place, say yes to a script. Answer with the buttons, or just write to her.
+4. From then on, Alma puts every choice in front of you as a card in one list, **Waiting for you**, the most important first: pick a place, a face, a voice, say yes to a script. Tap your choices, then press **Done picking** to send them all to her at once; or just write to her.
 
 Every step of a film opens with a few words from Alma: what you do there and why it comes at that point. **Hide**, after her last word, hides that step's intro, and **Show intro**, left in its place, brings it back. The **Step intros** switch in Settings turns all of them off, or back on.
 
@@ -86,7 +86,7 @@ Every step of a film opens with a few words from Alma: what you do there and why
 
 - Each new film starts with a budget of **2,000 Higgsfield credits** (change it on the New film form).
 - Alma quotes in **Higgsfield credits** before she spends.
-- Once you lock the script, she makes the first round of pictures and voices (faces, clothing, places, voices, the rough previews of each scene) without asking again, and tells you each round's size and cost.
+- Once you lock the script, she makes the first round of pictures and voices (the places first, then faces, clothing and each character's voice, and the rough previews of each scene) without asking again, and tells you each round's size and cost.
 - **There is one hard stop before the videos.** When every character, place and scene prompt is ready, she stops and asks "Go for the video?" with the total. You review every scene, its prompt and what goes into it on the **Go for the video** page before you say go.
 - Everything after that (another round, a redo of a take, the 1080p of each take in Seedance 2.5) gets its own quote and waits for your yes.
 - Every paid job is written down in the film's `spend.md`, and the total shows at the top of the film's pages.
@@ -127,16 +127,17 @@ Every paid job goes to Higgsfield, through Claude. Alma checks the model list an
 
 | Job | Made with |
 |---|---|
-| Character faces | Soul Cinema, twenty at a time for you to pick from |
-| New pictures of places and props | GPT Image 2.5 |
+| Character faces | Soul Cinema, twenty at a time for you to pick from; GPT Image 2.6 when Soul Cinema does not get there |
+| New pictures of places and props | GPT Image 2.6 |
+| Each place seen from every camera, painted over its rough stand-in | GPT Image 2.6 first (it also repaints or relights a view); Seedream 5.5 when it will not keep the room's shape |
 | Non-human characters | Nano Banana Pro |
-| Every change to an existing picture (clothes, character sheets, fixes) | Seedream 5.5 |
+| Every other change to an existing picture (clothes, character sheets, fixes) | Seedream 5.5 |
 | Each character's short reference clip, and every scene | Seedance 2.5, first as a 480p draft |
 | 1080p | Seedance 2.5 again: each take the cut uses is rendered at full quality. Higgsfield's upscaler is a cheaper second route, only if you ask for it |
 | Voices | Three kinds of candidate to pick from: Higgsfield's ready-made voices (free), a voice made to fit the character's face (Seed Audio, about 0.3 to 1.1 credits), and style variations of a ready-made voice (about 0.07 credits each). The one you pick is written into the film. A ready-made voice is used as it is. A voice from the face or a variation is used through its own sample: the line the character speaks in their short reference clip is cut from it, and that clip carries the voice into every scene. It is saved as a voice on your Higgsfield account only when lines must be spoken in it apart from the video (the film's lines as references for the scenes, a word fixed in the edit), and each save waits for its own price and your go |
 | Spoken lines outside the video | Eleven v4, on Higgsfield |
 | Music | ElevenLabs Music v2 (`elevenlabs_music_v2`), on Higgsfield, from a written description of each cue: about 0.064 credits a second (1.35 for 21 s) |
-| Sound effects | Higgsfield's sound-effects model; where it will not do, the sound Seedance makes with the take |
+| Sound effects | Higgsfield's sound-effects model (Mirelo), a few tries of each sound for you to pick from on one card; where it will not do, the sound Seedance makes with the take |
 
 Four things run on your Mac and cost nothing: laying out each scene's rough preview (Blender), removing music from a take (Demucs), timing each spoken word for checks and subtitles (Whisper), and cutting and rendering the film (ffmpeg).
 
@@ -164,4 +165,4 @@ Hitchcock Harness is open source under the MIT licence: see `LICENSE`. The Poppi
 
 ---
 
-Version 0.2.1. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
+Version 0.3.0. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
