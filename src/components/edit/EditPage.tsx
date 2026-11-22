@@ -1053,6 +1053,9 @@ export function EditPage() {
     </>
   );
   const pic = pictureAt(shown ?? tl, frame);
+  // "Note to Alma": the box opens empty about the playhead's moment, shown as its chip
+  const noteToAlma = () => ui.about({ id: `tc:${tc}`, label: `${pic?.clip.takeRef?.scene ?? 'cut'} · ${tc}` },
+    `the moment ${tc} in cut ${almaCut}${pic ? ` (${clipName(pic.clip)})` : ''}`, 'Say something about this moment…');
   // the line of the script under the playhead (the timeline from day one): what "At the playhead" says with no picture
   const mainA = mainTracks(shown ?? tl).a;
   const lineHere = planned ? mainA?.clips.find((c) => c.plan === 'line' && !c.muted && startF(c, fps) <= frame && endF(c, fps) > frame) : undefined;
@@ -1146,7 +1149,7 @@ export function EditPage() {
           : viewing ? <PhoneLine words={`Played live: ${viewing.version} has no 480p or master`} />
           : settled ? <PhoneLine words="Played live: this cut has no 480p or master" />
           : <PhoneSmoother store={cut.rendersStore} version={cut.ref ?? ''} edited={!cut.equals} onAsk={() => void cut.renderProxy()} />}
-        crumbs={crumbs} onNote={() => ui.prefill(`At ${tc}${pic ? ` (${clipName(pic.clip)})` : ''}: `, { id: `tc:${tc}`, label: `${pic?.clip.takeRef?.scene ?? 'cut'} · ${tc}` })} />
+        crumbs={crumbs} onNote={noteToAlma} />
     );
   }
 
@@ -1657,7 +1660,7 @@ export function EditPage() {
     const items: MenuItem[] = [
       { label: 'Add an effect here…', hint: 'Alma makes it', onPick: () => ui.prefill(`Add an effect at ${where}. Its own clip ${onTrack}, nothing else changed. The effect: `, chip) },
       { label: 'Add a file here…', hint: 'one you have', disabled: readOnly, onPick: () => openFiles('add', track && (track.kind === 'audio' || track.kind === 'video') ? track.id : undefined) },
-      ...(join ? [{ label: 'About the sound across this join…', onPick: () => ui.prefill(`About the sound across the join at ${smpte(join.at / fps, fps)} in cut ${almaCut}, where ${describeClip(join.left)} ends and ${describeClip(join.right)} begins. What I hear: `, { id: `join:${almaCut}:${join.at}`, label: `join · ${smpte(join.at / fps, fps)}` }) }] : []),
+      ...(join ? [{ label: 'About the sound across this join…', onPick: () => ui.about({ id: `join:${almaCut}:${join.at}`, label: `join · ${smpte(join.at / fps, fps)}` }, `the sound across the join at ${smpte(join.at / fps, fps)} in cut ${almaCut}, where ${describeClip(join.left)} ends and ${describeClip(join.right)} begins`, 'What do you hear across this join…') }] : []),
       // carrying the sound and the dissolve act on the cut: only on a join where the two shots touch, as the drag of a
       // join needs (14 Nov; Alma's entry above also takes two shots a frame apart)
       ...(touch && mainV ? [((join) => {
@@ -1679,7 +1682,7 @@ export function EditPage() {
           sub: [carry(join.left, 'tail', 0.5), carry(join.left, 'tail', 1), carry(join.left, 'tail', 2), carry(join.right, 'head', 0.5, true), carry(join.right, 'head', 1), carry(join.right, 'head', 2)] };
       })(touch)] : []),
       ...(touch && mainV ? [dissolveItem(touch.left, touch.right)] : []),
-      { label: 'Tell Alma about this point…', onPick: () => ui.prefill(`At ${where}: `, chip) },
+      { label: 'Tell Alma about this point…', onPick: () => ui.about(chip, `the point at ${where}`, 'Say something about this point…') },
       { label: 'Play from here', hint: 'Space', sepBefore: true, onPick: () => { setFrameRaw(f); setRate(1); } },
       { label: 'Save this frame…', hint: under ? 'PNG' : 'no picture here', disabled: !under, onPick: () => void saveFrame(f) },
       ...(hit && hit.track.kind === 'video' && fullMarks?.get(hit.clip.id)?.kind === 'small' ? [{ label: 'Upscale on Higgsfield…', hint: 'the whole take', onPick: () => askUpscale(hit.clip.src) }] : []),
@@ -2101,7 +2104,7 @@ export function EditPage() {
             {markerText === undefined ? (
               <span className="flex gap-3">
                 <button type="button" disabled={readOnly} onClick={() => setMarkerText('')} className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink disabled:opacity-50">+ Marker here</button>
-                <button type="button" onClick={() => ui.prefill(`At ${tc}${pic ? ` (${clipName(pic.clip)})` : ''}: `)} className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink">Note to Alma</button>
+                <button type="button" onClick={noteToAlma} className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink">Note to Alma</button>
               </span>
             ) : (
               <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (markerText.trim()) void apply(addMarker(tl, frame, markerText.trim())); setMarkerText(undefined); }}>

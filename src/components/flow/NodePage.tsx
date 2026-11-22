@@ -1,15 +1,12 @@
 'use client';
 // What a step other than the gate shows under the flow board: its content straight under the tab row (ASKS 46, as
-// drawn: no stage label, title or paragraph above it). The way to its full page and its QC chips sit at the right of
-// the tab row (NodeRight). Previz shows the shot plan with each scene's previz.
-import { ScenesOverview, ScenesSummary } from '@/components/pages/ScenesPage';
-import { useThread } from '@/components/data/thread';
+// drawn: no stage label, title or paragraph above it). Its QC chips sit at the right of the tab row (NodeRight).
+// Previz shows the shot plan with each scene's previz. The steps that are their own page (Story, Scenes, Finish,
+// Sound, Release; lib/flow.ts PAGE_STEPS) open that page from the flow and never show here.
 import Link from 'next/link';
 import type { FlowNode } from '@/components/lib/flow';
 import type { Part } from '@/components/lib/derive';
-import { fmtClock, fmtDate, repoPath } from '@/components/lib/format';
-import { useJson } from '@/components/pages/postCommon';
-import type { ReleaseInfo } from '@/server/films/read/release';
+import { fmtClock, repoPath } from '@/components/lib/format';
 import { Media, mediaUrl } from '@/components/media/Media';
 import { Dot, type DotState } from '@/components/shell/atoms';
 import { QCChip } from '@/components/shell/QCChip';
@@ -21,19 +18,17 @@ import { IconChevronRight } from '@/components/shell/icons';
 import type { FilmState } from '@/server/types';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
-import { FullCutLink } from '@/components/media/MasterPlayer';
-import { VideoShelf, day, finalTag, finalsFirst, newestFirst } from '@/components/media/Shelf';
+import { VideoShelf, day, newestFirst } from '@/components/media/Shelf';
 import type { FlowKey } from '@/components/lib/derive';
 import { LocationsStep, PlaceDeep, ViewsStep } from './Places';
 import { EditNext, ShotsStep } from './CutSteps';
 import { CharacterCards, type CastPart } from '@/components/characters/Cards';
+import { RunningLines } from './RunningNow';
+import { rememberBack } from '@/components/shell/BackLink';
 
 /** The flow's people steps: each shows the same Characters cards with its own part to the fore. */
 const CAST_STEP: Partial<Record<FlowKey, CastPart>> = { faces: 'faces', clothing: 'clothing', sheet: 'sheet', voices: 'voices', elements: 'elements' };
 
-const PAGE: Record<string, string> = {
-  story: 'Story', locations: 'Locations and props', character: 'Character', 'character/voices': 'Voices', 'character/elements': 'Elements', scenes: 'Scenes', edit: 'Edit', finish: 'Finish', sound: 'Sound', release: 'Release',
-};
 const partDot = (p: Part): DotState => (p.state === 'done' ? 'done' : p.state === 'running' ? 'running' : p.state === 'queued' ? 'queued' : p.state === 'ready' ? 'ready' : 'waiting');
 
 function Rows({ parts, onChip }: { parts: Part[]; onChip: (id: string, label: string) => void }) {
@@ -160,31 +155,19 @@ function PrevizPage({ s, onChip }: { s: FilmState; onChip: (id: string, label: s
 /** The first letter up, except a version: "v4 locked" stays "v4 locked". */
 const capitalFirst = (t: string) => (/^v\d/.test(t) ? t : t.charAt(0).toUpperCase() + t.slice(1));
 
-/** At the right of the tab row: the step's QC chips, and the way to its full page where its content is not all here
- *  (Edit: "Open the timeline", which opens What's next on the Edit page). */
+/** At the right of the tab row: the step's QC chips, and on Edit "Open the timeline", which opens the Edit page. */
 export function NodeRight({ s, n, base }: { s: FilmState; n: FlowNode; base: string }) {
-  const here = SHOWN_HERE.includes(n.key);
   const qc = qcSpecsFor(n.key).length > 0;
-  if (!qc && n.key !== 'edit' && (!n.href || here)) return null;
+  if (!qc && n.key !== 'edit') return null;
   const link = 'inline-flex h-[30px] items-center gap-1 whitespace-nowrap rounded-lg border border-edge-strong px-3 text-[12.5px] font-medium text-ink no-underline transition-colors duration-150 hover:bg-raised max-[760px]:h-11';
   return (
     <>
       <NodeQC s={s} n={n} />
-      {n.key === 'edit' && <Link href={`${base}/edit?tab=next`} data-open-timeline className={link}>Open the timeline<IconChevronRight size={13} /></Link>}
-      {n.href && !here && <Link href={`${base}/${n.href}`} data-open-page className={link}>Open {PAGE[n.href] ?? n.name}<IconChevronRight size={13} /></Link>}
+      {n.key === 'edit' && <Link href={`${base}/edit?tab=next`} onClick={() => rememberBack(`${base}/edit`, 'Back to Edit')} data-open-timeline className={link}>Open the timeline<IconChevronRight size={13} /></Link>}
     </>
   );
 }
 
-/** A step whose content is on its own page, while it has nothing to list here: where to find it. */
-const HOLDS: Partial<Record<FlowKey, string>> = {
-  story: 'The story and the script are on the Story page.',
-  finish: 'The 1080p and the captions are on the Finish page.',
-  sound: 'The music, the effects and the mix are on the Sound page.',
-};
-
-/** The steps whose content shows here under the flow (ASKS 46): their old "Open …" step goes. */
-export const SHOWN_HERE: FlowKey[] = ['loc', 'views', 'shots', 'faces', 'clothing', 'sheet', 'voices', 'elements', 'edit'];
 
 export function NodePage({ s, n, base, onChip, at, onAt }: {
   s: FilmState; n: FlowNode; base: string; onChip: (id: string, label: string, ref?: string) => void;
@@ -192,92 +175,50 @@ export function NodePage({ s, n, base, onChip, at, onAt }: {
   at?: string;
   onAt?: (id: string) => void;
 }) {
-  const { tasks } = useThread();
   // before the script is locked there are no scenes: the step says so instead of showing nothing (QC round two)
   if ((n.key === 'previz' || n.key === 'shots') && !s.scenes.length) return <p data-no-scenes className="m-0 text-[13px] leading-normal text-sub">No scenes yet. They come with the locked script.</p>;
   if (n.key === 'previz') return <PrevizPage s={s} onChip={onChip} />;
   const place = at && (n.key === 'loc' || n.key === 'views') ? s.locations.find((l) => l.id === at) : undefined;
   if (place) return <PlaceDeep s={s} l={place} base={base} onChip={onChip} />;
   const open = (id: string) => onAt?.(id);
-  const live = n.aims.filter((a) => a.task.state === 'running' || a.task.state === 'queued');
   return (
     <>
-      {n.key === 'scenes' && s.scenes.length > 0 && <div><ScenesSummary state={s} tasks={tasks} /></div>}
-      {n.key === 'release' && s.film.status === 'delivered' && <WentOut s={s} />}
-      {n.key === 'release' && s.film.status !== 'delivered' && !n.parts.length && <p className="m-0 text-[13px] leading-normal text-sub">Nothing is out yet. The texts, the thumbnails and the posts are on the Release page.</p>}
-      {live.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <span className="lbl">Running now</span>
-          {live.map((a) => (
-            <span key={a.task.id} className="flex items-center gap-2 text-[13px]"><Dot state={a.task.state === 'queued' ? 'queued' : 'running'} />{a.task.title}{a.task.liveLine && <span className="truncate text-sub">· {a.task.liveLine}</span>}</span>
-          ))}
-        </div>
-      )}
+      <RunningLines aims={n.aims} />
       {n.key === 'edit' && <EditNext s={s} base={base} />}
-      {n.key === 'finish' && s.master && <FullCutLink s={s} base={base} />}
-      {(n.key === 'release' || n.key === 'edit') && <CutPlayer s={s} which={n.key} onChip={onChip} />}
+      {n.key === 'edit' && <CutPlayer s={s} onChip={onChip} />}
       {n.key === 'edit' && <VideoShelf s={s} title="Cuts on disk" note="cut/, newest first" files={newestFirst(s.post?.cuts ?? [], s.post?.written)} onChip={onChip}
         tag={(f) => day(s.post?.written?.[f])} />}
       {n.key === 'edit' && <VideoShelf s={s} title="Title cards and made pieces" note="cut/cards/ and edits/" files={s.post?.pieces ?? []} onChip={onChip} />}
-      {n.key === 'release' && <VideoShelf s={s} title="Finished films" note="cut/ and social/" files={finalsFirst(s.post?.finals ?? [])} onChip={onChip}
-        tag={(f) => [finalTag(f), day(s.post?.written?.[f])].filter(Boolean).join(' · ')} />}
-      {/* the Scenes step is the film at a glance: the same rows as the Scenes page (13 Nov 2026) */}
-      {n.key === 'scenes' && s.scenes.length > 0 ? <ScenesOverview state={s} base={base} tasks={tasks} />
-        : n.key === 'loc' ? <LocationsStep s={s} onAt={open} onChip={onChip} />
+      {n.key === 'loc' ? <LocationsStep s={s} onAt={open} onChip={onChip} />
         : n.key === 'views' ? <ViewsStep s={s} onAt={open} onChip={onChip} />
         : n.key === 'shots' ? <ShotsStep s={s} base={base} fallback={<Rows parts={n.parts} onChip={onChip} />} />
         : n.key === 'edit' ? null
-        : CAST_STEP[n.key] ? <CharacterCards s={s} part={CAST_STEP[n.key]!} base={base} onChip={onChip} />
-        : n.parts.length ? <Rows parts={n.parts} onChip={onChip} />
-        : HOLDS[n.key] && !(n.key === 'finish' && s.master) ? <p className="m-0 text-[13px] leading-normal text-sub">{HOLDS[n.key]}</p> : null}
+        : CAST_STEP[n.key] ? <CharacterCards s={s} part={CAST_STEP[n.key]!} base={base} onChip={onChip} parts={n.key === 'elements' ? n.parts : undefined} />
+        : n.parts.length ? <Rows parts={n.parts} onChip={onChip} /> : null}
       <Feed query={`place=${n.key}`} from={`the ${n.name} node on Main`} />
     </>
   );
 }
 
-/** One line for a film that went out: the day, the platforms it is on (from the posting record), the file. */
-function WentOut({ s }: { s: FilmState }) {
-  const { data: r } = useJson<ReleaseInfo>(`/api/films/${s.film.slug}/release`, s.updatedAt);
-  const out = (r?.published?.rows ?? []).filter((x) => x.link || x.posted || x.pending);
-  const day0 = s.film.delivered?.[0]?.date;
-  const final = finalsFirst(s.post?.finals ?? [])[0];
-  return (
-    <div className="flex max-w-[720px] flex-col gap-2 text-[14px] leading-[1.6]">
-      <p className="m-0 text-ink-3">
-        {day0 ? `Delivered ${fmtDate(day0)}` : 'Delivered'}{out.length ? ` and posted to ${listOf(out.map((x) => x.platform.split(' (')[0]))}.` : '.'}
-      </p>
-      {out.some((x) => x.link) && (
-        <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
-          {out.filter((x) => x.link).map((x) => <a key={x.platform} href={x.link} target="_blank" rel="noreferrer" className="text-ink underline decoration-edge-strong underline-offset-4 hover:decoration-ink">{x.platform.split(' (')[0]}</a>)}
-        </p>
-      )}
-      {final && <span className="break-all font-mono text-[11.5px] text-mute">{final}</span>}
-    </div>
-  );
-}
-const listOf = (a: string[]) => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
-
-/** The film itself on the Edit, Finish and Release nodes: the current cut's render on Edit, the delivered
- *  1080 master on Finish and Release; the native controls play it, 9:16 kept. */
-function CutPlayer({ s, which, onChip }: { s: FilmState; which: 'release' | 'edit' | 'finish'; onChip: (id: string, label: string) => void }) {
+/** The film itself on the Edit step: the current cut's render; the native controls play it, 9:16 kept. (Finish and
+ *  Release play the master on their own pages.) */
+function CutPlayer({ s, onChip }: { s: FilmState; onChip: (id: string, label: string) => void }) {
   const cut = s.cut;
-  // Release shows only the master of a film that went out: a copy in final cuts there would read as released (ASKS 37)
-  const master = s.film.status === 'delivered' ? s.master?.path : undefined;
   // Edit: the current timeline version's 480p when it has one, else the render the record names
   const tl = cut?.current;
   const tlProxy = tl ? cut?.renders?.[tl.version]?.proxy : undefined;
   const proxy = tlProxy?.state === 'done' ? tlProxy.path : tl?.renders?.proxy?.path;
-  const file = which === 'edit' ? proxy ?? cut?.video ?? s.post?.cuts[s.post.cuts.length - 1] : master;
+  const file = proxy ?? cut?.video ?? s.post?.cuts[s.post.cuts.length - 1];
   if (!file) return null;
   const repoRel = repoPath(s.film.folder, s.film.repo, file);
   const nine = (s.film.aspect ?? '9:16') === '9:16';
-  const what = which === 'edit' ? (proxy && tl ? `${tl.version} 480p · ${tl.note ?? 'the current cut'}` : cut?.render ? `${cut.render} · ${cut.name}` : cut?.name ?? 'the cut') : 'the delivered master';
+  const what = proxy && tl ? `${tl.version} 480p · ${tl.note ?? 'the current cut'}` : cut?.render ? `${cut.render} · ${cut.name}` : cut?.name ?? 'the cut';
   return (
     <div className="flex flex-wrap items-start gap-5">
-      <Media path={repoRel} w={640} t={1} play fit="contain" onPlay={() => onChip(`cut:${file}`, `${which === 'edit' ? 'cut' : 'delivered cut'} · ${file.split('/').pop()}`)}
+      <Media path={repoRel} w={640} t={1} play fit="contain" onPlay={() => onChip(`cut:${file}`, `cut · ${file.split('/').pop()}`)}
         className={cn('flex-none rounded-[9px] border border-edge bg-black', nine ? 'aspect-[9/16] w-[300px] max-[760px]:w-full max-[760px]:max-w-[320px]' : 'aspect-[16/9] w-[560px] max-w-full')} />
       <div className="flex min-w-0 flex-col gap-1.5 pt-1 text-[13px]">
-        <span className="lbl">{which === 'edit' ? 'The cut' : 'Delivered'}</span>
+        <span className="lbl">The cut</span>
         <span className="font-medium">{capitalFirst(what)}</span>
         {cut && <span className="text-sub">{[cut.name, cut.frames ? `${cut.frames} frames · ${smpteOf(cut.frames, cut.fps)}` : '', `${cut.fps} fps`].filter(Boolean).join(' · ')}</span>}
         <span className="break-all font-mono text-[11.5px] text-mute">{repoRel}</span>

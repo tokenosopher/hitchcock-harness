@@ -13,10 +13,12 @@ import { readPost } from './read/post';
 import { masterYesOf, readMaster } from './read/master';
 import { readPreviz, type PrevizInfo } from './read/previz';
 import { readQC } from './read/qc';
+import { readPickupWork } from './read/pickups';
 import { feedSummary, isWaiting, readFeed } from './read/feed';
 import { soundCounts } from './read/sound';
 import { readResearch } from './read/research';
 import { readStory } from './read/story';
+import { withSettled } from '@/lib/story-settled';
 import { readReview } from './read/review';
 import { readScenes, type PickupInfo, type SceneRefX } from './read/scenes';
 import { readScript } from './read/script';
@@ -202,8 +204,9 @@ export async function buildFilmState(film: FilmRefX): Promise<FilmStateX> {
     scenesRest,
     feed: feed.cards.length ? feedSummary(feed) : undefined,
     sound: withMasterYes(await soundCounts(ctx), masterYesOf(feed.cards)),
+    pickups: await readPickupWork(ctx, scenes, unassignedPickups, qc),
     research: await readResearch(ctx),
-    story: await readStory(ctx),
+    story: withSettled(await readStory(ctx), script),
     updatedAt: new Date().toISOString(),
     warnings: warn.list,
     extra: {

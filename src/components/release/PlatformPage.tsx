@@ -76,7 +76,8 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
   const one = layout === 'one';
   return (
     <div ref={setWrap} data-layout={layout} className={cn('@container/page flex w-full flex-1 flex-col', !one && 'min-h-0')}>
-      <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Release', href: `${base}/release${qs}` }, { label: p.name }]} meta={filmMeta(state)} phoneSub={`Release · ${p.name}`}
+      <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Release', href: `${base}/release${qs}` }, { label: p.name }]}
+        back={{ label: 'Back to Release', href: `${base}/release${qs}`, soft: true }} meta={filmMeta(state)} phoneSub={`Release · ${p.name}`}
         crumbExtra={<Pill className="ml-1 @max-[820px]/page:hidden">final: master of {file.final!.version}</Pill>} actions={<Pill className="h-8">{posted.words}</Pill>} />
       <StepIntro step="platform" className="px-5 py-3" />
       <Tabs file={file} p={p} now={now} base={base} qs={qs} prev={prev} next={next} sticky={one} />

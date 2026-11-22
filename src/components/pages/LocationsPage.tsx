@@ -20,6 +20,8 @@ import { Feed } from '@/components/feed/Feed';
 import { refData } from '@/components/lib/refPick';
 import { viewRefOf } from '@/components/shell/refItems';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { MakingLines, useMaking } from '@/components/flow/Making';
+import { makingFor } from '@/components/lib/making';
 
 export function LocationsPage() {
   const { state, error, ui, base } = useFilmPage();
@@ -36,6 +38,9 @@ export function LocationsPage() {
   const [cand, setCand] = useState<string>();
   const chosen = cand ?? (st === 'picked' ? r?.pick : r?.prediction);
   const rn = (x: { id: string }) => /^r(\d+)/.exec(x.id)?.[1] ?? x.id;
+  // what is being painted for the places and has not landed (the loading state, lib/making.ts)
+  const making = useMaking();
+  const lMaking = l ? makingFor(making, ['loc'], l.id) : [];
   usePage(l ? `4 Locations · ${l.id} ${st === 'picked' ? 'master picked' : r ? `round ${rn(r)}` : 'not started'}` : undefined, undefined,
     l && chosen && st !== 'picked' ? [`Pick ${chosen} as master`, `Show the ${l.props?.[0]?.name.replace(/^the /, '') ?? 'props'} alone`] : []);
   if (!state) return <Loading error={error} />;
@@ -44,28 +49,35 @@ export function LocationsPage() {
   return (
     <>
       <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Locations and props' }]}
+        back={{ label: 'Back to Locations', href: `${base}?open=loc`, soft: true }}
         meta={<>{[state.film.aspect, filmPath(state, 'locations')].filter(Boolean).join(' · ')} · <span title={filmCost(state).title}>{filmCost(state).text}</span></>} phoneSub="Locations and props" />
       <div className="grid grid-cols-[200px_minmax(0,1fr)] max-[900px]:grid-cols-1">
         <nav aria-label="Locations and props" className="flex flex-col gap-1 border-r border-line px-3 py-6 max-[900px]:border-b max-[900px]:border-r-0">
           <span className="lbl px-2.5 pb-1.5">Locations</span>
           {locs.map((x) => {
-            const s2 = locationState(x.styleImages, x.master?.picked);
+            const s2r = locationState(x.styleImages, x.master?.picked);
             const rr = lastRound(x.styleImages);
+            // a sub-agent painting it before its round is on disk: being made, not "not started"
+            const s2 = s2r === 'waiting' && makingFor(making, ['loc'], x.id).length ? 'running' : s2r;
             return (
               <button key={x.id} type="button" aria-current={x.id === l?.id ? 'true' : undefined} onClick={() => { setSelId(x.id); setCand(undefined); setRoundId(undefined); ui.addChip({ id: `loc:${x.id}`, label: `${x.id} · ${x.name}` }); }}
                 className={cn('flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left', x.id === l?.id ? 'bg-panel' : 'hover:bg-panel')}>
                 <span className="flex items-center gap-2"><span className="font-mono text-[11.5px] text-sub">{x.id}</span><span className="flex-1 truncate text-[13px] font-medium">{x.name}</span><Dot state={s2 === 'running' ? 'running' : s2 === 'waiting' ? 'waiting' : 'done'} /></span>
-                <span className="text-[11.5px] text-sub">{s2 === 'picked' ? `master picked · ${x.styleImages?.length ?? 0} rounds` : rr ? `round ${rn(rr)} · ${s2 === 'running' ? 'running' : 'your pick'}` : 'not started'}</span>
+                <span className="text-[11.5px] text-sub">{s2 === 'picked' ? `master picked · ${x.styleImages?.length ?? 0} rounds` : rr ? `round ${rn(rr)} · ${s2 === 'running' ? 'being painted' : 'your pick'}` : s2 === 'running' ? 'being painted' : 'not started'}</span>
               </button>
             );
           })}
           {props.length > 0 && <span className="lbl px-2.5 pb-1.5 pt-4">Props</span>}
-          {props.map((x) => (
-            <button key={x.id} type="button" onClick={() => ui.addChip({ id: `prop:${x.id}`, label: `${x.id} · ${x.name}`, ref: x.path })} className="flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left hover:bg-panel">
-              <span className="flex items-center gap-2"><span className="font-mono text-[11.5px] text-sub">{x.id}</span><span className="flex-1 truncate text-[13px] font-medium">{x.name}</span><Dot state={x.path ? 'done' : 'waiting'} /></span>
-              <span className="text-[11.5px] text-sub">{propRail(x)}</span>
-            </button>
-          ))}
+          {props.map((x) => {
+            // a sub-agent making it before anything is on disk: being made, not "not started"
+            const busy = !x.path && !x.pick && makingFor(making, ['loc'], x.id).length > 0;
+            return (
+              <button key={x.id} type="button" onClick={() => ui.addChip({ id: `prop:${x.id}`, label: `${x.id} · ${x.name}`, ref: x.path })} className="flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left hover:bg-panel">
+                <span className="flex items-center gap-2"><span className="font-mono text-[11.5px] text-sub">{x.id}</span><span className="flex-1 truncate text-[13px] font-medium">{x.name}</span><Dot state={x.path ? 'done' : busy ? 'running' : 'waiting'} /></span>
+                <span className="text-[11.5px] text-sub">{busy ? 'being made' : propRail(x)}</span>
+              </button>
+            );
+          })}
           <div className="mx-2.5 mt-3 flex flex-col gap-1.5 border-t border-line pt-3 text-[12px] text-sub">
             <span className="flex items-center gap-2"><Dot state="done" />made</span>
             <span className="flex items-center gap-2"><Dot state="running" />running</span>
@@ -77,7 +89,7 @@ export function LocationsPage() {
           {!l ? <span className="text-[13px] text-sub">No locations in locations/ yet.</span> : (
             <>
               <StageTitle kicker="Stage 4 · Locations and props" title={<><span className="font-mono text-[18px] font-normal text-sub">{l.id}</span> {l.name}</>}
-                sub={!r ? 'No style images yet.' : st === 'picked' && r.pick
+                sub={!r ? (lMaking.length ? 'The looks of the place are being painted. They appear here as they land, for your pick of the master.' : 'No style images yet.') : st === 'picked' && r.pick
                   ? `Round ${rn(r)} of ${rounds.length}, the style image: ${word(r.candidates.length)} 16:9 candidates of the place. You picked ${r.pick}; it is the master, and the views below are made from it.`
                   : `Round ${rn(r)}, the style image: ${word(r.candidates.length)} 16:9 candidates of the place. Your pick becomes the master, then the plan from above.`}
                 right={<QCChip spec={qcSpec('views')} targets={{ target: l.id, label: `${l.id} views`, entry: qcEntry(state, 'views', l.id), ready: !!l.master?.picked && !!l.views?.length, waitsFor: !l.master?.picked ? `the ${l.id} master pick` : l.views?.length ? `${l.id}'s ${word(l.views.length)} views` : `${l.id}'s views` }} />} />
@@ -92,15 +104,14 @@ export function LocationsPage() {
                   ))}
                 </div>
               )}
-              {r && st === 'running' && (
-                <div className="flex items-center gap-3 text-[13px]"><Dot state="running" />{p.landed} of {p.asked} landed<span className="h-1 w-36 overflow-hidden rounded-sm bg-edge"><span className="block h-full bg-sub" style={{ width: `${(p.landed / Math.max(1, p.asked)) * 100}%` }} /></span></div>
-              )}
+              {/* the loading state: what is being painted, how many have landed of how many, a moving dot */}
+              <MakingLines items={st === 'picked' ? [] : lMaking} bar />
               {r && (
                 <div className="grid grid-cols-3 gap-3 max-[760px]:grid-cols-2">
                   {r.candidates.map((k) => {
                     const on = k.id === chosen;
                     return (
-                      <button key={k.id} type="button" disabled={!k.path} onClick={() => { setCand(k.id); ui.addChip({ id: `cand:${l.id}`, label: `${l.id} · ${k.id}`, ref: k.path }); }}
+                      <button key={k.id} type="button" disabled={!k.path} aria-pressed={on} data-zoom-choose onClick={() => { setCand(k.id); ui.addChip({ id: `cand:${l.id}`, label: `${l.id} · ${k.id}`, ref: k.path }); }}
                         className="flex cursor-pointer flex-col gap-2 text-left disabled:cursor-default">
                         <span className={cn('relative block aspect-[16/9] w-full rounded-[7px] border', !k.path ? 'border-dashed border-edge-strong' : on ? 'border-ink bg-tile outline outline-1 outline-offset-2 outline-ink' : 'border-edge bg-tile hover:border-sub')}>
                           {k.path && <Media path={filmPath(state, k.path)} w={640} className="absolute inset-0 rounded-[6px]" />}

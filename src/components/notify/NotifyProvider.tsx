@@ -3,8 +3,10 @@
 // a notice counts as unread when the user is not looking at its film (another film is open, the tab is
 // hidden, or the window is not focused). Unread counts and the last notice seen live in localStorage, so a
 // reload keeps them and asks the server only for what came after. Shown three ways: the tab title
-// "(2) Hitchcock Harness", a dot with the count on the sidebar's film row (UnreadBadge), and a browser
-// notification when the user switched them on (NotifyToggle in the thread header).
+// "(2) Hitchcock Harness", the white dot on the sidebar's film row (RowMark), and a browser notification when the
+// user switched them on (NotifyToggle in the thread header).
+// The same stream says which films' Alma is at work (`event: running`, the sidebar's glowing orb), and when Alma's
+// reply landed or a new card came in each film (`moved`, the sidebar's order), so neither needs a poll.
 //
 // TODO(web-push): a notification on a locked iPhone needs real Web Push (a VAPID key, a push subscription
 // stored on the server, a push handler in public/sw.js), and that needs a stable https origin: the quick
@@ -19,6 +21,10 @@ type Permission = NotificationPermission | 'unsupported';
 
 interface NotifyValue {
   unread: Record<string, Unread>;
+  /** The films whose Alma is at work now, as the server last said (GET /api/notify, `event: running`). */
+  running: ReadonlySet<string>;
+  /** When a notice that moves a film up the sidebar (her reply, a new card) last came in, per film, watched or not. */
+  moved: Readonly<Record<string, string>>;
   total: number;
   /** Notifications switched on in this browser (and allowed by it). */
   enabled: boolean;
@@ -29,7 +35,8 @@ interface NotifyValue {
   clear: (film: string) => void;
 }
 
-const Ctx = createContext<NotifyValue>({ unread: {}, total: 0, enabled: false, permission: 'unsupported', enable: async () => {}, disable: () => {}, clear: () => {} });
+const NONE: ReadonlySet<string> = new Set();
+const Ctx = createContext<NotifyValue>({ unread: {}, running: NONE, moved: {}, total: 0, enabled: false, permission: 'unsupported', enable: async () => {}, disable: () => {}, clear: () => {} });
 
 const UNREAD_KEY = 'hh:unread';
 const SEQ_KEY = 'hh:notify:seq';
@@ -68,6 +75,8 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const current = threadOf(params?.film, pathname);
   const [unread, setUnread] = useState<Record<string, Unread>>({});
+  const [running, setRunning] = useState<ReadonlySet<string>>(NONE);
+  const [moved, setMoved] = useState<Record<string, string>>({});
   const [on, setOn] = useState(false);
   const [permission, setPermission] = useState<Permission>('unsupported');
   const [looking, setLooking] = useState(true);
@@ -155,6 +164,8 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
         let n: HarnessNotice;
         try { n = JSON.parse(m.data) as HarnessNotice; } catch { return; }
         write(SEQ_KEY, n.seq);
+        // her reply landing and a new card move the film up the sidebar, seen here or not (the server keeps the same)
+        if (n.kind === 'turn' || n.kind === 'pick') setMoved((m) => (m[n.film] && m[n.film] >= n.at ? m : { ...m, [n.film]: n.at }));
         const watching = lookingRef.current && currentRef.current === n.film;
         if (watching) return;
         setUnread((u) => {
@@ -164,6 +175,14 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
         });
         if (onRef.current) void show(n);
       };
+      // a new set only when it changed: the sidebar draws again only then
+      es.addEventListener('running', (m) => {
+        let list: unknown;
+        try { list = JSON.parse((m as MessageEvent<string>).data); } catch { return; }
+        if (!Array.isArray(list)) return;
+        const films = list.filter((x): x is string => typeof x === 'string');
+        setRunning((cur) => (films.length === cur.size && films.every((f) => cur.has(f)) ? cur : films.length ? new Set(films) : NONE));
+      });
     };
     open();
     return () => { closed = true; es?.close(); };
@@ -211,8 +230,8 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const disable = useCallback(() => { setOn(false); write(ON_KEY, false); }, []);
 
-  const value = useMemo<NotifyValue>(() => ({ unread, total, enabled: on && permission === 'granted', permission, enable, disable, clear }),
-    [unread, total, on, permission, enable, disable, clear]);
+  const value = useMemo<NotifyValue>(() => ({ unread, running, moved, total, enabled: on && permission === 'granted', permission, enable, disable, clear }),
+    [unread, running, moved, total, on, permission, enable, disable, clear]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

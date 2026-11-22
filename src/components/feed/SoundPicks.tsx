@@ -4,14 +4,14 @@
 // and go, 'Yep, this is the one.'" One card per scene: each planned sound with where it sits on the cut (its times, a
 // strip of the film with its place lit, the planned level and fades, the designer's reason) and its tries, each with a
 // play button (the app's one sound player, as the Voices card has). Choosing a try, or "None of these", sets
-// the choice aside like every other pick; "Done picking" sends it, and the pick runs the kit's own command (sfx.py
-// --pick), which records it with the tries not picked. A line of why can go with each pick.
+// the choice aside like every other pick; "Done picking" sends it (the only confirm), and the pick runs the studio's
+// own command when it has it (sfx.py --pick), which records it with the tries not picked. A line of why can go with
+// each pick.
 import Link from 'next/link';
 import { useState } from 'react';
 import type { FeedCard, FeedSound } from '@/server/types';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
-import { Btn } from '@/components/shell/atoms';
-import { choose, unchoose, useChoices } from '@/components/data/choices';
+import { choose, useChoices } from '@/components/data/choices';
 import type { PickBody } from '@/components/library/data';
 import { cn } from '@/lib/utils';
 import { kindWord, placeLine, stripOf, tryLabel } from './soundPick';
@@ -96,10 +96,7 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
             placeholder={sel === 'none' ? 'What should it sound like? (your words for the prompt, optional)' : 'Why this one? (optional, kept with the pick)'}
             aria-label={sel === 'none' ? `Your words for the next tries of ${s.name}` : `Why try ${sel} of ${s.name}`}
             className="h-8 w-full max-w-[520px] rounded-lg border border-line bg-panel px-2.5 text-[13px] text-ink placeholder:text-mute" />
-          <span className="flex flex-wrap items-center gap-2 text-[12px] text-mute">
-            Chosen: {sel === 'none' ? 'none of these' : `try ${sel}`}
-            <button type="button" onClick={() => { unchoose(film, cid); setNote(''); }} className="cursor-pointer border-0 bg-transparent p-0 text-[12px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Take it back</button>
-          </span>
+          <span data-chosen className="text-[12px] text-mute">Chosen: {sel === 'none' ? 'none of these' : `try ${sel}`} · goes with Done picking</span>
         </div>
       )}
     </div>
@@ -112,34 +109,13 @@ export function SoundPicks({ film, card, toRepo, from, open }: { film: string; c
   const all = useChoices(film);
   const mine = all.filter((c) => c.pick?.kind === 'sfx' && c.pick.card === card.key);
   const left = sounds.filter((s) => !s.answer).length;
-  const [p, setP] = useState<{ k: 'idle' | 'busy' } | { k: 'error'; text: string } | { k: 'sent'; n: number }>({ k: 'idle' });
-  const sendNow = async () => {
-    setP({ k: 'busy' });
-    try {
-      const r = await fetch(`/api/films/${film}/done`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: [], picks: mine.map((c) => c.pick) }) });
-      const j = (await r.json().catch(() => ({}))) as { error?: string };
-      if (!r.ok) { setP({ k: 'error', text: j.error ?? `Not sent (${r.status})` }); return; }
-      unchoose(film, mine.map((c) => c.id));
-      setP({ k: 'sent', n: mine.length });
-    } catch {
-      setP({ k: 'error', text: 'The harness server is not answering' });
-    }
-  };
   if (!sounds.length) return null;
   return (
     <div data-sound-picks className="flex flex-col gap-3">
       {sounds.map((s) => <SoundRow key={s.name} film={film} card={card} s={s} toRepo={toRepo} from={from} open={open} />)}
       {open && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-          {p.k === 'sent' ? (
-            <span role="status" className="text-[12.5px] text-ink-3 duration-200 animate-in fade-in-0">Sent {p.n === 1 ? 'the pick' : `${p.n} picks`}. The kit records each with the tries not picked; Alma lays them on the cut.</span>
-          ) : (
-            <>
-              <span className="text-[12.5px] text-sub">{mine.length ? `${mine.length} of ${left} chosen` : `${left === 1 ? 'One sound' : `${left} sounds`} to pick`} · they go to Alma with Done picking, at the foot of the page</span>
-              {mine.length > 0 && <Btn ghost disabled={p.k === 'busy'} onClick={() => void sendNow()} title="Sends this card's picks now, by themselves">{p.k === 'busy' ? 'Sending…' : 'Send these now'}</Btn>}
-              {p.k === 'error' && <span role="alert" className="basis-full text-[12px] text-bad">{p.text}</span>}
-            </>
-          )}
+          <span className="text-[12.5px] text-sub">{mine.length ? `${mine.length} of ${left} chosen` : `${left === 1 ? 'One sound' : `${left} sounds`} to pick`} · they go with Done picking</span>
         </div>
       )}
     </div>

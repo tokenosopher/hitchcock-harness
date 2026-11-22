@@ -3,7 +3,7 @@
 // you can take that information and learn." One question, a few likely answers to tap, a box for the user's own words,
 // and a skip: on Alma's why card after a run of edits (Flow v3.3 - 9 Edit step 8) and on every question of the
 // debrief page (Flow v3.3 - 12 Release, step 40). The why card's answer is set aside like any choice and goes with
-// "Done picking"; the debrief keeps each answer as it is given (DebriefPage.tsx).
+// "Done picking", the only confirm; the debrief keeps each answer as it is given (DebriefPage.tsx).
 import { useState } from 'react';
 import type { FeedCard } from '@/server/types';
 import { Btn } from '@/components/shell/atoms';
@@ -39,15 +39,14 @@ export function WhyQuestion({ id, answers, picked, words, multi, disabled, onPic
   );
 }
 
-/** The why card's answer (`"ask": "why"`): tap, write, or skip; set aside until "Done picking", or sent at once. */
-export function WhyPanel({ film, card, from }: { film: string; card: FeedCard; from: string }) {
+/** The why card's answer (`"ask": "why"`): tap, write, or skip; set aside until "Done picking", the only confirm. */
+export function WhyPanel({ film, card }: { film: string; card: FeedCard; from: string }) {
   const ask = card.ask!;
   const cid = `card:${card.key}`;
   const mine = useChoice(film, cid);
   const opts = ask.options;
   const [picked, setPicked] = useState<string[]>(() => { const o = opts.find((x) => x.id === mine?.answer?.option); return o ? [o.label] : []; });
   const [words, setWords] = useState(mine?.answer?.note ?? '');
-  const [p, setP] = useState<{ k: 'idle' | 'busy' } | { k: 'done'; text: string } | { k: 'error'; text: string }>({ k: 'idle' });
   const skipped = mine?.answer?.option === 'skip';
   const label = (o?: string, w?: string) => `${card.id ?? 'why'} · ${o === 'skip' ? 'skipped' : [opts.find((x) => x.id === o)?.label, w?.trim() ? `“${w.trim().slice(0, 40)}”` : ''].filter(Boolean).join(' · ')}`;
   const keep = (pk: string[], w: string) => {
@@ -55,35 +54,17 @@ export function WhyPanel({ film, card, from }: { film: string; card: FeedCard; f
     if (!o && !w.trim()) { unchoose(film, cid); return; }
     choose(film, { id: cid, label: label(o, w), answer: { card: card.key, kind: 'why', ...(o ? { option: o } : {}), ...(w.trim() ? { note: w.trim() } : {}) } });
   };
-  const send = async (skip?: boolean) => {
-    setP({ k: 'busy' });
-    const o = skip ? 'skip' : opts.find((x) => x.label === picked[0])?.id;
-    try {
-      const r = await fetch(`/api/films/${film}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ card: card.key, option: o, note: skip ? undefined : words.trim() || undefined, from }) });
-      const j = (await r.json().catch(() => ({}))) as { error?: string };
-      if (!r.ok) { setP({ k: 'error', text: j.error ?? `Not sent (${r.status})` }); return; }
-      unchoose(film, cid);
-      setP({ k: 'done', text: skip ? 'Skipped. Alma asks nothing more about it.' : 'Sent. Alma keeps your reason on the card, in your words.' });
-    } catch {
-      setP({ k: 'error', text: 'The harness server is not answering' });
-    }
-  };
-  if (p.k === 'done') return <p role="status" className="m-0 text-[12.5px] leading-normal text-ink-3 duration-200 animate-in fade-in-0">{p.text}</p>;
   const has = !!picked.length || !!words.trim();
   return (
     <div className="flex flex-col gap-3">
-      <WhyQuestion id={card.key} answers={opts.map((o) => o.label)} picked={skipped ? [] : picked} words={skipped ? '' : words} disabled={p.k === 'busy'}
+      <WhyQuestion id={card.key} answers={opts.map((o) => o.label)} picked={skipped ? [] : picked} words={skipped ? '' : words}
         onPick={(pk) => { setPicked(pk); keep(pk, words); }} onWords={(w) => { setWords(w); keep(picked, w); }} />
       <div className="flex flex-wrap items-center gap-2">
-        {skipped
-          ? <span className="inline-flex items-center gap-1.5 text-[12.5px] text-ink"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen: skip</span>
-          : has ? <span className="inline-flex items-center gap-1.5 text-[12.5px] text-ink"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen</span>
-            : <span className="text-[12.5px] text-sub">Tap one, write a line, or skip.</span>}
-        {(has || skipped) && <Btn ghost disabled={p.k === 'busy'} onClick={() => void send(skipped)} title="Sends this answer to Alma now, by itself">{p.k === 'busy' ? 'Sending…' : 'Send only this now'}</Btn>}
-        {!skipped && <Btn ghost disabled={p.k === 'busy'} onClick={() => { setPicked([]); setWords(''); choose(film, { id: cid, label: label('skip'), answer: { card: card.key, kind: 'why', option: 'skip' } }); }}>Skip</Btn>}
-        {skipped && <Btn ghost onClick={() => unchoose(film, cid)}>Take it back</Btn>}
-        {(has || skipped) && <span className="basis-full text-[12px] text-mute">It goes to Alma with your other choices when you press Done picking, at the foot of the page.</span>}
-        {p.k === 'error' && <span role="alert" className="basis-full text-[12px] text-bad">{p.text}</span>}
+        {skipped || has
+          ? <span data-chosen className="inline-flex items-center gap-1.5 text-[12.5px] text-ink duration-200 animate-in fade-in-0"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen{skipped ? ': skip' : ''} · goes with Done picking</span>
+          : <span className="text-[12.5px] text-sub">Tap one, write a line, or skip.</span>}
+        {/* tapped again, the skip is taken back */}
+        <Btn ghost aria-pressed={skipped} onClick={() => { if (skipped) { unchoose(film, cid); return; } setPicked([]); setWords(''); choose(film, { id: cid, label: label('skip'), answer: { card: card.key, kind: 'why', option: 'skip' } }); }}>{skipped ? 'Skipped' : 'Skip'}</Btn>
       </div>
     </div>
   );

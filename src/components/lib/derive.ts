@@ -1,6 +1,6 @@
 // What the pages read off a FilmState: pick states, stage states, the gate inbox, scene summaries.
 // Pure functions, no I/O; everything here is derived from the contract in src/server/types.ts.
-import type { CharacterRef, CutInfo, FilmState, LocationRef, Round, SceneRef, ScriptLine, Stage, TakeRef, TaskCard, ThreadEvent } from '@/server/types';
+import type { CharacterRef, CutInfo, FeedCard, FilmState, LocationRef, Round, SceneRef, ScriptLine, Stage, TakeRef, TaskCard, ThreadEvent } from '@/server/types';
 import { cutTakeIds as timelineTakeIds } from './cut';
 import { fmtCredits, fmtDate, sumCredits, takeLabel } from './format';
 import { takesReady } from '@/components/edit/takesReady';
@@ -104,13 +104,17 @@ export const speaks = (c: CharacterRef) => !c.extra && !c.silent;
 /** A face counts as picked when the record says so, or when what follows it exists (an approved sheet, a final element). */
 export const faceDone = (c: CharacterRef) => !!(c.face?.pick || c.reused || c.sheet?.approved || c.element?.state === 'final');
 export const clothingDone = (c: CharacterRef) => !!(c.wardrobe?.pick || c.reused || c.sheet?.approved || c.element?.state === 'final');
-export const voiceDone = (c: CharacterRef) => !!(c.voice?.pick || c.voice?.elementLine || c.element?.state === 'final');
+export const voiceDone = (c: CharacterRef) => !!(c.voice?.pick || c.voice?.elementLine || c.element?.state === 'final' || c.reused);
+/** The Voices step is one of this character's steps (Flow v3.3): it speaks, it was not taken from the
+ *  library (a reused character brings its voice), and its face is picked (a voice comes inside the character's
+ *  creation, after the face). */
+export const voiceStepFor = (c: CharacterRef) => speaks(c) && !c.reused && faceDone(c);
 /** The master is settled when it is picked, or when views were made from it. */
 export const locationSettled = (l: LocationRef) => !!(l.master?.picked || l.views?.length);
 
 export type PartState = 'done' | 'ready' | 'running' | 'queued' | 'waiting';
 /** One character, location or scene on a node: its state and one line. */
-export interface Part { id: string; name: string; state: PartState; line: string; aims: TaskAim[]; round?: Round }
+export interface Part { id: string; name: string; state: PartState; line: string; aims: TaskAim[]; round?: Round; /** Character elements: a new video element to make, counted on the step */ newElement?: boolean }
 
 export const roundNo = (r: Round) => /^r(\d+[a-z]?)/.exec(r.id)?.[1] ?? r.id;
 
@@ -148,19 +152,34 @@ export function sheetParts(s: FilmState, tasks: TaskCard[]): Part[] {
     return { id: c.id, name: c.name, state: 'waiting', line: clothingDone(c) ? 'not started' : 'after clothing', aims };
   });
 }
+/** The voices to make or pick: every speaking character but those taken from the library (they bring their voice, so
+ *  no voice step is shown for them). Before the face pick a voice is not started, whatever is on file (strict). */
 export function voiceParts(s: FilmState, tasks: TaskCard[]): Part[] {
-  return castOf(s).filter(speaks).map((c) => partOf({ id: c.id, name: c.name, rounds: c.voice?.rounds, aims: liveAims(tasks, 'voices', c.id),
+  return castOf(s).filter(speaks).filter((c) => !c.reused).map((c) => partOf({ id: c.id, name: c.name, rounds: c.voice?.rounds, aims: liveAims(tasks, 'voices', c.id),
     done: voiceDone(c) ? (c.voice?.pick ? `${/^\d+$/.test(c.voice.pick.candidateId) ? 'option ' : ''}${c.voice.pick.candidateId} picked` : 'picked') : undefined,
-    blocked: faceDone(c) ? undefined : 'after the face pick' }));
+    blocked: faceDone(c) ? undefined : 'after the face pick', strict: true }));
+}
+/** The Character elements step : one row per character, the people and the groups. Only a speaking
+ *  character not brought whole from the library needs a new video element, and only those count ("1 of 1" while
+ *  Tobias's is made); a reused one with its final element is done "from the library"; a silent character or a group of
+ *  extras has its image element only and is done at once (Flow v3.3, 3, step 19: extras get no video element). */
+export const needsNewElement = (c: CharacterRef) => speaks(c) && !(c.reused && c.element?.state === 'final');
+export function elementPart(s: FilmState, tasks: TaskCard[], c: CharacterRef): Part {
+  const base = { id: c.id, name: c.name, newElement: needsNewElement(c) || undefined };
+  if (!speaks(c))
+    return { ...base, state: 'done', aims: [], line: c.extra ? 'Image element only · a group of extras, no video element needed' : 'Image element only · no lines, no video element needed' };
+  const aims = liveAims(tasks, 'elements', c.id);
+  const v = (line: string) => `Video element · ${line}`;
+  if (c.element?.state === 'final') return { ...base, state: 'done', aims, line: v(c.reused ? 'from the library' : 'done') };
+  if (aims.length) return { ...base, state: aims.some((a) => a.task.state === 'running') ? 'running' : 'queued', line: v('being made'), aims };
+  if (c.element?.state === 'draft') return { ...base, state: 'ready', line: v('draft waiting for your yes'), aims };
+  const mine = (id: string) => id === c.id || new RegExp(`^${c.id}[a-z]$`).test(id);
+  if ((s.feed?.asks ?? []).some((a) => a.place === 'elements' && a.ids.some(mine))) return { ...base, state: 'ready', line: v('waiting for your go'), aims };
+  return { ...base, state: 'waiting', line: v(faceDone(c) && c.sheet?.approved && voiceDone(c) ? 'not made yet' : 'after the picks'), aims };
 }
 export function elementParts(s: FilmState, tasks: TaskCard[]): Part[] {
-  return castOf(s).filter(speaks).map((c) => {
-    const aims = liveAims(tasks, 'elements', c.id);
-    if (c.element?.state === 'final') return { id: c.id, name: c.name, state: 'done', line: 'final', aims };
-    if (aims.length) return { id: c.id, name: c.name, state: 'running', line: 'running', aims };
-    if (c.element?.state === 'draft') return { id: c.id, name: c.name, state: 'ready', line: 'draft · waiting for your yes', aims };
-    return { id: c.id, name: c.name, state: 'waiting', line: 'after the picks', aims };
-  });
+  const cast = new Set(castOf(s));
+  return s.characters.filter((c) => cast.has(c) || c.extra).map((c) => elementPart(s, tasks, c));
 }
 export function locationParts(s: FilmState, tasks: TaskCard[]): Part[] {
   return s.locations.map((l) => {
@@ -228,6 +247,20 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
   if (s.film.status === 'delivered') return [];
   const items: GateItem[] = [];
   const cast = castOf(s);
+  // after the lock the location pick is the first thing put in front of the user (Flow v3.3): the masters
+  // come before the faces
+  for (const lp of locationParts(s, tasks)) {
+    if (lp.state === 'done') continue;
+    const l = s.locations.find((x) => x.id === lp.id)!;
+    const r = lp.round;
+    const p = r ? roundProgress(r) : undefined;
+    items.push({
+      key: `pick:${l.id}`, id: l.id, title: `${l.name} master`, chip: `${l.id} · ${l.name} master`, state: pickState(lp.state),
+      meta: r ? `Round ${roundNo(r)} · ${p?.asked} candidates${lp.state === 'ready' ? ` landed ${fmtDate(r.date)}` : ''}` : 'Round 1',
+      round: r, progress: p, prediction: lp.state === 'ready' ? r?.prediction : undefined, predictionNote: r && lp.state === 'ready' ? predictionNote(r) : undefined,
+      group: 'chains', kind: 'master',
+    });
+  }
   for (const f of faceParts(s, tasks)) {
     if (f.state === 'done') continue;
     const c = cast.find((x) => x.id === f.id)!;
@@ -244,18 +277,6 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
       group: 'chains', kind: 'face',
     });
   }
-  for (const lp of locationParts(s, tasks)) {
-    if (lp.state === 'done') continue;
-    const l = s.locations.find((x) => x.id === lp.id)!;
-    const r = lp.round;
-    const p = r ? roundProgress(r) : undefined;
-    items.push({
-      key: `pick:${l.id}`, id: l.id, title: `${l.name} master`, chip: `${l.id} · ${l.name} master`, state: pickState(lp.state),
-      meta: r ? `Round ${roundNo(r)} · ${p?.asked} candidates${lp.state === 'ready' ? ` landed ${fmtDate(r.date)}` : ''}` : 'Round 1',
-      round: r, progress: p, prediction: lp.state === 'ready' ? r?.prediction : undefined, predictionNote: r && lp.state === 'ready' ? predictionNote(r) : undefined,
-      group: 'chains', kind: 'master',
-    });
-  }
   // at the gate: what landed and waits for a pick or a yes
   for (const cp of clothingParts(s, tasks).filter((x) => x.state === 'ready')) {
     const c = cast.find((x) => x.id === cp.id)!;
@@ -270,16 +291,16 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
     if (s.feed?.asks.some((k) => k.place === 'sheet' && k.ids.includes(c.id))) continue;
     items.push({ key: `pick:${c.id}:sheet`, id: c.id, title: `${c.name} sheet`, chip: `${c.id} · ${c.name} sheet`, state: 'ready', meta: 'Made from the picked face and clothing · waiting for your yes', group: 'gate', kind: 'sheet' });
   }
-  const voices = voiceParts(s, tasks).filter((v) => v.state !== 'done');
-  if (voices.length) {
-    const ready = voices.filter((v) => v.state === 'ready');
-    const running = voices.filter((v) => v.state === 'running' || v.state === 'queued');
-    const held = cast.filter(speaks).some((c) => !faceDone(c));  // the voice picks come after the face picks
+  // a voice is asked only inside a character's creation, once its face is picked, and never for a character taken from
+  // the library (Flow v3.3); and only once its options exist: one card per character whose voice round
+  // landed, nothing before ("Waiting for faces" is not a card)
+  for (const v of voiceParts(s, tasks).filter((x) => x.state === 'ready' && x.round)) {
+    const r = v.round!;
+    const p = roundProgress(r);
     items.push({
-      key: 'pick:voices', id: '', title: 'Voices', chip: 'Voices', group: 'gate', kind: 'voices',
-      state: ready.length ? 'ready' : held ? 'waiting' : running.length ? 'running' : 'waiting',
-      meta: ready.length ? `${ready.map((v) => v.id).join(' ')} ready · ${ready.length} of ${voices.length}` : held ? 'Waiting for faces'
-        : running.length ? `${running.map((v) => v.id).join(' ')} running` : 'Not started',
+      key: `pick:${v.id}:voice`, id: v.id, title: `${v.name} voice`, chip: `${v.id} · ${v.name} voice`, group: 'gate', kind: 'voices', state: 'ready',
+      meta: `Round ${roundNo(r)} · ${p.landed} ${p.landed === 1 ? 'voice' : 'voices'} landed${r.date ? ` ${fmtDate(r.date)}` : ''}`, round: r, progress: p,
+      prediction: r.prediction, predictionNote: r.prediction ? predictionNote(r) : undefined,
     });
   }
   for (const l of s.locations) for (const pr of l.props ?? []) {
@@ -296,7 +317,17 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
       meta: `${go.length} ${go.length === 1 ? 'prompt' : 'prompts'} ready${taken.length ? ` (${go.join(' ')}; ${taken.join(' ')} already taken)` : ''} · review the scenes, their prompts and the assets fed in, then say go`,
     });
   }
+  // what "Done picking" just sent is not asked again while the server catches up (data/film.tsx)
+  if (s.sentKeys?.length) { const sent = new Set(s.sentKeys); return items.filter((g) => !sent.has(g.key)); }
   return items;
+}
+
+/** The gate's picks that ask the user to choose now ("Waiting for you" is only cards to choose from): only those whose round has landed (a round being made, queued or not started is no
+ *  choice yet), and each question once: a character's voice pick goes where Alma's own card at Voices asks to pick
+ *  that character's voice. */
+export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
+  return gate.filter((g) => g.state === 'ready'
+    && !(g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id))));
 }
 
 /** The page a stage belongs to, as the sidebar names it. */
@@ -309,7 +340,8 @@ export const STAGE_SHORT: Record<Stage, string> = {
 export function filmSubtitle(s: FilmState, tasks: TaskCard[]): string {
   const stage = s.film.stage;
   const name = stage ? STAGE_SHORT[stage] : 'Story';
-  const waiting = gateItems(s, tasks).length + (s.feed?.asks.length ?? 0);
+  const asks = s.feed?.asks ?? [];
+  const waiting = gateChoices(gateItems(s, tasks), asks).length + asks.length;
   return waiting ? `${name} · ${picksWaiting(waiting)}` : name;
 }
 

@@ -21,7 +21,7 @@ import { childEnv } from '../childEnv';
 import { claudeConfig } from '../claude/config';
 import { pythonBin } from '../config';
 import { natCmp, titleCase } from '../films/util';
-import { invalidateFilmState } from '../films/state';
+import { pokeFilm } from '../films/watcher';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
 import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, locationDraft, roundFolders, voiceDraft, type FilmInfo } from '../library/sources';
 import { filmTarget, type FilmTarget } from './film';
@@ -271,7 +271,7 @@ export async function makePick(raw: PickInput, film: string, opts: PickOptions =
         throw new PickError('voices/options.json not found or not valid', 404);
       }
       script = await runVoicePick(ft, w, [target, String(n), '--note', words]);
-      next.push(`pick.py recorded the pick in voices/cast.json and called no service. Speak no sample lines; make the voice reusable if it is not a preset and cut the element line from the picked preview, as the voices note says (step 5 on)`);
+      next.push(`pick.py recorded the pick in voices/cast.json and called no service. Speak no sample lines; make the voice reusable if it is not a preset and cut the element line from the picked preview, as the voices note says (step 5 on); the line asks for no yes of its own: it goes to the user inside the character's one element go card, with the sheet and the face (the show recipe)`);
     }
     wrote.push(ft.show(path.join(ft.dir, 'voices', 'cast.json')), ft.show(path.join(ft.dir, 'voices', 'options.json')));
     if (!libEntry) {
@@ -357,7 +357,8 @@ export async function makePick(raw: PickInput, film: string, opts: PickOptions =
     await sendToAlma(ft.slug, message);
     notified = true;
   }
-  if (!opts.dryRun) invalidateFilmState(ft.slug);
+  // the pages hear of it now, not when the folder watcher sees the files (a pick card stayed on the phone)
+  if (!opts.dryRun) pokeFilm(ft.slug);
   return {
     ok: true, dryRun: !!opts.dryRun, film: ft.slug, kind, target, candidate,
     writes: w.records, tasteRow: taste.line,
@@ -435,6 +436,7 @@ async function pickSound(input: PickInput, film: string, opts: PickOptions): Pro
     await sendToAlma(ft.slug, message);
     notified = true;
   }
-  if (!opts.dryRun) invalidateFilmState(ft.slug);
+  // the pages hear of it now, not when the folder watcher sees the files (a pick card stayed on the phone)
+  if (!opts.dryRun) pokeFilm(ft.slug);
   return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, kind: 'sfx', target: name, candidate: none ? 'none' : String(n), writes: w.records, tasteRow, message, notified, ...(script ? { script } : {}) };
 }

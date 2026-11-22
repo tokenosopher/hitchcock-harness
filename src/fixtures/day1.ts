@@ -302,7 +302,17 @@ function waitingAsks(): FeedCard[] {
       media: NEIGHBOUR_VOICES.map(([k, note]) => ({ kind: 'audio' as const, path: neighbourVoice(k), label: `option ${k} · ${note}`, option: `option-${k}` })),
       ask: { kind: 'pick', options: NEIGHBOUR_VOICES.map(([k, note, hz]) => ({ id: `option-${k}`, label: `option ${k} · ${note} (${hz} Hz)`, path: neighbourVoice(k) })), prediction: 'option-2' } }),
     card({ id: 'GO-S3-closer', title: 'Go for a closer S3 shot 3? One take, 7 seconds', place: 'scenes', ids: ['S3'], date: '2026-11-15T12:00:00Z',
-      text: ['The light blinking back, closer, so it reads on the phone.'],
+      // a long text with a list of four long lines, then more words: the card folds it under "Show more" and draws the
+      // list as a list
+      text: [[
+        'The light blinking back, closer, so it reads on the phone. Its storyboard has your yes, its prompt passed the checker and the critic, and its references are uploaded. On **the Go page** you can read the prompt and see the exact pictures fed into it.',
+        'One take, as a 480p draft with sound, in four beats:',
+        '- Beat 1, the dark: 2 s, the black sea through the window, the glass catching the lamp the way the storyboard has it (prompt v4, critic 8.7)',
+        '- Beat 2, the line: 3 s, "Someone\'s there", said low, Tobias\'s eyes on the water; one second longer than the script so the line ends inside the clip',
+        '- Beat 3, the turn: 1 s, Maren looks at him and back at the window, the framing from the storyboard, the room\'s look and light from the view',
+        '- Beat 4, the hold: 1 s, a silent hold trimmed in the edit if it runs long',
+        'Things worth knowing before you say go: the painted view missed its camera by a little after two repaints, so this shot takes only the room\'s look and light from it.',
+      ].join('\n')],
       media: [{ kind: 'image', path: board(3, 3), label: 'S3 shot 3, the board' }],
       ask: { kind: 'go', options: [], cost: '21 credits for one 480p draft with sound (7 seconds at 3 credits a second)' } }),
   ];

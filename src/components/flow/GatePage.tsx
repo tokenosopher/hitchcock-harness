@@ -1,19 +1,23 @@
 'use client';
-// The gate page (Main, the default page while anything waits): the inbox of every pick waiting for the user,
-// "In the chains" (face picks, master picks) and "At the gate" (voices, the rest, and the go for the video).
-// A pick is the one thing a button does itself (build step 2): two steps in the card, then the pick route writes
-// it and tells Alma. Everything that would spend credits still prefills the composer (SPEC principle 1). design/boards/Main.dc.html.
+// "Waiting for you" (Main, the default page while anything waits): one list of the cards that ask the user to choose,
+// Alma's asking cards and the picks whose round landed together, the most important first (waitList.ts
+// byImportance). What is still being made is one quiet line, no card; each step's own page shows its work.
+// A pick is the one thing a button does itself (build step 2): a candidate tile selects it to look at, "Pick X" (or
+// "Choose this one" in the full-screen view) sets it aside, and "Done picking" writes it and tells Alma. Everything that would spend credits still prefills the composer (SPEC principle 1). design/boards/Main.dc.html.
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { GateItem } from '@/components/lib/derive';
 import { CHAIN_A, CHAIN_B, ORDER, runningSummary, type Flow } from '@/components/lib/flow';
+import { Reveal } from '@/components/shell/Reveal';
 import { capital, fmtDate, repoPath, word } from '@/components/lib/format';
 import { useFilm } from '@/components/data/film';
+import { useUIActions } from '@/components/data/ui';
 import { Media } from '@/components/media/Media';
 import { Badge, Btn, Dot, type DotState } from '@/components/shell/atoms';
 import { IconBookmark } from '@/components/shell/icons';
 import { FromLibrary } from '@/components/library/FromLibrary';
-import { PickButton, SaveButton } from '@/components/library/PickButton';
+import { choosePick, pickChoiceId, PickButton, SaveButton } from '@/components/library/PickButton';
+import { useChoice } from '@/components/data/choices';
 import type { LibraryKind, PickBody } from '@/components/library/data';
 import type { FilmState } from '@/server/types';
 import { cn } from '@/lib/utils';
@@ -22,6 +26,8 @@ import { Who } from '@/components/feed/Who';
 import { castBoxLines } from '@/components/characters/Cards';
 import { VoiceRounds } from './VoiceOptions';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { beingMade, waitItemsOf } from './waitList';
+import { useKept } from './useKept';
 
 function stateDot(st: GateItem['state']): DotState {
   return st === 'running' ? 'running' : st === 'ready' ? 'done' : st === 'queued' ? 'queued' : 'waiting';
@@ -29,6 +35,7 @@ function stateDot(st: GateItem['state']): DotState {
 
 export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices }: { p: GateItem; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void; from?: string; voices?: string[] }) {
   const [sel, setSel] = useState<string | undefined>(p.prediction);
+  const ui = useUIActions();
   const state = useFilm().state;
   const film = state?.film;
   const sheetPath = p.kind === 'sheet' ? state?.characters.find((c) => c.id === p.id)?.sheet?.path : undefined;
@@ -38,11 +45,14 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
   const all = p.round?.candidates.filter((c) => c.path) ?? [];
   const shown = all.slice(0, 16);
   const badge = ready ? 'Ready' : wait ? 'Waiting' : p.state === 'queued' ? 'Queued' : 'Running';
-  const tabs = (ready && (p.kind === 'face' || p.kind === 'master')) || p.kind === 'voices';
+  // a character's voice card is the voices to hear and choose, nothing more
+  const tabs = ready && (p.kind === 'face' || p.kind === 'master');
   const target = p.id || p.title;
   // what the pick route calls each gate item, and the library kind its candidates belong to
   const pickKind: PickBody['kind'] | undefined = ({ face: 'face', master: 'location', clothing: 'wardrobe', prop: 'prop' } as const)[p.kind as 'face' | 'master' | 'clothing' | 'prop'];
   const libKind: LibraryKind | undefined = p.kind === 'face' ? 'face' : p.kind === 'master' ? 'location' : undefined;
+  // the candidate set aside for Done picking, if any (the tile is only selected to look at until then)
+  const setAside = useChoice(film?.slug ?? '', pickKind ? pickChoiceId({ kind: pickKind, target }) : '')?.pick?.candidate;
   const saveRef = (id: string) => p.round?.candidates.find((c) => c.id === id)?.path;
   return (
     <article className={cn('flex min-w-0 flex-col gap-3 rounded-[10px] border bg-well px-4 py-3.5', wait ? 'border-dashed border-edge-strong' : 'border-edge')}>
@@ -83,9 +93,6 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
       {tabs && tab === 'lib' && film && libKind && (
         <div className="pl-3.5"><FromLibrary film={film.slug} kind={libKind} target={target} from={from} /></div>
       )}
-      {tabs && tab === 'lib' && p.kind === 'voices' && film && (
-        <span className="pl-3.5 text-[12.5px] text-ink-3">A library voice is chosen per character: <Link href={`/films/${film.slug}/character/voices`} className="text-ink">open Voices</Link>, pick the character, then its “From the library” tab.</span>
-      )}
       {ready && tab === 'round' && p.kind === 'sheet' && (
         <div className="flex flex-col gap-3 pl-3.5">
           {/* what is being approved: the sheet itself (a click opens it full screen) and who the character is */}
@@ -93,30 +100,31 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
           {state && <Who state={state} ids={[p.id]} face={false} />}
           <div className="flex flex-wrap items-center gap-2">
             <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, p.chip)} title="Puts the words in Alma's box; press send there">Approve the sheet</Btn>
-            <Btn onClick={() => onPrefill(`About the ${p.id} sheet: `, p.key, p.chip)}>Ask for a change</Btn>
+            <Btn onClick={() => ui.about({ id: p.key, label: p.chip }, `the ${p.id} sheet: a change to it`, `What should change in the ${p.id} sheet…`)}>Ask for a change</Btn>
             {film && <Link href={`/films/${film.slug}/character/${p.id}`} className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium text-sub no-underline hover:text-ink">Open {p.id}</Link>}
           </div>
         </div>
       )}
       {/* each voice heard and picked in the card itself */}
-      {p.kind === 'voices' && ready && tab === 'round' && state && <div className="pl-3.5"><VoiceRounds s={state} from={from} only={voices} /></div>}
-      {p.kind === 'voices' && film && tab === 'round' && (
-        <div className="pl-3.5"><Link href={`/films/${film.slug}/character/voices`} className="inline-flex h-8 items-center rounded-lg border border-edge-strong px-3 text-[13px] font-medium text-ink no-underline hover:bg-raised">Open Voices</Link></div>
-      )}
+      {p.kind === 'voices' && ready && state && <div className="pl-3.5"><VoiceRounds s={state} from={from} only={voices ?? (p.id ? [p.id] : undefined)} /></div>}
       {/* a row that has nothing to choose yet still leads somewhere */}
       {!ready && film && p.id && (
         <div className="pl-3.5">
           <Link href={/^[LP]/.test(p.id) ? `/films/${film.slug}/locations` : `/films/${film.slug}/character/${p.id}`} className="text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Open {p.id}</Link>
         </div>
       )}
-      {ready && tab === 'round' && shown.length > 0 && (
+      {ready && tab === 'round' && p.kind !== 'voices' && shown.length > 0 && (
         <>
-          <div className="scroll strip flex gap-1 overflow-x-auto pb-1 pl-3.5 pr-4 pt-0.5">
+          <div data-zoom-set className="scroll strip flex gap-1 overflow-x-auto pb-1 pl-3.5 pr-4 pt-0.5">
             {shown.map((c, i) => {
               const on = c.id === sel;
               return (
-                <button key={c.id} type="button" aria-label={`Candidate ${c.id}`} aria-pressed={on}
-                  onClick={() => { setSel(c.id); onChip(`cand:${target}`, `${target} · ${c.id}`); }}
+                <button key={c.id} type="button" aria-label={`Candidate ${c.id}`} aria-pressed={on} data-zoom-choose data-zoom-chosen={pickKind ? String(setAside === c.id) : undefined}
+                  onClick={(e) => {
+                    setSel(c.id); onChip(`cand:${target}`, `${target} · ${c.id}`);
+                    // "Choose this one" in the full-screen view chooses it as "Pick" does: set aside for Done picking
+                    if (e.currentTarget.hasAttribute('data-zoom-from-view') && film && pickKind) choosePick(film.slug, { kind: pickKind, target, round: p.round?.id, candidate: c.id, prediction: p.prediction, from }, `${c.id} for ${target}`);
+                  }}
                   className={cn('relative flex h-12 w-9 flex-none cursor-pointer items-end justify-center overflow-hidden rounded-[5px] border pb-1 font-mono text-[9.5px] focus-visible:outline-offset-[-2px]', on ? 'border-sub text-ink outline outline-1 outline-offset-1 outline-ink' : 'border-line text-mute', i % 3 === 0 ? 'bg-bubble' : 'bg-tile')}>
                   {c.path && film && <Media path={repoPath(film.folder, film.repo, c.path)} w={160} missingLabel="" className="absolute inset-0" />}
                   <span className={cn('relative', c.path && film && 'rounded-[3px] bg-black/60 px-0.5 text-ink-3')}>{c.id.split('-').pop()}</span>
@@ -144,7 +152,8 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
 
 /** The one hard spend gate: every remaining scene has a checked prompt and no take yet (SPEC principle 7).
  *  Its button opens the review (/films/[film]/go), where the go is sent from. */
-export function GoCard({ p, base, onChip, onPrefill }: { p: GateItem; base: string; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void }) {
+export function GoCard({ p, base, onChip }: { p: GateItem; base: string; onChip: (id: string, label: string) => void }) {
+  const ui = useUIActions();
   return (
     <article className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
       <button type="button" onClick={() => onChip(p.key, p.chip)} aria-label={`Add ${p.chip} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
@@ -159,7 +168,7 @@ export function GoCard({ p, base, onChip, onPrefill }: { p: GateItem; base: stri
       <div className="flex flex-wrap items-center gap-2 pl-3.5">
         {/* the go itself is sent from the review: every scene, its prompt and the exact assets fed in, then the quote */}
         <Link href={`${base}/go`} onClick={() => onChip(p.key, p.chip)} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-3 text-[13px] font-medium text-bg no-underline hover:bg-ink-3">Review and go</Link>
-        <button type="button" onClick={() => onPrefill(`Before the go for the video (${p.scenes?.join(', ')}), change: `, p.key, `Go · ${p.scenes?.join(' ')}`)} className="inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-[13px] font-medium text-sub hover:text-ink">Change something first</button>
+        <button type="button" onClick={() => ui.about({ id: p.key, label: `Go · ${p.scenes?.join(' ')}` }, `a change before the go for the video (${p.scenes?.join(', ')})`, 'What should change before the go…')} className="inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-[13px] font-medium text-sub hover:text-ink">Change something first</button>
       </div>
     </article>
   );
@@ -191,17 +200,16 @@ function idleLines(s: FilmState, flow: Flow): { title: string; sub: string } {
 }
 
 export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; flow: Flow; base: string; onChip: (id: string, label: string) => void; onPrefill: (t: string, id: string, label: string) => void }) {
-  const items = flow.gate;
-  const ready = items.filter((i) => i.state === 'ready');
-  const chains = items.filter((i) => i.group === 'chains');
-  const gate = items.filter((i) => i.group === 'gate');
-  const locNames = s.locations.filter((l) => chains.some((c) => c.id === l.id)).map((l) => l.id);
-  // in the order the work goes: a character's face before their voice
-  const asks = [...flow.asks].sort((a, b) => ORDER.indexOf(a.place) - ORDER.indexOf(b.place));
+  // one list of what asks the user to choose, the most important first (waitList.ts, the same list What's next shows);
+  // an answered one folds away instead of vanishing
+  // the same list while the flow is the same: the kept rows compare it by identity
+  const items = useMemo(() => waitItemsOf(flow), [flow]);
+  const rows = useKept(items);
+  const made = beingMade(flow);
   const working = flow.working;
   // nothing waits, but questions are being worked on: say that, not the next stage
-  const idle = flow.waiting ? undefined : working.length
-    ? { title: `Nothing waits for you · ${working.length} in progress`, sub: `Alma is working on ${working.length === 1 ? 'the question' : `the ${working.length} questions`} below. ${working.length === 1 ? 'It comes' : 'They come'} back here when she needs your answer.` }
+  const idle = items.length ? undefined : working.length
+    ? { title: `Nothing waits for you · ${working.length} in progress`, sub: `Alma is working on ${working.length === 1 ? 'a question' : `${working.length} questions`}. ${working.length === 1 ? 'It comes' : 'They come'} back here when she needs your answer.` }
     : idleLines(s, flow);
   const toRepo = (rel: string) => repoPath(s.film.folder, s.film.repo, rel);
   // the people steps in the board's own words ("5 picked, 1 group"), so the list under the gate and the boxes above it
@@ -210,15 +218,8 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
   return (
     <>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="lbl">Gate · where both chains meet</span>
-        <h1 className="m-0 text-[20px] font-semibold tracking-[-0.02em]">{idle ? idle.title : asks.length ? `Waiting for you · ${flow.waiting}` : `Picks waiting · ${items.length}`}</h1>
-        <span className="text-[13px] leading-normal text-sub">
-          {idle ? idle.sub
-            : !items.length ? `Alma asked and waits for your answer. ${asks.length === 1 ? 'It is' : 'Each is'} also on the page of the work it belongs to.`
-            : items.every((i) => i.kind === 'go')
-              ? 'Every pick in the chains is made. The go for the video is the one hard spend gate: review every scene, its prompt and the assets fed in, read the quote, then say go.'
-              : `Faces and the master are picked inside the chains as they land; the gate holds the voices and anything still unpicked. ${ready.length ? `${capital(word(ready.length))} ${ready.length === 1 ? 'is' : 'are'} ready now.` : 'None is ready yet.'}`}
-        </span>
+        <h1 className="m-0 text-[20px] font-semibold tracking-[-0.02em]">{idle ? idle.title : `Waiting for you · ${items.length}`}</h1>
+        {idle && <span className="text-[13px] leading-normal text-sub">{idle.sub}</span>}
       </div>
       <StepIntro step="gate" width="full" />
       {flow.done && idle && (
@@ -231,30 +232,25 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
           ))}
         </div>
       )}
-      {asks.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><span className="lbl">Alma asks</span><span className="text-[12px] text-mute">rounds to pick from · a yes · the go for a quoted job</span></div>
-          {asks.map((c) => <AskCard key={c.key} film={s.film.slug} card={c} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[c.place]?.name}</span>} />)}
+      {rows.length > 0 && (
+        <div data-wait-list className="-mb-2.5 flex flex-col">
+          {rows.map(({ it, here }) => {
+            const g = it.gate;
+            return (
+              <Reveal key={it.key} open={here} className="min-w-0">
+                <div data-wait-item={it.key} className="pb-2.5">
+                  {it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[it.card.place]?.name}</span>} />
+                    : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={onChip} />
+                    : g ? <PickCard p={g} onChip={onChip} onPrefill={onPrefill} voices={it.voiceIds} /> : null}
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       )}
-      {working.length > 0 && (
-        <div className={cn('flex flex-col gap-2.5', asks.length > 0 && 'pt-2.5')}>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><span className="lbl">In progress · {working.length}</span><span className="text-[12px] text-mute">being worked on, not waiting for you · the options are locked</span></div>
-          {working.map((c) => <AskCard key={c.key} film={s.film.slug} card={c} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[c.place]?.name}</span>} />)}
-        </div>
-      )}
-      {[{ label: 'In the chains', sub: `face pick per character · master pick${locNames.length === 1 ? ` for ${locNames[0]}` : ' per location'}`, list: chains },
-        { label: 'At the gate', sub: 'voices and anything still unpicked · the go for the video', list: gate }]
-        .filter((g) => g.list.length)
-        .map((g, i) => (
-          <div key={g.label} className={cn('flex flex-col gap-2.5', (i > 0 || asks.length > 0) && 'pt-2.5')}>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><span className="lbl">{g.label}</span><span className="text-[12px] text-mute">{g.sub}</span></div>
-            {g.list.map((p) => (p.kind === 'go'
-              ? <GoCard key={p.key} p={p} base={base} onChip={onChip} onPrefill={onPrefill} />
-              : <PickCard key={p.key} p={p} onChip={onChip} onPrefill={onPrefill} />))}
-          </div>
-        ))}
-      {items.some((i) => i.prediction) && <p className="m-0 text-[12.5px] leading-normal text-sub">Alma predicts your pick from your earlier picks; every pick is recorded.</p>}
+      {items.some((i) => i.gate?.prediction) && <p className="m-0 text-[12.5px] leading-normal text-sub">Alma predicts your pick from your earlier picks; every pick is recorded.</p>}
+      {/* work still running is no choice yet: one quiet line, no cards */}
+      {items.length > 0 && made > 0 && <p data-being-made className="m-0 text-[12.5px] leading-normal text-mute duration-200 animate-in fade-in-0">{made} more being made</p>}
     </>
   );
 }

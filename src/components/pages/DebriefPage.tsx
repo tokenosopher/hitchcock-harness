@@ -20,6 +20,7 @@ import { countsOf, groupsOf, isAnswered, KIND_WORDS, type Debrief, type DebriefA
 import { cn } from '@/lib/utils';
 import { filmMeta, filmPath, useFilmPage } from './common';
 import { useJson } from './postCommon';
+import { almaFetch } from '@/components/data/almaOutbox';
 
 interface Data { debrief?: Debrief; answers: DebriefAnswers; problems: string[] }
 const AUDIO = /\.(wav|mp3|m4a|aac|flac|ogg)$/i;
@@ -135,7 +136,7 @@ export function DebriefPage() {
   const sendAll = async () => {
     setSend({ k: 'busy' });
     try {
-      const r = await fetch(`/api/films/${film}/debrief`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ send: true }) });
+      const r = await almaFetch(film, `/api/films/${film}/debrief`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ send: true }) });
       const j = (await r.json().catch(() => ({}))) as { answers?: DebriefAnswers; error?: string };
       if (!r.ok) { setSend({ k: 'error', text: j.error ?? `Not sent (${r.status})` }); return; }
       if (j.answers) setAnswers(j.answers);

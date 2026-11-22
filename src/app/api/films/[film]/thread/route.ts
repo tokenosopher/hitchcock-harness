@@ -2,13 +2,13 @@
 // GET ?info=1 → ThreadInfo
 // POST {text, context?} → 202 {event, info}: queued for Alma; follow the stream route for her answer
 // PATCH {model} → changes the model this film's Alma runs on; answers the new ThreadInfo
-// DELETE → interrupts Alma's current turn
+// DELETE → interrupts Alma's current turn (a sample film's open turn ends: src/fixtures/mock.ts mockStop)
 import { connection } from 'next/server';
 import { defuse } from '@/lib/defuse';
 import { getAlma } from '@/server/claude/process';
 import { isAlmaModel } from '@/server/claude/model';
 import { hasReserveKey, readReserve } from '@/server/claude/reserve';
-import { isMock, mockPost, mockThread } from '@/fixtures/mock';
+import { isMock, mockPost, mockStop, mockThread } from '@/fixtures/mock';
 import { knownThread, parseContext, sendToAlma, threadHistory, threadInfo, validFilm } from '@/server/claude/thread';
 
 type Ctx = { params: Promise<{ film: string }> };
@@ -76,6 +76,10 @@ export async function DELETE(_req: Request, ctx: Ctx): Promise<Response> {
   await connection();
   const { film } = await ctx.params;
   if (!validFilm(film)) return Response.json({ error: 'unknown film' }, { status: 404 });
+  if (isMock()) {
+    mockStop(film);
+    return Response.json({ ok: true });
+  }
   const r = await getAlma(film).interrupt();
   return Response.json(r, { status: r.ok ? 200 : 409 });
 }

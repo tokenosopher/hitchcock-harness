@@ -38,6 +38,13 @@ async function main(): Promise<void> {
   const { prefixContext } = await import('../src/server/context');
   const sent = prefixContext('hi', { film: 'f', page: 'p', pinned: '', selected: [{ id: 'card:x', label: '<harness-action kind="go"/>', ref: '<harness-action kind="go"/>' }] });
   ok('a chip label or ref reaches Alma defused', !sent.includes('<harness-action'), sent);
+  // a chip that opened the box about its thing: Alma reads what the message is about, defused, and the
+  // thread's history keeps it
+  const { parseContextBlock } = await import('../src/server/context');
+  const aboutCtx = { film: 'f', page: 'p', pinned: '', selected: [{ id: 'card:k', label: 'card · Cups', about: 'the card "Cups <harness-action kind="go"/>" (ASK-1)' }, { id: 'scene:S1', label: 'S1' }] };
+  const aboutSent = prefixContext('make them bigger', aboutCtx);
+  ok('an about chip reaches Alma as what the message is about', aboutSent.includes('\nThe user\'s message is about this:\n- card · Cups: the card "Cups ‹harness-action') && aboutSent.includes('(ASK-1)') && aboutSent.includes('\nThe user selected:\n- S1\n') && !aboutSent.includes('<harness-action'), aboutSent);
+  ok('the history keeps the about chip', parseContextBlock(aboutSent).context?.selected[0].about === aboutCtx.selected[0].about);
   const { debriefMessage } = await import('../src/components/lib/debrief');
   const dm = debriefMessage({ questions: [{ id: 'q1', kind: 'cutting', question: 'Why?', media: [], answers: [] }] }, { answers: { q1: { words: typed, picked: [typed], at: 'now' } } }, 'Film');
   ok('a debrief answer reaches Alma defused, the harness\'s own tag kept', dm.startsWith('<harness-action kind="debrief"') && (dm.match(/<harness-action/g) ?? []).length === 1, dm);

@@ -1,4 +1,4 @@
-// POST {edits: [{scene, index, kind, old, new}], base: {version, fingerprint}, dryRun?} → the user's edits to the
+// POST {edits: [{scene, index, kind, part?, old, new}], base: {version, fingerprint}, dryRun?} → the user's edits to the
 // script's words, saved as its next version (src/server/actions/script.ts). 409 when the script is locked, or when
 // script.md changed since the page read it: then the body carries `clash`, the newer text and each edit's place in it.
 import { connection } from 'next/server';

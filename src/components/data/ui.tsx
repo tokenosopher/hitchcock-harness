@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Chip } from '@/server/types';
 import { TOKEN_OPEN, type InlineRef } from '@/lib/refs';
+import { flushSync } from 'react-dom';
 import { useFilm } from './film';
 
 interface UIValue {
@@ -21,6 +22,10 @@ interface UIValue {
   setDraftRefs: (f: (refs: Record<string, InlineRef>) => Record<string, InlineRef>) => void;
   /** Put a message in the composer instead of acting (buttons that would spend credits do this). */
   prefill: (text: string, chip?: Chip) => void;
+  /** Opens the box about a thing (a card's "Say something else", "Ask Alma about S1"): the box starts empty, the thing
+   *  shows as its chip and the box asks `placeholder`. `about` is what the message is about, in words; Alma reads it
+   *  with the chip ahead of the message. Removing the chip makes it an ordinary message. */
+  about: (chip: Chip, about: string, placeholder: string) => void;
   /** Brings Alma's column out and puts the cursor in her box, leaving its words as they are. */
   focusBox: () => void;
   /** The text a button replaced, when the box still holds exactly what the button wrote: Command-Z in the box
@@ -125,7 +130,7 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   const addChip = useCallback((c: Chip) => setChips((l) => {
     const i = l.findIndex((x) => x.id === c.id);
     if (i < 0) return [...l, c];
-    if (l[i].label === c.label && l[i].ref === c.ref) return l;
+    if (l[i].label === c.label && l[i].ref === c.ref && l[i].about === c.about && l[i].placeholder === c.placeholder) return l;
     const next = l.slice();
     next[i] = c;
     return next;
@@ -142,30 +147,73 @@ export function UIProvider({ film, children }: { film: string; children: React.R
     // a button writes over what is in the box: what was there is kept, so Command-Z in the box brings it back
     const had = draftNow.current;
     if (had.trim() && had !== text) { back.current.push({ prev: had, next: text }); fwd.current = []; keepBack(); }
-    setDraft(text);
-    // Alma's column may be folded away (13 Nov): words put in her box bring it back
-    window.dispatchEvent(new Event('hh:alma-show'));
-    setTimeout(() => composerRef.current?.focus(), 80);
+    // Alma's column may be folded away (13 Nov): words put in her box bring it back. All of it is drawn now, inside
+    // the tap, so the cursor can go in the box in the same tap (below).
+    flushSync(() => {
+      setDraft(text);
+      window.dispatchEvent(new Event('hh:alma-show'));
+    });
+    focusComposer(composerRef);
   }, [addChip, keepBack]);
+  const about = useCallback((chip: Chip, words: string, placeholder: string) => {
+    // one thing at a time: a chip an earlier "about" button put there goes, as its words used to be written over
+    setChips((l) => l.filter((x) => !x.about || x.id === chip.id));
+    prefill('', { ...chip, about: words, placeholder });
+  }, [prefill]);
   const focusBox = useCallback(() => {
-    window.dispatchEvent(new Event('hh:alma-show'));
-    setTimeout(() => composerRef.current?.focus(), 80);
+    flushSync(() => { window.dispatchEvent(new Event('hh:alma-show')); });
+    focusComposer(composerRef);
   }, []);
 
   // The draft is not in this value: it changes on every key press, and everything that reads the UI state
   // (the whole thread, every page) would re-render with it. It has its own context, read by the message box only.
   const value = useMemo<UIValue>(() => ({
-    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, setDraftRefs, prefill, focusBox, undoDraft, redoDraft,
+    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, setDraftRefs, prefill, about, focusBox, undoDraft, redoDraft,
     openTask, setOpenTask, playhead, setPlayhead, composerRef, threadOpen, setThreadOpen, hint, setHint,
-  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraftRefs, prefill, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
+  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraftRefs, prefill, about, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
   // The setters and actions alone, which never change: a page that only writes (the pinned chip, the playhead, a
   // prefill) reads these, so it does not draw itself again each time the pinned chip or the playhead it set changes.
-  const actions = useMemo<UIActions>(() => ({ setPinned, setHint, setPlayhead, addChip, removeChip, prefill, focusBox }), [addChip, removeChip, prefill, focusBox]);
+  const actions = useMemo<UIActions>(() => ({ setPinned, setHint, setPlayhead, addChip, removeChip, prefill, about, focusBox }), [addChip, removeChip, prefill, about, focusBox]);
   return <Ctx.Provider value={value}><ActionsCtx.Provider value={actions}><DraftCtx.Provider value={draft}><RefsCtx.Provider value={refs}>{children}</RefsCtx.Provider></DraftCtx.Provider></ActionsCtx.Provider></Ctx.Provider>;
 }
 
+/** Puts the cursor at the end of Alma's box, ready to type. iOS raises the keyboard only for a focus() made inside the user's tap, so
+ *  this focuses at once, in the caller's handler (the box and her column are drawn by then: flushSync). If the box
+ *  can't take it yet (still inert, or not there), a hidden field takes the focus in the tap, which keeps the keyboard
+ *  up, and hands it to the box as soon as the box can take it. The focus scrolls nothing: on a phone the box is the
+ *  folded bar at the bottom, which rises onto the keyboard by itself (ThreadColumn, keyboardLift), so the page stays
+ *  where the user was reading (iOS's own scroll to the box does not happen with the keyboard already up, and when
+ *  it does it moves the page). */
+function focusComposer(ref: React.RefObject<HTMLTextAreaElement | null>): void {
+  const put = (): boolean => {
+    const el = ref.current;
+    if (!el || !el.isConnected || el.disabled || el.closest('[inert]')) return false;
+    // the open thread on a phone fills the screen and does not rise: there iOS's own scroll keeps her box in sight
+    const open = window.matchMedia('(max-width: 760px)').matches && !!el.closest('[data-thread-open]');
+    if (document.activeElement !== el) el.focus(open ? undefined : { preventScroll: true });
+    if (document.activeElement !== el) return false;
+    const n = el.value.length;
+    el.setSelectionRange(n, n);
+    return true;
+  };
+  if (put()) return;
+  const keep = document.createElement('input');
+  keep.setAttribute('aria-hidden', 'true');
+  keep.tabIndex = -1;
+  // 16px, so iOS does not zoom to it; out of sight, but not display:none, which could not take the focus
+  keep.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;pointer-events:none';
+  document.body.appendChild(keep);
+  keep.focus({ preventScroll: true });
+  let tries = 0;
+  const step = () => {
+    if (put() || ++tries > 30) { keep.remove(); return; }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 /** The parts of the UI state a page writes and never reads: stable for the film. */
-export type UIActions = Pick<UIValue, 'setPinned' | 'setHint' | 'setPlayhead' | 'addChip' | 'removeChip' | 'prefill' | 'focusBox'>;
+export type UIActions = Pick<UIValue, 'setPinned' | 'setHint' | 'setPlayhead' | 'addChip' | 'removeChip' | 'prefill' | 'about' | 'focusBox'>;
 const ActionsCtx = createContext<UIActions | null>(null);
 export function useUIActions(): UIActions {
   const v = useContext(ActionsCtx);

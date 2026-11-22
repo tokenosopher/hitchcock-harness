@@ -19,6 +19,8 @@ import { parseSrt } from './subs';
 import { fetchSrt } from './Subtitles';
 import { useWaitingNow, WaitingNow } from '@/components/flow/WaitingNow';
 import { waitsByStep, waitsLine, type WaitItem } from '@/components/flow/waitList';
+import { MakingLines, useMaking } from '@/components/flow/Making';
+import { MAKING_STEPS, makingFor, type Making } from '@/components/lib/making';
 
 /** The route's answer, read once and on each change of the film's folder (`changed`, the state's time); a tick shows at
  *  once and is saved, and goes back with a line saying why when the save fails. `also`: a version whose render part
@@ -115,6 +117,8 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: 
   const w = useWaitingNow();
   const [openWait, setOpenWait] = useState<string>();
   const waits = useMemo(() => (w ? waitsByStep(w.items, view.steps) : new Map<string, WaitItem[]>()), [w, view.steps]);
+  // what is being made for each step not done yet and has not landed (the loading state)
+  const making = useMaking();
   // the early steps from the script on (15 Nov): the ones done before the step to look at fold into one row (two or
   // more), so the step to do is near the top, and a film with its takes in reads as it did, its seven under one line
   const [unfold, setUnfold] = useState(false);
@@ -148,7 +152,7 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: 
           </li>
         )}
         {shown.map((s) => (
-          <Row key={s.id} s={s} onDo={onDo} onUntick={onUntick} waits={waits.get(s.id)} onWait={setOpenWait}
+          <Row key={s.id} s={s} onDo={onDo} onUntick={onUntick} waits={waits.get(s.id)} onWait={setOpenWait} making={s.done ? undefined : makingFor(making, MAKING_STEPS[s.id] ?? [])}
             cls={foldable && view.steps.indexOf(s) < lead ? 'duration-200 animate-in fade-in-0 slide-in-from-top-1' : undefined} />
         ))}
       </ol>
@@ -157,8 +161,10 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: 
   );
 }
 
-function Row({ s, onDo, onUntick, cls, waits, onWait }: {
+function Row({ s, onDo, onUntick, cls, waits, onWait, making }: {
   s: LeftStep; onDo: (d: LeftDo) => void; onUntick: (s: LeftStep) => void; cls?: string;
+  /** What is being made for this step and has not landed yet (lib/making.ts). */
+  making?: Making[];
   /** What waits for the user and holds this step up; a press opens the first of it in the list above. */
   waits?: WaitItem[]; onWait: (key: string) => void;
 }) {
@@ -181,6 +187,7 @@ function Row({ s, onDo, onUntick, cls, waits, onWait }: {
             {s.versions && <span key={s.versions} data-step-versions className="ml-2 font-mono text-[11px] font-normal text-mute duration-200 animate-in fade-in-0">{s.versions}</span>}
           </span>
           <span key={s.facts} data-step-facts className="line-clamp-2 text-[12px] leading-snug text-sub duration-200 animate-in fade-in-0" title={s.versions ? `${s.facts} (${s.versions})` : s.facts}>{s.facts}</span>
+          <MakingLines items={making ?? []} className="pt-0.5" />
           {waits && (
             <button type="button" key={waitsLine(waits)} data-step-waits onClick={(e) => { stop(e); onWait(waits[0].key); }} onKeyDown={stop} title={waits.map((x) => x.title).join('\n')}
               className="line-clamp-2 cursor-pointer border-0 bg-transparent p-0 text-left text-[12px] leading-snug text-warn underline decoration-warn/40 underline-offset-4 transition-colors duration-150 hover:decoration-warn duration-200 animate-in fade-in-0">{waitsLine(waits)}</button>

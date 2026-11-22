@@ -12,7 +12,10 @@
 //                         same content, so the master is current and the final has no amber note (ASKS 49)
 //   sample-left-posting   everything up to the final, which is the master of the cut; Reddit and YouTube posted of six
 //   sample-left-done      everything done: every platform posted
-import type { FeedCard, FilmRef, FilmState, Timeline } from '@/server/types';
+//   sample-left-pickups   the shape of a real film at its edit: every scene in the cut, nothing
+//                         approved yet, and three pick-ups being made for S1, S2 and S3 (new previz and boards, the
+//                         board check), each a running sub-agent "pick-up · FIX-…"; no take of theirs landed
+import type { FeedCard, FilmRef, FilmState, PickupWork, ThreadEvent, Timeline } from '@/server/types';
 import type { SeedanceMark } from '@/components/edit/marks';
 import type { LeftFile } from '@/components/edit/left';
 import type { ReleaseFile } from '@/components/release/file';
@@ -24,7 +27,7 @@ const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
 const FROM = 'assets/films/the-lighthouse/';
 
-type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done';
+type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-pickups';
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
 export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-start': ref('sample-left-start', "Sample · what's next: nothing done", 9),
@@ -33,7 +36,10 @@ export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-same': ref('sample-left-same', "Sample · what's next: a move and its undo", 10),
   'sample-left-posting': ref('sample-left-posting', "Sample · what's next: posting", 12),
   'sample-left-done': ref('sample-left-done', "Sample · what's next: done", 12),
+  'sample-left-pickups': ref('sample-left-pickups', 'Sample · three pick-ups being made', 8),
 };
+/** The samples where nothing is approved, ticked or full size yet. */
+const START = (slug: string) => slug === 'sample-left-start' || slug === 'sample-left-pickups';
 const isLeft = (slug: string): slug is Id => slug in LEFT_SAMPLES;
 export const leftSampleFilms = (): FilmRef[] => Object.values(LEFT_SAMPLES);
 
@@ -95,14 +101,40 @@ export function leftSampleState(slug: string): FilmState | undefined {
     cut: { name: `cut ${cur.version}`, fps: cur.fps, source: { cut: `cut ${cur.version}`, from: [`cut/${cur.version}.json`], date: '2026-11-14', label: `from cut/${cur.version}.json` },
       versions: c.versions, current: cur },
     post: { cuts: [], masters: [], captions: [] },
-    feed: { counts: slug === 'sample-left-start' ? {} : { edit: 1 }, asks: [] },
+    feed: { counts: START(slug) ? {} : { edit: 1 }, asks: [] },
+    ...(slug === 'sample-left-pickups' ? { pickups: PICKUPS } : {}),
   };
 }
+
+// ---- sample-left-pickups: the three pick-ups' folders, and Alma's sub-agents on them
+
+const pickup = (name: string, scene: string, o: Partial<PickupWork>): PickupWork => ({ name, scenes: [scene], previz: true, boards: 0, checked: false, prompts: 0, landed: 0, generating: 0, stopped: 0, ...o });
+/** S1 has its boards and waits for their check; S3 is at its new previz; S2 is at the check after three boards. An
+ *  older pick-up of S1 landed long ago and says nothing. */
+const PICKUPS: PickupWork[] = [
+  pickup('FIX-S1-wide', 'S1', { boards: 1 }),
+  pickup('FIX-S3-window', 'S3', {}),
+  pickup('FIX-S2-desk', 'S2', { boards: 3 }),
+  pickup('FIX-bottle-S1', 'S1', { boards: 0, previz: false, prompts: 2, promptPassed: true, landed: 1 }),
+];
+const tAt = (m: number) => `2026-11-21T09:${String(m).padStart(2, '0')}:00.000Z`;
+const pickupTask = (id: string, name: string, m: number): ThreadEvent => ({
+  kind: 'task', id, at: tAt(m), task: { id, title: `Alma › pick-up · ${name}`, state: 'running', startedAt: tAt(m), steps: [{ at: tAt(m), text: 'Bash · Build the new previz in Blender' }] },
+});
+export const LEFT_THREADS: Record<string, ThreadEvent[]> = {
+  'sample-left-pickups': [
+    { kind: 'user', id: 'u-notes', at: tAt(20), text: 'S1: the wide from lower. S2: Maren from behind Tobias, over the desk. S3: the window close-up with the light, then the wide.' },
+    { kind: 'assistant_text', id: 'a-notes', at: tAt(21), text: 'Three pick-ups are being built from your notes: new previz and boards for each, the board check, then the prompt and a go card.' },
+    pickupTask('t-fix-s1', 'FIX-S1-wide', 22),
+    pickupTask('t-fix-s3', 'FIX-S3-window', 22),
+    pickupTask('t-fix-s4', 'FIX-S2-desk', 22),
+  ],
+};
 
 /** The record's yes for cut v1 (a card at the edit stage, answered). */
 export function leftSampleFeed(slug: string): FeedCard[] | undefined {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start') return [];
+  if (START(slug)) return [];
   return [{
     key: 'YES-cut-v1-480p', id: 'YES-cut-v1-480p', title: 'Is cut v1 the one at 480p?', date: '2026-11-13T21:10:00Z', section: 'Edit', place: 'edit', ids: [], placed: 'card', media: [],
     text: ['The whole cut at 480p, before the 1080p.'],
@@ -113,7 +145,7 @@ export function leftSampleFeed(slug: string): FeedCard[] | undefined {
 /** GET …/full: the upscaled cut of v1 and the FIX-bottle take with its own full-size file; nothing for the first sample. */
 export function leftSampleFull(slug: string): unknown {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start') return { bases: [], takes: {}, label: 'upscaled' };
+  if (START(slug)) return { bases: [], takes: {}, label: 'upscaled' };
   const take = `assets/films/${slug}/blocks/FIX-bottle/takes/FIX-bottle-seedance-take2-480p.mp4`;
   return { bases: [{ version: 'v1', path: `assets/films/${slug}/video/1080/cut-v1-1080.mp4`, frames: 1655, label: 'Higgsfield' }], takes: { [take]: take.replace('-480p.', '-1080p.') }, label: 'Higgsfield' };
 }
@@ -128,7 +160,7 @@ export function leftMarksSeed(slug: string): SeedanceMark[] | undefined {
 /** The user's ticks the sample starts with. */
 export function leftTicksSeed(slug: string): LeftFile | undefined {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start' || slug === 'sample-left-1080') return { ticks: {} };
+  if (START(slug) || slug === 'sample-left-1080') return { ticks: {} };
   return { ticks: { sound: { at: '2026-11-14T08:30:00.000Z', cut: 'v1' } } };
 }
 

@@ -15,7 +15,7 @@ function unattr(value: string): string {
 
 /** `<harness-context film="…" page="…" pinned="…" selected='[…]' playhead="…">` plus one line per chip, so the model reads it either way. */
 export function buildContextBlock(ctx: HarnessContext): string {
-  const selected = ctx.selected.map((c) => ({ id: c.id, label: c.label, ...(c.ref ? { ref: c.ref } : {}) }));
+  const selected = ctx.selected.map((c) => ({ id: c.id, label: c.label, ...(c.ref ? { ref: c.ref } : {}), ...(c.about ? { about: c.about } : {}) }));
   const json = JSON.stringify(selected).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let open = `${OPEN} film="${attr(ctx.film)}" page="${attr(ctx.page)}" pinned="${attr(ctx.pinned)}" selected='${json}'`;
   if (ctx.playhead) open += ` playhead="${attr(ctx.playhead)}"`;
@@ -23,9 +23,12 @@ export function buildContextBlock(ctx: HarnessContext): string {
   // a chip whose id starts "upload:" is a file the user pasted or attached; its ref is the file's full path
   // a ref of several lines (the takes marked for Seedance) is a list in itself: it follows the label on lines of its own
   const line = (c: Chip) => defuse(`- ${c.label.replace(/\n/g, ' ')}${c.ref ? (c.ref.includes('\n') ? `:\n${c.ref}` : ` (${c.ref})`) : ''}`);
-  const lines = ctx.selected.filter((c) => !isUpload(c)).map(line);
+  // a chip that opened the box about its thing: the message is about it (the words the box used to start with)
+  const about = ctx.selected.filter((c) => c.about && !isUpload(c)).map((c) => `${line(c)}: ${defuse(c.about!.replace(/\n/g, ' '))}`);
+  const lines = ctx.selected.filter((c) => !c.about && !isUpload(c)).map(line);
   const files = ctx.selected.filter(isUpload).map(line);
-  const body = (lines.length ? `\nThe user selected:\n${lines.join('\n')}\n` : '')
+  const body = (about.length ? `\nThe user's message is about ${about.length === 1 ? 'this' : 'these'}:\n${about.join('\n')}\n` : '')
+    + (lines.length ? `\nThe user selected:\n${lines.join('\n')}\n` : '')
     + (files.length ? `\nThe user attached ${files.length === 1 ? 'this file' : 'these files'} to the message. Open ${files.length === 1 ? 'it' : 'each'} with Read before you answer (a picture is shown to you that way); copy one into the film folder only if it belongs there:\n${files.join('\n')}\n` : '');
   return `${open}${body}${CLOSE}`;
 }
@@ -67,8 +70,8 @@ export function parseContextBlock(prompt: string): { text: string; context?: Har
     const raw: unknown = JSON.parse(readAttr(open, 'selected') ?? '[]');
     if (Array.isArray(raw)) {
       selected = raw
-        .filter((c): c is { id: unknown; label: unknown; ref?: unknown } => !!c && typeof c === 'object')
-        .map((c) => ({ id: String(c.id), label: String(c.label), ...(typeof c.ref === 'string' ? { ref: c.ref } : {}) }));
+        .filter((c): c is { id: unknown; label: unknown; ref?: unknown; about?: unknown } => !!c && typeof c === 'object')
+        .map((c) => ({ id: String(c.id), label: String(c.label), ...(typeof c.ref === 'string' ? { ref: c.ref } : {}), ...(typeof c.about === 'string' && c.about ? { about: c.about } : {}) }));
     }
   } catch {
     selected = [];

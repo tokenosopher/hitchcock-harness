@@ -11,6 +11,7 @@ import { Feed } from '@/components/feed/Feed';
 import { fmtDate, plural } from '@/components/lib/format';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
 import { Header } from '@/components/shell/Header';
+import { StepRunning } from '@/components/flow/RunningNow';
 import { Loading, PageBody, StageTitle } from '@/components/shell/StageTitle';
 import { Card } from '@/components/shell/atoms';
 import { IconChevronRight } from '@/components/shell/icons';
@@ -105,6 +106,7 @@ export function SoundPage() {
           sub={settled ? 'The music, effects, voice fixes and mixes made for this film, by folder, then the rounds Alma played you.'
             : 'Music, effects, voice fixes and the mix. A round to choose from waits here until you answer it; the rest is what Alma has played you and what the folders hold.'} />
         <StepIntro step="sound" />
+        <StepRunning step="sound" />
 
         {final && (
           <Card className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-[13px]">

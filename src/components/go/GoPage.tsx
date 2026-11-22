@@ -72,8 +72,8 @@ export function GoPage() {
   };
   const sel = review.scenes.find((s) => s.id === selected);
   const change = () => {
-    if (sel) ui.prefill(`Before the go, change ${sel.id}: `, { id: `scene:${sel.id}`, label: `${sel.id} · ${sel.title}${sel.prompt ? ` · prompt ${sel.prompt.version}` : ''}` });
-    else ui.prefill('Before the go, change: ');
+    if (sel) ui.about({ id: `scene:${sel.id}`, label: `${sel.id} · ${sel.title}${sel.prompt ? ` · prompt ${sel.prompt.version}` : ''}` }, `a change to ${sel.id} before the go for the video`, `What should change in ${sel.id} before the go…`);
+    else ui.about({ id: 'go:change', label: 'Go · change first' }, 'a change before the go for the video', 'What should change before the go…');
     ui.setThreadOpen(true);
   };
 

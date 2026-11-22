@@ -5,10 +5,17 @@
 // What an edit may change, and nothing else: the words of one spoken line (inside its quotes) or of one direction
 // (after its `[N s]`). The count and the order of the rows, who speaks, a line's delivery note and a direction's
 // seconds stay as they are, because the line IDs (L01…, counted in film order), the cast and the timing follow them.
+// A card (the title card, a card between scenes, an end card; src/lib/script-cards.ts) is edited the same way: the
+// words of its first line or of the line under it, in place, and nothing else on its line ("it should be
+// as editable as everything else that's in the script"). Its edit is kind 'card': `index` is its place among the
+// version's cards, `part` 0 or 1 its line, `scene` the scene it is placed by.
 // A save is the next script version: the version it replaces is copied word for word under "## Earlier drafts", and the
 // new version note goes in front of the old one, which stays after it.
 
+import { cardLineLabel, cardWordSpans, scriptCards, type ScriptCard } from './script-cards';
+
 export type RowKind = 'line' | 'action';
+export type EditKind = RowKind | 'card';
 export interface Row {
   scene: string;          // "S2"
   index: number;          // place among the scene's rows (lines and directions), from 0
@@ -20,7 +27,7 @@ export interface Row {
   words: string;
   at: number;             // the row's line number in the whole file, from 0
 }
-export interface ScriptEdit { scene: string; index: number; kind: RowKind; old: string; new: string }
+export interface ScriptEdit { scene: string; index: number; kind: EditKind; /** a card's line: 0 its first, 1 the one under it */ part?: number; old: string; new: string }
 export type EditStatus = 'applies' | 'changed' | 'gone';
 export interface EditCheck extends ScriptEdit { status: EditStatus; at?: number; theirs?: string; label: string }
 
@@ -170,7 +177,9 @@ const clean = (w: string): string => w.replace(/\s+/g, ' ').trim();
  *  place; when the rows above it moved, by its old words, if they are in that scene exactly once. */
 export function checkEdits(markdown: string, edits: ScriptEdit[]): EditCheck[] {
   const rows = scriptRows(markdown);
+  const cards = edits.some((e) => e.kind === 'card') ? scriptCards(markdown) : [];
   return edits.map((e) => {
+    if (e.kind === 'card') return checkCard(cards, e);
     const inScene = rows.filter((r) => r.scene === e.scene && r.kind === e.kind);
     const same = inScene.find((r) => r.index === e.index);
     if (same && clean(same.words) === clean(e.old)) return { ...e, status: 'applies', at: same.at, label: rowLabel(same) };
@@ -179,6 +188,18 @@ export function checkEdits(markdown: string, edits: ScriptEdit[]): EditCheck[] {
     if (same) return { ...e, status: 'changed', at: same.at, theirs: same.words, label: rowLabel(same) };
     return { ...e, status: 'gone', label: `${e.scene} ${e.kind === 'line' ? 'line' : 'direction'}` };
   });
+}
+
+/** A card's edit, found by its place among the cards and the line's words, or by the words alone if they are on one
+ *  card only (cards above it came or went). */
+function checkCard(cards: ScriptCard[], e: ScriptEdit): EditCheck {
+  const part = e.part ?? 0;
+  const same = cards[e.index];
+  if (same && same.lines[part] !== undefined && clean(same.lines[part]) === clean(e.old)) return { ...e, part, status: 'applies', at: same.at, label: cardLineLabel(same, part) };
+  const byWords = cards.map((c, i) => ({ c, i })).filter(({ c }) => c.lines[part] !== undefined && clean(c.lines[part]) === clean(e.old));
+  if (byWords.length === 1) return { ...e, part, index: byWords[0].i, status: 'applies', at: byWords[0].c.at, label: cardLineLabel(byWords[0].c, part) };
+  if (same && same.lines[part] !== undefined) return { ...e, part, status: 'changed', at: same.at, theirs: same.lines[part], label: cardLineLabel(same, part) };
+  return { ...e, part, status: 'gone', label: 'a card' };
 }
 
 export class ScriptEditError extends Error {
@@ -190,9 +211,10 @@ export interface Applied { markdown: string; from: string; version: string; chan
 /** One edit's words, checked: one line of text, not empty, nothing that would end the row early. */
 export function checkWords(e: ScriptEdit): string {
   const w = clean(e.new);
-  if (typeof e.new !== 'string' || !w) throw new ScriptEditError(`${e.scene}: the new words are empty; to cut a ${e.kind === 'line' ? 'line' : 'direction'}, ask Alma`);
+  if (typeof e.new !== 'string' || !w) throw new ScriptEditError(`${e.scene}: the new words are empty; to cut a ${e.kind === 'line' ? 'line' : e.kind === 'card' ? 'card or its line' : 'direction'}, ask Alma`);
   if (/[\r\n]/.test(e.new.trim())) throw new ScriptEditError(`${e.scene}: the new words run over more than one line; a new line goes through Alma`);
   if (w.length > 2000) throw new ScriptEditError(`${e.scene}: the new words are longer than 2,000 characters`);
+  if (e.kind === 'card' && /[*"“”]/.test(w)) throw new ScriptEditError('a card\'s words cannot hold * or quotation marks: the script marks the card\'s lines with them; ask Alma');
   if (e.kind === 'action' && /^\*\*[^*]+\*\*/.test(w)) throw new ScriptEditError(`${e.scene}: a direction that starts with a speaker's name would read as a spoken line; a new line goes through Alma`);
   if (e.kind === 'action' && /^`?\[\d/.test(w)) throw new ScriptEditError(`${e.scene}: a direction's seconds are not changed on the page; ask Alma`);
   return w;
@@ -207,7 +229,7 @@ export function applyEdits(markdown: string, edits: ScriptEdit[], opts: { date: 
   if (cur.locked) throw new ScriptEditError(`script ${cur.version} is locked; to change a line, unlock it through Alma first`, 409);
   const seen = new Set<string>();
   for (const e of edits) {
-    const k = `${e.scene}:${e.index}:${e.kind}`;
+    const k = `${e.scene}:${e.index}:${e.kind}:${e.part ?? 0}`;
     if (seen.has(k)) throw new ScriptEditError(`${e.scene}: the same row is edited twice`);
     seen.add(k);
   }
@@ -216,15 +238,28 @@ export function applyEdits(markdown: string, edits: ScriptEdit[], opts: { date: 
   if (off) throw new ScriptEditError(`${off.label} is not as it was when you started`, 409);
   const changes = checks.filter((c) => clean(c.old) !== clean(c.new)) as Applied['changes'];
   if (!changes.length) throw new ScriptEditError('nothing changed');
-  const words = new Map(changes.map((c) => [c.at!, checkWords(c)]));
+  // keyed by the row's line; a card's line by a negative key, as both of a card's lines sit on one line of the file
+  const words = new Map(changes.map((c) => [c.kind === 'card' ? -1 - (c.at! * 2 + (c.part ?? 0)) : c.at!, checkWords(c)]));
 
   const lines = markdown.split('\n');
   const before = scriptRows(markdown);
+  const cardsBefore = scriptCards(markdown);
   const span = sectionSpan(lines, SCRIPT_H)!;
   const kept = lines.slice(span.head + 1, span.end).join('\n').trim();
 
   // 1. the words, in place: the rest of each row exactly as it was
+  const wordsOf = (c: EditCheck): string => words.get(c.kind === 'card' ? -1 - (c.at! * 2 + (c.part ?? 0)) : c.at!)!;
+  // a card's words: both of its lines may change in one save; swapped from the end of the line so the spans hold
+  const cardChanges = changes.filter((c) => c.kind === 'card').sort((x, y) => x.at! - y.at! || (y.part ?? 0) - (x.part ?? 0));
+  for (const c of cardChanges) {
+    const raw = lines[c.at!];
+    const spans = cardWordSpans(markdown.split('\n')[c.at!], cardsBefore[c.index]);
+    const span = spans?.[c.part ?? 0];
+    if (!span) throw new ScriptEditError(`${c.label}: its words were not found on its line; ask Alma for that change`);
+    lines[c.at!] = `${raw.slice(0, span[0])}${wordsOf(c)}${raw.slice(span[1])}`;
+  }
   for (const c of changes) {
+    if (c.kind === 'card') continue;
     const raw = lines[c.at!];
     const w = words.get(c.at!)!;
     if (c.kind === 'line') {
@@ -240,7 +275,7 @@ export function applyEdits(markdown: string, edits: ScriptEdit[], opts: { date: 
   // 2. the new note in front of the old one (the old one stays whole after it)
   const version = nextVersion(markdown, cur.version);
   const note = versionNote(markdown)!;
-  const said = changes.map((c) => `${c.label}${c.kind === 'line' ? ` (${before.find((r) => r.at === c.at)?.speaker ?? ''})` : ''}: "${words.get(c.at!)}" (was "${clean(c.old)}")`).join('; ');
+  const said = changes.map((c) => `${c.label}${c.kind === 'line' ? ` (${before.find((r) => r.at === c.at)?.speaker ?? ''})` : ''}: "${wordsOf(c)}" (was "${clean(c.old)}")`).join('; ');
   const newNote = `*${version}, draft. ${opts.date}: the user's edit on the Story page, word for word: ${said}. ${note.text.replace(/^\*|\*$/g, '')}*`;
   lines[note.line] = lines[note.line].replace(note.text, newNote);
 
@@ -263,11 +298,22 @@ export function applyEdits(markdown: string, edits: ScriptEdit[], opts: { date: 
   const after = scriptRows(out);
   const sameShape = after.length === before.length && after.every((r, i) => r.scene === before[i].scene && r.kind === before[i].kind && r.speaker === before[i].speaker && r.direction === before[i].direction && r.seconds === before[i].seconds);
   if (!sameShape) throw new ScriptEditError('the new words would change the script\'s rows; ask Alma for that change');
-  const changed = new Set(changes.map((c) => `${c.scene}:${c.index}`));
+  const changed = new Set(changes.filter((c) => c.kind !== 'card').map((c) => `${c.scene}:${c.index}`));
   for (let i = 0; i < after.length; i++) {
     const k = `${after[i].scene}:${after[i].index}`;
     const want = changed.has(k) ? words.get(before[i].at) : before[i].words;
     if (clean(after[i].words) !== clean(want ?? '')) throw new ScriptEditError(`${rowLabel(after[i])} would not read as written; ask Alma for that change`);
+  }
+  // the cards read as they did, in the same places and lengths, but for the changed words
+  const cardsAfter = scriptCards(out);
+  if (cardsAfter.length !== cardsBefore.length) throw new ScriptEditError('the new words would change the script\'s cards; ask Alma for that change');
+  for (let i = 0; i < cardsAfter.length; i++) {
+    const a = cardsAfter[i], b = cardsBefore[i];
+    if (a.kind !== b.kind || a.where !== b.where || a.seconds !== b.seconds || a.lines.length !== b.lines.length) throw new ScriptEditError(`${cardLineLabel(b, 0)}: the new words would change the card's place or length; ask Alma for that change`);
+    for (let k = 0; k < b.lines.length; k++) {
+      const c = cardChanges.find((x) => x.index === i && (x.part ?? 0) === k);
+      if (clean(a.lines[k]) !== clean(c ? wordsOf(c) : b.lines[k])) throw new ScriptEditError(`${cardLineLabel(b, k)} would not read as written; ask Alma for that change`);
+    }
   }
   const rl0 = readerLines(markdown), rl1 = readerLines(out);
   if (rl0.length !== rl1.length || rl0.some((l, i) => l.speaker !== rl1[i].speaker || l.scene !== rl1[i].scene)) throw new ScriptEditError('the new words would change the spoken lines\' count or speakers; ask Alma for that change');
@@ -280,14 +326,15 @@ export function applyEdits(markdown: string, edits: ScriptEdit[], opts: { date: 
 /** What Alma is told after a save (recipes/story.md, "When the user edits the script on the page"). */
 export const SCRIPT_EDITED_KIND = 'script-edited';
 export function scriptEditedMessage(a: Pick<Applied, 'from' | 'version' | 'changes'>, rel: string): string {
-  const scenes = [...new Set(a.changes.map((c) => c.scene))];
+  const scenes = [...new Set(a.changes.filter((c) => c.kind !== 'card').map((c) => c.scene))];
+  const cards = a.changes.some((c) => c.kind === 'card');
   return [
     `<harness-action kind="${SCRIPT_EDITED_KIND}" version="${a.version}" from="${a.from}"/> The user edited the script on the Story page and saved it as ${a.version}: ${rel}. ${a.from} is kept word for word under "## Earlier drafts".`,
     '',
     'What changed, word for word:',
     ...a.changes.map((c) => `- ${c.label}: "${c.new.replace(/\s+/g, ' ').trim()}" (was "${c.old.replace(/\s+/g, ' ').trim()}")`),
     '',
-    `Yours, as recipes/story.md says: re-time ${scenes.join(', ')} and the whole film, check the changed lines against the video filter, fix any quote of the old words in the audit, and say in the thread whether the script now differs from the settled story. Finish ${a.version} in place: this is not a new version.`,
+    `Yours, as recipes/story.md says: ${scenes.length ? `re-time ${scenes.join(', ')} and the whole film, check the changed lines against the video filter, ` : ''}${cards ? 'carry the card\'s new words wherever the script names them (the timing table\'s card row, a note), ' : ''}fix any quote of the old words in the audit, and say in the thread whether the script now differs from the settled story. Finish ${a.version} in place: this is not a new version.`,
   ].join('\n');
 }
 

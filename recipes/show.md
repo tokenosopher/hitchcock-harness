@@ -53,7 +53,7 @@ When you tell the user that something is on a page, make the page's name a link,
 | Shots, Previz and storyboards | `[the Previz step](page:previz)`, `[Shots](page:shots)` |
 | The picks waiting for the user | `[Your picks](page:picks)` |
 | All characters, one character | `[the Character page](page:character)`, `[C02 Tobias](page:character/C02)` |
-| Voices, video elements | `[Voices](page:voices)`, `[Elements](page:elements)` |
+| Voices, character elements | `[Voices](page:voices)`, `[Character elements](page:elements)` |
 | All scenes, one scene | `[the Scenes page](page:scenes)`, `[S3](page:scenes/S3)` |
 | The go for the video | `[the Go page](page:go)` |
 | Edit, Finish, Sound, Release | `[the Edit page](page:edit)`, `page:finish`, `page:sound`, `page:release` |
@@ -111,12 +111,32 @@ When you need the user to choose among options, say yes to what is shown, or giv
 
 - `"ask"` is `"pick"` (one of several), `"yes"` (approve what the card shows) or `"go"` (a paid job; put the quote in `"cost"`, as you would say it: `"cost": "12 credits at 480p draft"`). Nothing else asks: the harness reads no question out of a card's words.
 - **A `yes` or a `go` is for one named thing.** Its `"for"` names the exact asset, take or version it covers (`"C01"`, `"S4"`, `"FIX-S3-laugh"`), and its title says the version (`"C01 sheet v2: approve"`), because the button press counts as the user's yes naming that thing. One go covers what its card quotes and nothing more; where a stage note asks for a go per job, write a card per job.
+- **A card about the story or the script does not paste their text.** Put it `"at": "story"` and name the thing and its version in the title (`"Script v2: lock it?"`, `"Story v8: settle it?"`); the harness gives the card a "Read the script ›" or "Read the story ›" link that opens the Story page at that version. Every other card shows its thing in the card itself (its pictures, clips, sounds), so the user can answer without leaving it.
 - **The card needs an `"id"` of its own**, and it cannot be an `asset` card (an asset card's id is the asset's). Use any other card type (`card`, `video`, `videos`, `images`, `audio`). A `card` with one file per block works too: each block's `file` is an option. Two asking cards never share an id.
 - **The options of a pick are the card's own files**, in order: the card's `items` (or each block's `file`). Give each one an `"id"` (it is what comes back, and what goes into `taste.md`). Add an `"options"` list, `{id, label}` each or plain strings, only when the choices are not files (two wordings of a line, two release times).
+- **The card's `"text"` is a few short lines.** Where it names several things (scenes, takes, beats), write a list, one short `- ` line per item; the details go in the thread or on the page the card links. Long text is folded under "Show more".
 - `"who"`: for a card about a character, who they are in a sentence or two (the part, where they speak, the look in the brief). The harness shows it at the top of the card. Without it the harness shows that character's line from the `## Cast` list of `brief.md`, so write `who` only when the brief's line is not the right words for this choice. On a card that is not a face round the harness also shows the character's picked face by itself (from `"for"`), so a voice is picked looking at the face it belongs to: no extra picture card is needed.
 - `"prediction"`: the option you expect the user to take, as `taste.md` asks, written before the pick.
 - **A new round is a new card with a new id**, at the top. Close the old round's card with `"answer": "replaced by <the new card's id>"` so it stops asking; never rewrite it into the new round and never delete it.
 - A card with no `"ask"` is history: it shows, and nothing waits on it.
+
+## A character's video element: one go card
+
+The board's step and page are called **Character elements**. Every character has a row there: a speaking character's video element (from the library, a draft waiting for a yes, being made, or done), and for a silent character or a group of extras "Image element only": they need no video element and are done at once. Only a speaking character not brought whole from the library counts as an element to make.
+
+When a speaking character's element is ready to make, write **one** go card for that character and nothing else about it: `"ask": "go"`, `"at": "elements"`, `"for": "<the character>"`, the quote in `"cost"`, and as its `items` the approved sheet, the picked face and the element line (the sound cut from the picked voice), each with a label (`"the sheet"`, `"the face"`, `"the line · <the voice>"`). The element line is never a card of its own and never asks for a yes: the voice was picked, the line is cut from it, and the user approves it with the element's go. The user answers the whole character in that card: the go, or something else in words.
+
+```json
+{
+  "type": "card", "id": "GO-E-C02-draft", "title": "C02 Tobias video element: 480p draft",
+  "at": "elements", "for": "C02", "updated": "2026-11-21T16:00:00Z", "ask": "go", "cost": "15 credits at 480p draft",
+  "items": [
+    {"label": "the sheet", "file": "cast/C02-tobias/pick.png"},
+    {"label": "the face", "file": "cast/C02-tobias/pick-face.png"},
+    {"label": "the line · option 3", "file": "cast/C02-tobias/voice/element-line-5s.mp3"}
+  ]
+}
+```
 
 ## Sound picks: one card for a scene's sounds
 
@@ -196,7 +216,7 @@ followed by one line that names the card, the option and what the harness alread
 
 A `<harness-action kind="pick" …/>` message is the same thing from an asset's own page (a face, clothing, a sheet, a voice, a location, a prop or a take picked there); the line after it says what the harness wrote. Continue the flow from there.
 
-Most answers come together. A press on a card only sets the choice aside; when the user is done choosing they press "Done picking" at the foot of the page, and everything they chose arrives as one message:
+Answers come together. A tap on a card only sets the choice aside (there is no confirm on the card, and no way to send one card by itself); when the user is done choosing they press "Done picking" at the foot of the page, and everything they chose arrives as one message. Only a card with its own yes and no words (`yesLabel`/`noLabel`) answers at once, as a single `kind="answer"` message:
 
 ```
 <harness-action kind="answers" count="3"/> The user is done choosing and sent 3 choices with one button, in Hitchcock Harness. …

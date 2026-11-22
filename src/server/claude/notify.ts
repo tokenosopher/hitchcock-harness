@@ -1,14 +1,20 @@
 // What the UI is told about every film's thread at once (GET /api/notify): Alma finished a turn, a sub-agent
 // finished, picks are waiting at the gate. The browser counts them unread per film while the user is not
 // looking at that film. One hub per server process; it attaches to each film's Alma as it appears.
+// Also which films' Alma is at work right now (the sidebar's glowing orb, the user): worked out from
+// her own state on each of her events, and pushed only when the set changes.
+// Her reply landing and a new card waiting move the film to the top of the sidebar (src/server/films/recent.ts).
 import type { FilmState, HarnessNotice, NoticeKind, TaskCard, ThreadEvent } from '../types';
-import { gateItems } from '@/components/lib/derive';
+import { gateChoices, gateItems } from '@/components/lib/derive';
 import { findFilm } from '../films/registry';
+import { noteAttention } from '../films/recent';
 import { getFilmState, invalidateFilmState } from '../films/state';
 import { allAlmas, type AlmaSession } from './process';
 import { oneLine } from './summarize';
 
 type Listener = (n: HarnessNotice) => void;
+/** Told the films whose Alma is at work, sorted, each time that set changes. */
+export type RunningListener = (films: string[]) => void;
 
 const KEEP = 200;              // notices kept for ?after= replays (a page reload, a phone waking up)
 const ATTACH_EVERY_MS = 2000;  // how often the hub looks for an Alma it has not attached to yet
@@ -38,11 +44,27 @@ class NotifyHub {
   private titles = new Map<string, string>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private bornAt = Date.now();
+  private running = new Set<string>();                 // films whose Alma is at work
+  private runningListeners = new Set<RunningListener>();
+  private checking = new Set<string>();                // films whose state is looked at once the current event is done
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
     this.start();
     return () => { this.listeners.delete(fn); };
+  }
+
+  /** The films whose Alma is at work now: a turn in flight or queued, or a sub-agent running. */
+  runningNow(): string[] { return [...this.running].sort(); }
+  subscribeRunning(fn: RunningListener): () => void {
+    this.runningListeners.add(fn);
+    this.start();
+    return () => { this.runningListeners.delete(fn); };
+  }
+
+  /** A sample film's notice, played by the test hook (POST /api/notify/mock; MOCK=boards only). */
+  mockNotice(film: string, kind: NoticeKind, text: string): Promise<void> {
+    return this.emit(film, kind, `${kind}:mock:${film}:${Date.now()}`, text);
   }
 
   currentSeq(): number { return this.seq; }
@@ -52,21 +74,23 @@ class NotifyHub {
     return this.notices.filter((n) => n.seq > seq);
   }
 
+  /** Attaches to every Alma there is now (one just made by a send included), and to each new one every 2 s. */
   start(): void {
-    if (this.timer) return;
     this.attachAll();
+    if (this.timer) return;
     this.timer = setInterval(() => this.attachAll(), ATTACH_EVERY_MS);
     this.timer.unref?.();
   }
 
   /** Takes over an older hub's subscribers and notices (dev hot reload), so open streams keep their ids. */
   adopt(old: unknown): void {
-    const o = old as Partial<{ listeners: Set<Listener>; notices: HarnessNotice[]; firstSeq: number; seq: number; picks: Map<string, number> }>;
+    const o = old as Partial<{ listeners: Set<Listener>; runningListeners: Set<RunningListener>; notices: HarnessNotice[]; firstSeq: number; seq: number; picks: Map<string, number> }>;
     if (o.listeners) for (const fn of o.listeners) this.listeners.add(fn);
+    if (o.runningListeners) for (const fn of o.runningListeners) this.runningListeners.add(fn);
     if (o.notices) this.notices = [...o.notices];
     if (typeof o.firstSeq === 'number' && typeof o.seq === 'number') { this.firstSeq = o.firstSeq; this.seq = o.seq; }
     if (o.picks) this.picks = new Map(o.picks);
-    if (this.listeners.size) this.start();
+    if (this.listeners.size || this.runningListeners.size) this.start();
   }
 
   dispose(): void {
@@ -87,10 +111,31 @@ class NotifyHub {
         if (Date.parse(ev.at) >= Math.max(recent, this.bornAt)) this.onEvent(film, ev);
         else if (ev.kind === 'task') this.cardState.set(ev.task.id, ev.task.state);
       }
-      this.attached.set(alma, alma.subscribe((ev) => this.onEvent(film, ev)));
+      this.attached.set(alma, alma.subscribe((ev) => { this.onEvent(film, ev); this.checkRunning(alma); }, () => this.checkRunning(alma)));
+      this.checkRunning(alma);
       void this.title(film);
       void this.countPicks(film, false);
     }
+  }
+
+  /** Looks at whether the film's Alma is at work once the event in hand is done with (send() queues the message just
+   *  after emitting it; a result clears her turn just after), and tells the listeners when that changed. A burst of
+   *  events (partial text streams many times a second) is looked at once. */
+  private checkRunning(alma: AlmaSession): void {
+    const film = alma.film;
+    if (this.checking.has(film)) return;
+    this.checking.add(film);
+    queueMicrotask(() => {
+      this.checking.delete(film);
+      const on = alma.busy || alma.runningTasks().length > 0;
+      if (on === this.running.has(film)) return;
+      if (on) this.running.add(film);
+      else this.running.delete(film);
+      const list = this.runningNow();
+      for (const fn of this.runningListeners) {
+        try { fn(list); } catch { /* a closed stream */ }
+      }
+    });
   }
 
   private async title(film: string): Promise<string> {
@@ -134,7 +179,8 @@ class NotifyHub {
     this.pickTimers.set(film, t);
   }
 
-  /** Counts the gate's picks waiting (the same derivation the gate page and the sidebar use); a rise is news. */
+  /** Counts what waits for the user ("Waiting for you": the gate's choices and the cards that ask, as the sidebar's
+   *  subtitle counts them); a rise is news. */
   private async countPicks(film: string, announce: boolean): Promise<void> {
     if (film === 'library') return;
     try {
@@ -142,7 +188,9 @@ class NotifyHub {
       const state = await getFilmState(film);
       if (!state) return;
       const alma = allAlmas().find((a) => a.film === film);
-      const n = gateItems(state as unknown as FilmState, alma?.runningTasks() ?? []).length;
+      const s = state as unknown as FilmState;
+      const asks = s.feed?.asks ?? [];
+      const n = gateChoices(gateItems(s, alma?.runningTasks() ?? []), asks).length + asks.length;
       const before = this.picks.get(film);
       this.picks.set(film, n);
       if (announce && before !== undefined && n > before) await this.emit(film, 'pick', `pick:${film}:${Date.now()}`, `${n} ${n === 1 ? 'pick' : 'picks'} waiting`);
@@ -152,6 +200,8 @@ class NotifyHub {
   private async emit(film: string, kind: NoticeKind, id: string, text: string, taskId?: string): Promise<void> {
     const filmTitle = await this.title(film);
     const n: HarnessNotice = { id, seq: ++this.seq, film, filmTitle, kind, at: new Date().toISOString(), text, ...(taskId ? { taskId } : {}) };
+    // her reply landing and a new card waiting move the film up the sidebar; a sub-agent's end alone does not
+    if (kind === 'turn' || kind === 'pick') noteAttention(film, n.at);
     this.notices.push(n);
     if (this.notices.length > KEEP) this.notices.splice(0, this.notices.length - KEEP);
     for (const fn of this.listeners) {

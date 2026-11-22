@@ -242,7 +242,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
               <span className="inline-flex h-[34px] items-center gap-2 whitespace-nowrap text-[12.5px] text-ink-3"><span aria-hidden="true" className="dot-run size-2 rounded-full bg-sub" />fixes running</span>
             ) : lastRound && open.length ? (
               <button type="button"
-                onClick={() => ui.prefill(`About the ${open.length} QC ${open.length === 1 ? 'miss' : 'misses'} still open on ${label} after round ${r.round} (${open.map((m) => m.id).join(', ')}): `, chip)}
+                onClick={() => ui.about(chip, `the ${open.length} QC ${open.length === 1 ? 'miss' : 'misses'} still open on ${label} after round ${r.round} (${open.map((m) => m.id).join(', ')}): what to do with them`, `What should Alma do with ${open.length === 1 ? 'it' : 'them'}…`)}
                 className="h-[34px] cursor-pointer whitespace-nowrap rounded-lg border border-edge-strong bg-transparent px-3 text-[13px] font-medium text-ink hover:bg-raised">
                 Tell Alma what to do with them
               </button>

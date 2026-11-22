@@ -101,6 +101,10 @@ const tasteKind = (what: string): Kind | 'voice' | undefined => {
 function idsIn(text: string | undefined, known: Set<string>): string[] {
   if (!text) return [];
   const out: string[] = [];
+  // the cell's own first word, when it is a candidate: a voice option is a bare number ("**3**: 3 · 95 Hz, slow and
+  // dark"), which the patterns below do not take, so the pick went unread
+  const lead = /^\s*\**\s*([\w-]+)\s*\**\s*(?:[:·,(]|$)/.exec(text)?.[1];
+  if (lead && known.has(lead)) out.push(lead);
   for (const m of text.matchAll(/\b(r\d+[a-z]?-\d+|W-?[A-Z0-9]+|option \d+|[A-Z]\d+)\b/g)) {
     const id = m[1].replace(/^option /, '');
     if (known.has(id) && !out.includes(id)) out.push(id);
@@ -185,6 +189,18 @@ function voiceFor(ctx: FilmCtx, cid: string, vf: VoiceFiles, rows: TastePickX[],
   const elFile = asString(el?.file);
   const elementLine = elFile ? { path: elFile, seconds: asNumber(el?.seconds), hz: asNumber(el?.f0) } : undefined;
   return { rounds, pick, elementLine };
+}
+
+/** A library entry's meta.json, as far as the cast needs it: the film it came from, the element line's file and its
+ *  measures, the video element's file (src/server/library/store.ts writes it). */
+export function libraryMeta(raw: unknown): { title?: string; slug?: string; entry?: string; line?: string; seconds?: number; hz?: number; element?: string } | undefined {
+  const m = asRecord(raw);
+  if (!m) return undefined;
+  const film = asRecord(m.film);
+  const v = asRecord(m.voice);
+  const files = Array.isArray(m.files) ? m.files.map(asRecord).filter((x): x is Record<string, unknown> => !!x) : [];
+  const file = (role: string) => asString(files.find((f) => asString(f.role) === role)?.file);
+  return { title: asString(film?.title), slug: asString(film?.slug), entry: asString(m.id), line: file('element line'), seconds: asNumber(v?.seconds), hz: asNumber(v?.hz), element: file('element') };
 }
 
 function lineFor(lines: unknown, cid: string): unknown {
@@ -306,10 +322,12 @@ export async function readCharacters(ctx: FilmCtx, script: ScriptInfo | undefine
     if (byKind.sheet.length) applyTaste(byKind.sheet, sheetRows);
 
     const isExtra = cid.includes('-');
-    // "no lines": the script's ID table row or the brief's Cast entry of this character says so (or the script's cast note calls them silent)
+    // "no lines": the script's ID table row or the brief's Cast entry of this character says so, as "no lines" or
+    // "silent" (a sample film's ID row says "silent": its assistant counted as speaking), or the
+    // script's cast note calls them silent
     const cidRe = cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const noLines = new RegExp(`^\\|[^\\n]*\\b${cidRe}\\b[^\\n]*\\bno lines\\b`, 'im').test(script?.markdown ?? '')
-      || new RegExp(`^\\s*[-*]\\s*\\*\\*${cidRe}\\b[^\\n]*\\bno lines\\b`, 'im').test(briefMd)
+    const noLines = new RegExp(`^\\|[^\\n]*\\b${cidRe}\\b[^\\n]*\\b(no lines|silent)\\b`, 'im').test(script?.markdown ?? '')
+      || new RegExp(`^\\s*[-*]\\s*\\*\\*${cidRe}\\b[^\\n]*\\b(no lines|silent)\\b`, 'im').test(briefMd)
       || /\b(silent|no lines)\b/i.test(script?.roles.get(cid) ?? '');
     const noRounds = !byKind.face.length && !byKind.wardrobe.length && !byKind.sheet.length;
     const reused = !isExtra && !!sheetFile && !!faceFile && noRounds;
@@ -319,7 +337,24 @@ export async function readCharacters(ctx: FilmCtx, script: ScriptInfo | undefine
       const line = (await list(abs(ctx, `${folder}/voice`))).find((e) => !e.dir && /^element-line.*\.(mp3|wav|m4a)$/i.test(e.name));
       if (line) voice = { rounds: voice?.rounds ?? [], pick: voice?.pick, elementLine: { path: `${folder}/voice/${line.name}` } };
     }
-    const { element, files } = await elementFor(ctx, cid, d.name, elementsJson);
+    // the library entry it was taken from (meta.json beside the copied files): the film it was made for,
+    // its voice's element line (the file the entry names, at the folder's root where the library copies it) with the
+    // length and pitch measured when it was made, and its video element
+    const lib = reused ? libraryMeta(await readJson(ctx, `${folder}/meta.json`)) : undefined;
+    if (!isExtra && lib) {
+      const at = async (f?: string) => {
+        for (const rel of f ? [`${folder}/${f}`, `${folder}/voice/${f}`] : []) if (await exists(abs(ctx, rel))) return rel;
+        return undefined;
+      };
+      const rootLine = entries.find((e) => !e.dir && /^element-line.*\.(mp3|wav|m4a)$/i.test(e.name))?.name;
+      const linePath = voice?.elementLine?.path ?? (await at(lib.line)) ?? (await at(rootLine));
+      if (linePath) voice = { rounds: voice?.rounds ?? [], pick: voice?.pick, elementLine: { path: linePath, seconds: voice?.elementLine?.seconds ?? lib.seconds, hz: voice?.elementLine?.hz ?? lib.hz } };
+    }
+    let { element, files } = await elementFor(ctx, cid, d.name, elementsJson);
+    if (lib && element?.state === 'none') {
+      const f = lib.element && (await exists(abs(ctx, `${folder}/${lib.element}`))) ? `${folder}/${lib.element}` : undefined;
+      if (f) { element = { path: f, state: /1080p/.test(f) ? 'final' : 'draft' }; files = /1080p/.test(f) ? { final: f } : { draft: f }; }
+    }
 
     const name =
       script?.names.get(cid) ??
@@ -342,6 +377,7 @@ export async function readCharacters(ctx: FilmCtx, script: ScriptInfo | undefine
       silent: (!isExtra && noLines) || undefined,
       imageElement: elementKeys(cid, Object.keys(elementsJson ?? {})).some((k) => !!asString(asRecord(elementsJson?.[k])?.id)) || undefined,
       reused: reused || undefined,
+      ...(lib?.title ? { reusedFrom: { title: lib.title, ...(lib.slug ? { slug: lib.slug } : {}), ...(lib.entry ? { entry: lib.entry } : {}) } } : {}),
       picks: faceFile || wardFile ? { face: faceFile ? `${folder}/${faceFile}` : undefined, wardrobe: wardFile ? `${folder}/${wardFile}` : undefined } : undefined,
       more: { sheetRounds: byKind.sheet, otherRounds: byKind.other, pickFiles, elementFiles: files },
     });

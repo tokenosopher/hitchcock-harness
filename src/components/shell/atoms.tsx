@@ -61,13 +61,14 @@ export function Btn({ children, primary, ghost, className, ...rest }: React.Butt
 }
 
 /** A candidate tile: the picture itself when `src` (a path relative to the film repo) is given, else a grey tile with the id. */
-export function Tile({ label, selected, alma, kept, onClick, className, ariaLabel, faded, src, w = 320 }: { label: string; selected?: boolean; alma?: boolean; kept?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number }) {
+export function Tile({ label, selected, alma, kept, onClick, className, ariaLabel, faded, src, w = 320, choose }: { label: string; selected?: boolean; alma?: boolean; kept?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number; /** a click chooses it: the full-screen view offers the same choice (Lightbox) */ choose?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={`${ariaLabel ?? `Candidate ${label}`}${kept ? ', in the library' : ''}`}
       aria-pressed={selected}
+      data-zoom-choose={choose ? '' : undefined}
       className={cn(
         'relative flex cursor-pointer items-end justify-center rounded-[6px] border bg-tile pb-1.5 font-mono text-[10.5px]',
         selected ? 'border-sub text-ink outline outline-1 outline-offset-2 outline-ink' : 'border-line text-mute hover:border-edge-strong',

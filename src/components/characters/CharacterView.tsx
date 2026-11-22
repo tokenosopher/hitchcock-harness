@@ -5,6 +5,7 @@
 // and the clothing side by side, the voice with the voices made. Each shows the pick as the main thing and folds its
 // rounds; a part with no pick yet opens its round, where the pick is made as before.
 import Link from 'next/link';
+import { rememberBack } from '@/components/shell/BackLink';
 import type { CharacterRef, FilmState } from '@/server/types';
 import { clothingDone, faceDone, speaks, voiceDone } from '@/components/lib/derive';
 import { fmtDate, repoPath } from '@/components/lib/format';
@@ -14,6 +15,8 @@ import { IconChevronDown } from '@/components/shell/icons';
 import { Tile } from '@/components/shell/atoms';
 import { AskCard } from '@/components/feed/Feed';
 import { cn } from '@/lib/utils';
+import { MakingLines, useMaking } from '@/components/flow/Making';
+import { makingFor } from '@/components/lib/making';
 import { castLines, facePath, MarkGlyph, pickedVoice, WholePicture, wardrobePath, type CastPart } from './Cards';
 
 type Chip = (id: string, label: string, ref?: string) => void;
@@ -59,6 +62,8 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
   faceRounds: React.ReactNode;
 }) {
   const toRepo = (rel?: string) => (rel ? repoPath(s.film.folder, s.film.repo, rel) : undefined);
+  // what is being made for this character and has not landed (the loading state, lib/making.ts)
+  const making = useMaking();
   const lines = castLines(c);
   const mark = (k: CastPart) => lines.find((l) => l.key === k)!.mark;
   const order = blockOrder(c);
@@ -105,7 +110,7 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
         ) : (
           <div className="flex w-full min-w-0 flex-1 flex-col gap-1.5 text-[12.5px] leading-normal text-sub">
             <span>{c.sheet?.approved ? 'Made from the sheet and the picked voice, once you say go.' : 'Made after the sheet is approved and the voice is picked.'}</span>
-            <Link href={`${base}/character/elements`} className="w-max text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">How a video element is made</Link>
+            <Link href={`${base}/character/elements`} onClick={() => rememberBack(`${base}/character/elements`, `Back to ${c.name}`)} className="w-max text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">How a video element is made</Link>
           </div>
         )}
       </section>
@@ -133,9 +138,10 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
           <Label title="Face" mark={mark('faces')} word={c.reused ? 'from the library' : c.face?.pick ? `picked${c.face.pick.date ? ` ${fmtDate(c.face.pick.date)}` : ''}` : faceDone(c) ? 'picked' : 'not picked yet'} />
           <div className="flex w-full min-w-0 flex-1 flex-col gap-2">
             {facePath(c) && <span className="block w-[72px]"><WholePicture path={toRepo(facePath(c))} alt={`${c.name}, face`} className="rounded-[6px] border border-edge" /></span>}
+            <MakingLines items={faceDone(c) ? [] : makingFor(making, ['faces'], c.id)} bar />
             {faceRoundsAll.length > 0
               ? <Fold label={`${plural(faceRoundsAll.length, 'round')}, ${plural(faceCount, 'face')}`} open={!faceDone(c)}>{faceRounds}</Fold>
-              : !facePath(c) && <span className="text-[12.5px] text-sub">No faces yet.</span>}
+              : !facePath(c) && !makingFor(making, ['faces'], c.id).length && <span className="text-[12.5px] text-sub">No faces yet.</span>}
           </div>
         </div>
         <div className="flex min-w-0 flex-col items-start gap-2 @[560px]/char:flex-row @[560px]/char:gap-4">
@@ -159,8 +165,10 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
     ),
     voice: (
       <section key="voice" data-block="voice" aria-label="Voice" className="flex min-w-0 flex-col items-start gap-2 @[560px]/char:flex-row @[560px]/char:gap-4">
-        <Label title="Voice" mark={mark('voices')} word={c.voice?.pick ? `picked${c.voice.pick.date ? ` ${fmtDate(c.voice.pick.date)}` : ''}` : voiceDone(c) ? (c.reused ? 'from the library' : 'done') : 'not picked yet'} />
+        <Label title="Voice" mark={mark('voices')} word={c.voice?.pick ? `picked${c.voice.pick.date ? ` ${fmtDate(c.voice.pick.date)}` : ''}` : voiceDone(c) ? (c.reused ? 'from the library' : 'done') : faceDone(c) ? 'not picked yet' : 'after the face'} />
         <div className="flex w-full min-w-0 flex-1 flex-col gap-2">
+          {c.reused && c.reusedFrom && <span data-voice-reused className="text-[12.5px] text-ink-3">Reused from the library: {c.reusedFrom.title}</span>}
+          <MakingLines items={c.reused ? [] : makingFor(making, ['voices'], c.id)} bar />
           {voiceFile && (
             <span className="flex w-[300px] max-w-full items-center gap-2.5 rounded-lg border border-edge-strong px-2.5 py-1.5">
               <PlayButton path={toRepo(voiceFile)!} label={`${c.name}'s voice`} className="size-7" />
@@ -180,7 +188,7 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
                   </span>
                 ))}
               </div>
-              <Link href={`${base}/character/voices`} className="w-max text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Pick or change it on the Voices page</Link>
+              <Link href={`${base}/character/voices`} onClick={() => rememberBack(`${base}/character/voices`, `Back to ${c.name}`)} className="w-max text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Pick or change it on the Voices page</Link>
             </Fold>
           ) : !voiceFile && <span className="text-[12.5px] text-sub">No voices yet.</span>}
         </div>

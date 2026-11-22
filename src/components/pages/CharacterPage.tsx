@@ -1,5 +1,5 @@
 'use client';
-// One character, as drawn in the timeline design (Character, CharacterWaiting; ASKS 46): "Back to Characters" and the
+// One character, as drawn in the timeline design (Character, CharacterWaiting): "Back to <step>" and the
 // trail in the header, the tab row ("Waiting for you in this film", "Characters"), then the made things in the order
 // the takes use them; its brief and its spend under them. Picks and saves work as before.
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -179,7 +179,7 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
         <>
           <div className="grid grid-cols-5 gap-1.5 max-[760px]:grid-cols-4">
             {r.candidates.map((k) => (
-              <Tile key={k.id} label={k.id} src={media(k.path)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} alma={k.id === r.prediction} kept={!!kept(k.path)} faded={!k.path}
+              <Tile key={k.id} label={k.id} src={media(k.path)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} choose alma={k.id === r.prediction} kept={!!kept(k.path)} faded={!k.path}
                 onClick={() => { setSel(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
             ))}
           </div>
@@ -241,6 +241,8 @@ export function CharacterPage() {
   const people = PEOPLE.map((k) => glyphOf(flow.nodes[k].state));
   const peopleG: Glyph = people.every((g) => g === 'done') ? 'done' : people.includes('now') ? 'now' : people.includes('run') ? 'run' : 'todo';
   const back = `${base}?open=${from}`;
+  // the way back names the step the character was opened from: "Back to Voices"
+  const backWords = `Back to ${flow.nodes[from].name}`;
 
   const brief = characterBrief(state.brief?.markdown, c.id);
   const spend = characterSpend(state, c);
@@ -252,11 +254,11 @@ export function CharacterPage() {
   return (
     <>
       <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Characters', node: <StepMenu flow={flow} base={base} label="Characters" g={peopleG} /> }, { label: c.name }]}
-        back={{ label: 'Back to Characters', href: back }}
+        back={{ label: backWords, href: back }}
         phoneSub={`${c.id} · ${st?.text}`}
         actions={<ShownLink places={['faces', 'clothing', 'sheet', 'voices', 'elements']} />} />
       <PageBody wide>
-        <StepBar waiting={flow.waiting} step="Characters" deep back="Back to Characters" backPhoneOnly onBack={() => router.push(back)} onWaiting={() => router.push(`${base}?open=gate`)}
+        <StepBar waiting={flow.waiting} step="Characters" deep back={backWords} backPhoneOnly onBack={() => router.push(back)} onWaiting={() => router.push(`${base}?open=gate`)}
           right={<QCChip spec={qcSpec('sheet')} targets={{ target: c.id, label: `${c.id} sheet`, entry: qcEntry(state, 'sheet', c.id), ready: !!c.sheet?.path, waitsFor: c.sheet?.path ? `${c.id}'s sheet` : faceDone ? 'the sheet' : 'the face pick, then the sheet' }} />} />
 
         <StepIntro step="character" />

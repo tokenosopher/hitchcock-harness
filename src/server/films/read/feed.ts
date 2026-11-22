@@ -25,8 +25,9 @@ const str = (v: unknown): string | undefined => {
   const s = asString(v);
   return s === undefined ? undefined : clean(s) || undefined;
 };
+// a card's words keep their line breaks, "- " lists and **bold**: the card draws them (Feed.tsx CardText)
 const paras = (v: unknown): string[] =>
-  (typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []).map(clean).filter(Boolean);
+  (typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []).map((x) => redact(x).trim()).filter(Boolean);
 
 const kindOf = (p: string): FeedMedia['kind'] => (VIDEO_RE.test(p) ? 'video' : AUDIO_RE.test(p) ? 'audio' : IMAGE_RE.test(p) ? 'image' : 'file');
 
@@ -229,7 +230,7 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
 
       const text = [...paras(c.what), ...paras(c.text)];
       // a card's own "who", or a first paragraph that starts "Who:" (how cards said it before the field existed)
-      const whoLine = !str(c.who) && /^Who:\s*/i.test(text[0] ?? '') ? text.shift()!.replace(/^Who:\s*/i, '') : undefined;
+      const whoLine = !str(c.who) && /^Who:\s*/i.test(text[0] ?? '') ? clean(text.shift()!.replace(/^Who:\s*/i, '')) : undefined;
       const card: FeedCard = {
         key: n > 1 ? `${base}~${n}` : base,
         id: own,

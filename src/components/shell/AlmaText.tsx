@@ -48,7 +48,7 @@ function named(film: string, text: string, key: string): ReactNode[] {
 }
 
 /** One run of text with its links, bold and code drawn. */
-function inline(text: string, film: string, key: string): ReactNode[] {
+export function inline(text: string, film: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
   let at = 0;
   for (const m of text.matchAll(TOKEN)) {

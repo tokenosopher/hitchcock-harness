@@ -1,9 +1,10 @@
 'use client';
 // The step in a deeper page's trail ("The Lighthouse / ✓ Characters ⌄ / Tobias", as drawn): its
-// mark and name, and a press opens the flow's steps as a short menu, each opening that step on the film's board.
+// mark and name, and a press opens the flow's steps as a short menu, each opening that step on the film's board (or
+// its own page, for a step that is one: Release).
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { PEOPLE, PLACES, type Flow } from '@/components/lib/flow';
+import { PEOPLE, PLACES, stepHref, type Flow } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
 import { IconChevronDown } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
@@ -54,7 +55,7 @@ export function StepMenu({ flow, base, label, g }: { flow: Flow; base: string; l
               {keys.map((k) => {
                 const n = flow.nodes[k];
                 return (
-                  <Link key={k} role="menuitem" href={`${base}?open=${k}`} onClick={() => setOpen(false)}
+                  <Link key={k} role="menuitem" href={stepHref(base, k)} onClick={() => setOpen(false)}
                     className="flex h-8 items-center gap-2 rounded-md px-2 text-[12.5px] text-ink no-underline transition-colors duration-150 hover:bg-raised">
                     <StepGlyph g={k === 'gate' ? (flow.waiting ? 'now' : 'done') : glyphOf(n.state)} />{k === 'gate' ? 'Your picks' : n.name}
                   </Link>

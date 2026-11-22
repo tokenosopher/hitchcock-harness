@@ -1,6 +1,7 @@
 'use client';
 // The library as the pages see it (GET /api/library), and the two actions that write: the pick and "Save to library".
 import { useCallback, useEffect, useState } from 'react';
+import { almaFetch } from '@/components/data/almaOutbox';
 
 /** What a library voice's voiceId is. 'saved voice': saved on Higgsfield, reused by its id. 'picked preview': a film's
  *  pick recorded without saving (Flow v3.3 - 3 step 5): no voice id, the picked preview file is the voice, reused by that
@@ -74,7 +75,7 @@ export interface PickBody {
 
 export async function postPick(film: string, body: PickBody): Promise<{ ok: boolean; error?: string; tasteRow?: string }> {
   try {
-    const r = await fetch(`/api/films/${film}/pick`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await almaFetch(film, `/api/films/${film}/pick`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const j = (await r.json().catch(() => ({}))) as { error?: string; tasteRow?: string };
     return r.ok ? { ok: true, tasteRow: j.tasteRow } : { ok: false, error: j.error ?? `pick: ${r.status}` };
   } catch {

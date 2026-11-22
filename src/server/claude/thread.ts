@@ -3,6 +3,7 @@ import { setProgress } from '../actions/progress';
 import { pokeFilm } from '../films/watcher';
 import type { HarnessContext, ThreadEvent, ThreadInfo } from '../types';
 import { findFilm } from '../films/registry';
+import { noteUserWrote } from '../films/recent';
 import { FILM_SLUG } from './config';
 import { isOwnUpload } from '../uploads';
 import { getAlma } from './process';
@@ -43,9 +44,10 @@ export async function threadInfo(film: string): Promise<ThreadInfo> {
   return info;
 }
 
-function isChip(v: unknown): v is { id: string; label: string; ref?: string } {
-  const c = v as { id?: unknown; label?: unknown; ref?: unknown };
-  return !!v && typeof v === 'object' && typeof c.id === 'string' && typeof c.label === 'string' && (c.ref === undefined || typeof c.ref === 'string');
+function isChip(v: unknown): v is { id: string; label: string; ref?: string; about?: string } {
+  const c = v as { id?: unknown; label?: unknown; ref?: unknown; about?: unknown };
+  return !!v && typeof v === 'object' && typeof c.id === 'string' && typeof c.label === 'string' && (c.ref === undefined || typeof c.ref === 'string')
+    && (c.about === undefined || typeof c.about === 'string');
 }
 
 /** An attached file's chip ("upload:…", whose ref Alma is told to open) is kept only when its file really is in this
@@ -60,14 +62,19 @@ export function parseContext(film: string, v: unknown): HarnessContext | undefin
     film: typeof c.film === 'string' && c.film ? c.film : film,
     page: typeof c.page === 'string' ? c.page : '',
     pinned: typeof c.pinned === 'string' ? c.pinned : '',
-    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).filter(keptChip(film)).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}) })) : [],
+    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).filter(keptChip(film)).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}), ...(x.about ? { about: x.about } : {}) })) : [],
     ...(typeof c.playhead === 'string' && c.playhead ? { playhead: c.playhead } : {}),
   };
 }
 
 export async function sendToAlma(film: string, text: string, context?: HarnessContext): Promise<{ event: ThreadEvent; info: ThreadInfo }> {
   const alma = getAlma(film);
+  // the notices (her reply landed, a new card waits) and her working state are followed from her first message, open
+  // page or not: the sidebar's order and marks read them (attached before the send, so her orb shows at once)
+  await import('./notify').then((m) => m.notifyHub().start()).catch(() => undefined);
   const event = await alma.send(text, context);
+  // the user wrote in the film: it goes to the top of the sidebar
+  noteUserWrote(film);
   // a message about a card that asks (its chip rides along) puts that card in progress: its options lock
   const cards = (context?.selected ?? []).filter((c) => c.id.startsWith('card:')).map((c) => c.id.slice(5));
   if (cards.length) void setProgress(film, cards, true).then(() => pokeFilm(film)).catch(() => undefined);

@@ -19,7 +19,9 @@ export const metadata: Metadata = {
   icons: { icon: [{ url: '/icons/favicon.svg', type: 'image/svg+xml' }, { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }], apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }] },
 };
 
-export const viewport: Viewport = { themeColor: '#09090B', width: 'device-width', initialScale: 1 };
+// maximumScale 1 stops iPhone Safari zooming into a text box on focus (its text is under 16 px); Safari still lets a
+// person pinch to zoom, so nothing is lost for reading.
+export const viewport: Viewport = { themeColor: '#09090B', width: 'device-width', initialScale: 1, maximumScale: 1 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (

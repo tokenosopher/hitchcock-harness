@@ -32,7 +32,7 @@ export const QC_SPECS: QCSpec[] = [
   { stage: 'previz', name: 'previz & boards', page: 'Main, the Previz step', node: 'previz', note: 'Flow v3.3 - 5 Previz and storyboards',
     reads: 'the shots file, the boards and the views',
     checks: ['Camera design: angles and sizes worth having; neighbouring shots change position, not only size', 'Action fluidity: beats of one to two seconds, poses matched across each cut', 'One action per wide, each wide on the view from its own camera', 'A shot’s text names only what is in frame', 'States agree across cuts', 'Lines fit their shots at the measured rate, with the tail', 'Reference videos under 30 s in one generation', 'No full-size grey panel alone; every grey image with its “blocking only” line', 'Boards match the picked sheets and views'] },
-  { stage: 'elements', name: 'elements', page: 'Elements', node: 'elements', note: 'Flow v3.3 - 3 Voices and video elements',
+  { stage: 'elements', name: 'elements', page: 'Character elements', node: 'elements', note: 'Flow v3.3 - 3 Voices and video elements',
     reads: 'each element, its sheet and its voice',
     checks: ['The line heard once, in the picked voice, lips closed after the last word', 'Six views in five cuts, 1920×1080 split, 5 s', 'Face and costume match the sheet'] },
   { stage: 'prompt', name: 'prompt', page: 'Scene', node: 'scenes', note: 'Flow v3.3 - 6 Scene prompts',

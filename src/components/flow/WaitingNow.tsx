@@ -6,7 +6,7 @@
 // The list is read from the flow as "Waiting for you" reads it (waitList.ts); this component reads Alma's thread for
 // it (the picks being made), so the page around it is not drawn again when the thread changes.
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { FilmState } from '@/server/types';
 import { useFilm } from '@/components/data/film';
 import { useThread } from '@/components/data/thread';
@@ -20,6 +20,7 @@ import { IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { GoCard, PickCard } from './GatePage';
 import { itemHref, soundsOf, waitItemsOf, type WaitItem } from './waitList';
+import { useKept } from './useKept';
 
 /** The flow and what waits in it, for the film on screen; undefined until the film is read. */
 export function useWaitingNow(): { s: FilmState; flow: Flow; items: WaitItem[] } | undefined {
@@ -28,7 +29,7 @@ export function useWaitingNow(): { s: FilmState; flow: Flow; items: WaitItem[] }
   return useMemo(() => {
     if (!state) return undefined;
     const flow = flowOf(state, tasks);
-    return { s: state, flow, items: waitItemsOf(flow, state) };
+    return { s: state, flow, items: waitItemsOf(flow) };
   }, [state, tasks]);
 }
 
@@ -44,22 +45,6 @@ export function WaitingCount({ onCount }: { onCount: (n: number) => void }) {
     onCount(n);
   }, [n, onCount]);
   return null;
-}
-
-/** The items as they come and go: one that stops waiting (answered) folds away instead of vanishing. */
-function useKept(items: WaitItem[]): { it: WaitItem; here: boolean }[] {
-  const [prev, setPrev] = useState(items);
-  const [kept, setKept] = useState<WaitItem[]>(items);
-  if (prev !== items) {
-    setPrev(items);
-    const now = new Set(items.map((x) => x.key));
-    const merged = [...items];
-    // a gone item stays where it was, closed
-    kept.forEach((x, i) => { if (!now.has(x.key)) merged.splice(Math.min(i, merged.length), 0, x); });
-    setKept(merged);
-  }
-  const now = new Set(items.map((x) => x.key));
-  return kept.map((it) => ({ it, here: now.has(it.key) }));
 }
 
 export function WaitingNow({ w, here, from, open, onOpen }: {
@@ -156,7 +141,7 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
       <Reveal open={open} className="min-w-0 px-2.5 pb-2.5">
         <div className="flex flex-col gap-3 pt-0.5">
           {it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from={from} where={<span>{where}</span>} />
-            : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={chip} onPrefill={prefill} />
+            : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={chip} />
             : g ? <PickCard p={g} onChip={chip} onPrefill={prefill} from={from} voices={it.voiceIds} /> : null}
         </div>
       </Reveal>

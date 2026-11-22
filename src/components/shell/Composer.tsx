@@ -2,15 +2,20 @@
 // The composer: "Alma sees" chips, the message box, Attach and Send (the page's quick messages are not shown, 14 Nov).
 // Every message carries the HarnessContext built from the chips; once it is out, the removable chips it
 // carried clear (the thread shows them under the message) and only the pinned chip, and a chip a page keeps, stay.
-// Enter sends, Shift+Enter is a new line. While Alma works an empty composer's button is Stop; typing turns it
+// Enter sends, Shift+Enter is a new line; on a touch-first device (the phone) Enter is a new line and only the button
+// sends. While Alma works an empty composer's button is Stop; typing turns it
 // back into Send, which queues the message behind her turn.
+// Send is instant: the button shows the press on touch-down, and on the tap the box clears and the message is in the
+// thread at once, marked as sending (useThread's send), so a tap on the phone never leaves you unsure it took. A touch
+// sends on its lift (pointerup), not on the click that follows it, which iOS can hold back or spend on closing the
+// keyboard. Right after a send the button stays Send for a moment instead of turning into Stop under the finger.
 // References in the words: a thing put into the line as a chip, at the cursor, by Option-clicking it on the
 // page, by the pick button and a click or tap, by Ctrl-M for the playhead's moment, or from the @ list. The box stays
 // a plain text box: a chip is its label in the words, drawn as a pill by a copy of the text behind them, and is one
 // piece (the cursor never stops inside it; a deletion that reaches it takes it out whole). Alma receives each chip
 // as a <harness-ref …/> tag in its place (src/lib/refs.ts).
 import { usePathname } from 'next/navigation';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useUI, useDraft, useDraftRefs } from '@/components/data/ui';
 import { useThread } from '@/components/data/thread';
 import { useFilm } from '@/components/data/film';
@@ -20,7 +25,8 @@ import { cn } from '@/lib/utils';
 import { isUploadChip, sendUpload, UPLOAD_PART } from '@/components/lib/uploads';
 import { useSize } from '@/components/lib/sizes';
 import { Edge } from './Edge';
-import { useIsPhone } from './useIsPhone';
+import { useIsPhone, useIsTouch } from './useIsPhone';
+import { enterAction, PHONE_BOX_LINES } from './phoneBar';
 import {
   chipSpans, draftForAlma, draftMarkup, draftParts, draftPlain, editParts, insertRef, isRefPart, newRefKey, shownLabel, snapCaret,
   type DraftPart, type InlineRef,
@@ -74,12 +80,13 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
   const { setDraft, setDraftRefs, prefill, undoDraft, redoDraft, hint, pinned, chips, addChip, removeChips, playhead, composerRef } = useUI();
   const draft = useDraft();
   const refs = useDraftRefs();
-  const { send, sending, stop, workingSince } = useThread();
+  const { send, stop, workingSince } = useThread();
   const filmState = useFilm().state;
   const [stopping, setStopping] = useState(false);
   const working = workingSince !== undefined;
   const page = usePathname();
   const phone = useIsPhone();
+  const touch = useIsTouch();
   const mac = useSyncExternalStore(noSub, isMac, () => true);
   const hasMoment = useHasMoment();
   const [focus, setFocus] = useState(false);
@@ -128,7 +135,9 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
     if (!el || boxH) return;
     if (!showAll) { el.style.height = ''; return; }
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, Math.round(window.innerHeight / 3))}px`;
+    // on a phone a few lines at most, then the box scrolls: the page above stays put
+    const cap = phone && touch ? Math.round(PHONE_BOX_LINES * parseFloat(getComputedStyle(el).lineHeight) + 15) : Math.round(window.innerHeight / 3);
+    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   });
   // the cursor after a change of ours, and the pills' copy kept at the box's size and scroll
   useLayoutEffect(() => {
@@ -227,27 +236,43 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
     }
   }
 
-  async function submit() {
+  // just sent: the button stays Send (not Stop) for a moment, so a second touch cannot stop Alma by accident
+  const [justSent, setJustSent] = useState(false);
+  const justSentTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(justSentTimer.current), []);
+  function submit() {
     // a message can be only a file: Alma is told to look at it; a message of chips alone is their tags
     const words = draftForAlma(parts).trim();
     const text = words || (attached ? (attached === 1 ? 'Look at the attached file.' : 'Look at the attached files.') : '');
-    if (!text || sending || uploading > 0) return;
+    if (!text || uploading > 0) return;
     const selected = chips;
-    const ok = await send(text, { film, page, pinned, selected, playhead });
-    if (ok) {
-      setDraft('');
-      setDraftRefs(() => ({}));
-      card.setOpen(undefined);
-      // a chip a page keeps ("keep:…", the takes marked for Seedance) goes with every message and stays
-      removeChips(selected.filter((c) => !c.id.startsWith('keep:')).map((c) => c.id));
-    }
+    // the box clears and the message shows in the thread now; if it does not go, the thread keeps it with a retry
+    void send(text, { film, page, pinned, selected, playhead });
+    setDraft('');
+    setDraftRefs(() => ({}));
+    card.setOpen(undefined);
+    // a chip a page keeps ("keep:…", the takes marked for Seedance) goes with every message and stays
+    const gone = selected.filter((c) => !c.id.startsWith('keep:')).map((c) => c.id);
+    if (gone.length) startTransition(() => removeChips(gone));
+    setJustSent(true);
+    clearTimeout(justSentTimer.current);
+    justSentTimer.current = setTimeout(() => setJustSent(false), 900);
   }
+  // the touch that sent (its lift), so the click the browser sends after it does not send again
+  const firedAt = useRef(0);
+  const press = (el: HTMLElement, on: boolean) => {
+    if (on) { el.dataset.pressed = ''; el.dataset.pressedAt = String(performance.now()); return; }
+    // a press is seen for at least a tenth of a second, however quick the tap
+    const left = 110 - (performance.now() - Number(el.dataset.pressedAt ?? 0));
+    const off = () => { delete el.dataset.pressed; };
+    if (left > 0) setTimeout(off, left); else off();
+  };
   async function halt() {
     if (stopping) return;
     setStopping(true);
     try { await stop(); } finally { setStopping(false); }
   }
-  const asStop = working && !has;
+  const asStop = working && !has && !justSent;
   // The page's quick messages ("What changed?", "Render the 480p of this version") are not shown (the user, 14 Nov:
   // "those options make no sense, so I wouldn't actually keep those right now"). Pages still state them through
   // usePage, so they can come back; the box has the message, Attach and Send.
@@ -303,6 +328,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
             id="composer"
             ref={composerRef}
             rows={showAll ? 2 : 1}
+            enterKeyHint={touch ? 'enter' : undefined}
             style={showAll ? { height: boxH ? Math.max(boxH, 44) : undefined, maxHeight: '60dvh' } : undefined}
             value={plain}
             role={at ? 'combobox' : undefined}
@@ -398,11 +424,11 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
                 if (to !== undefined) { e.preventDefault(); e.stopPropagation(); setDraft(to); }
                 return;
               }
-              if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+              if (enterAction({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing }, touch) !== 'send') return;
               e.preventDefault();
-              void submit();
+              submit();
             }}
-            placeholder={chips.find((c) => c.placeholder)?.placeholder ?? hint.placeholder ?? DEFAULT_PLACEHOLDER}
+            placeholder={[...chips].reverse().find((c) => c.placeholder)?.placeholder ?? hint.placeholder ?? DEFAULT_PLACEHOLDER}
             className={cn('relative w-full resize-none border-0 bg-transparent text-[14px] leading-normal text-ink outline-none placeholder:text-mute', showAll ? 'block px-[13px] pb-1 pt-[11px]' : 'block h-11 overflow-hidden whitespace-nowrap px-3 py-[11px]')}
           />
         </div>
@@ -432,8 +458,24 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
               <IconStop />Stop
             </button>
           ) : (
-            <button type="button" onClick={() => void submit()} aria-label={working ? 'Send (queued after Alma’s turn)' : 'Send'} disabled={sending || uploading > 0}
-              className={cn('flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg', has ? 'bg-ink text-bg' : 'bg-edge text-sub')}>
+            <button type="button" data-send="" aria-label={working ? 'Send (queued after Alma’s turn)' : 'Send'} disabled={uploading > 0}
+              // the press shows at once, written on the button itself (no render to wait for)
+              onPointerDown={(e) => { if (e.button === 0) press(e.currentTarget, true); }}
+              onPointerUp={(e) => {
+                const el = e.currentTarget;
+                press(el, false);
+                if (e.pointerType === 'mouse') return;
+                const r = el.getBoundingClientRect();
+                if (e.clientX < r.left - 8 || e.clientX > r.right + 8 || e.clientY < r.top - 8 || e.clientY > r.bottom + 8) return;
+                firedAt.current = performance.now();
+                submit();
+              }}
+              onPointerCancel={(e) => press(e.currentTarget, false)}
+              onPointerLeave={(e) => { if (e.currentTarget.dataset.pressed !== undefined) press(e.currentTarget, false); }}
+              onClick={() => { if (performance.now() - firedAt.current > 800) submit(); }}
+              className={cn('flex size-8 flex-none cursor-pointer touch-manipulation select-none items-center justify-center rounded-lg [-webkit-tap-highlight-color:transparent]',
+                'transition-[transform,background-color,color,opacity] duration-150 ease-out data-[pressed]:scale-[0.86] data-[pressed]:opacity-80 data-[pressed]:duration-75 motion-reduce:transition-none motion-reduce:data-[pressed]:scale-100',
+                has || justSent ? 'bg-ink text-bg' : 'bg-edge text-sub')}>
               <IconSend />
             </button>
           )}

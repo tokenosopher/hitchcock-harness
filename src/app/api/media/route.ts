@@ -6,8 +6,10 @@ import { isMock } from '@/fixtures/mock';
 import { mockMedia } from '@/fixtures/masters';
 import { castMedia } from '@/fixtures/cast';
 import { day1Media } from '@/fixtures/day1';
+import { afterlockMedia } from '@/fixtures/afterlock';
 import { soundMedia } from '@/fixtures/soundpick';
 import { sentMedia } from '@/fixtures/sent';
+import { elementsMedia } from '@/fixtures/elements';
 
 // GET /api/media?p=<path relative to the film repo, "assets/films/<slug>/…"> → the file, from the film
 // folders, the library or the final cuts only. Video answers HTTP Range so <video> can seek.
@@ -21,7 +23,7 @@ export async function GET(req: Request) {
   await connection();
   const url = new URL(req.url);
   try {
-    const r = (isMock() ? (await mockMedia(url.searchParams.get('p'))) ?? (await castMedia(url.searchParams.get('p'))) ?? (await day1Media(url.searchParams.get('p'))) ?? (await soundMedia(url.searchParams.get('p'))) ?? (await sentMedia(url.searchParams.get('p'))) : undefined) ?? await resolveMedia(url.searchParams.get('p'));
+    const r = (isMock() ? (await mockMedia(url.searchParams.get('p'))) ?? (await castMedia(url.searchParams.get('p'))) ?? (await day1Media(url.searchParams.get('p'))) ?? (await afterlockMedia(url.searchParams.get('p'))) ?? (await soundMedia(url.searchParams.get('p'))) ?? (await sentMedia(url.searchParams.get('p'))) ?? (await elementsMedia(url.searchParams.get('p'))) : undefined) ?? await resolveMedia(url.searchParams.get('p'));
     const w = Number(url.searchParams.get('w') || 0);
     if (w) {
       if (!isImage(r.real) && !isVideo(r.real) && !isPdf(r.real)) throw new MediaError(415, 'no thumbnail for this kind of file');

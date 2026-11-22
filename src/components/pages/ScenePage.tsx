@@ -193,6 +193,7 @@ export function ScenePage() {
   return (
     <>
       <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Scenes', href: `${base}/scenes` }, { label: `${sc.id} · ${sc.title}` }]}
+        back={{ label: 'Back to Scenes', href: `${base}/scenes`, soft: true }}
         meta={<>{[fmtSecs(sc.seconds), shotN ? `${shotN} shots` : '', loc ?? '', `${sc.takes.length} takes`, fmtCredits(sceneCredits(sc), 'credits')].filter(Boolean).join(' · ')} · <span className="font-mono">{filmPath(state, sc.folder)}</span></>}
         phoneSub={`${fmtSecs(sc.seconds)} · ${shotN} shots · ${sc.takes.length} takes`}
         actions={<>

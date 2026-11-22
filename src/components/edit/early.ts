@@ -9,7 +9,8 @@ import { hasPlanned, plannedCounts, sceneKinds } from './planned';
 import { takesReady } from './takesReady';
 
 export type EarlyId = 'script' | 'characters' | 'places' | 'shots' | 'boards' | 'takes';
-export const EARLY_IDS: EarlyId[] = ['script', 'characters', 'places', 'shots', 'boards', 'takes'];
+// places before characters: after the lock the location pick is the first thing put in front of the user (Flow v3.3)
+export const EARLY_IDS: EarlyId[] = ['script', 'places', 'characters', 'shots', 'boards', 'takes'];
 export const EARLY_NAME: Record<EarlyId, string> = {
   script: 'Script', characters: 'Characters', places: 'Locations', shots: 'Shot lists', boards: 'Boards', takes: 'First takes',
 };
@@ -55,26 +56,29 @@ export function earlySteps(s: FilmState, tl?: Pick<Timeline, 'tracks'>): EarlySt
       act: !draft && !story ? { label: 'Tell Alma the idea', do: { kind: 'idea' } } : { label: draft ? 'Open the script' : 'Open the story', do: { kind: 'page', page: 'story' } } });
   }
 
-  // 2. characters: a face picked and a sheet approved for each (a group has its sheet only)
-  const cast = s.characters;
-  const ready = (c: (typeof cast)[number]) => (c.extra || faceDone(c)) && (!!c.sheet?.approved || !!c.reused);
-  if (!locked && !cast.length) steps.push({ id: 'characters', done: false, facts: after('the script'), row: { kind: 'page', page: 'character' } });
-  else if (!cast.length) steps.push({ id: 'characters', done: false, facts: 'no characters yet', row: { kind: 'page', page: 'character' } });
-  else {
-    const toPick = cast.filter((c) => !c.extra && !faceDone(c) && (c.face?.rounds.length ?? 0) > 0);
-    const done = cast.every(ready);
-    steps.push({ id: 'characters', done, row: { kind: 'page', page: 'character' },
-      facts: done ? plural(cast.length, 'character') : toPick.length ? `${plural(toPick.length, 'face')} to pick: ${names(toPick.map((c) => c.name))}` : `${cast.filter(ready).length} of ${plural(cast.length, 'character')} ready` });
-  }
-
-  // 3. places: a main image picked for each
+  // 2. places: a main image picked for each
   const locs = s.locations;
   if (!locs.length) steps.push({ id: 'places', done: false, facts: locked ? 'no places yet' : after('the script'), row: { kind: 'page', page: 'locations' } });
   else {
     const picked = locs.filter((l) => !!l.master?.picked || !!l.master?.path).length;
     const views = locs.reduce((k, l) => k + (l.views?.length ?? 0), 0);
+    // a round landed and not picked yet: the places to pick, by name (as the characters' faces are)
+    const toPick = locs.filter((l) => !l.master?.picked && !l.master?.path && (l.styleImages?.[l.styleImages.length - 1]?.candidates.some((c) => !!c.path) ?? false));
     steps.push({ id: 'places', done: picked === locs.length, row: { kind: 'page', page: 'locations' },
-      facts: picked === locs.length ? `${plural(locs.length, 'place')}${views ? ` · ${plural(views, 'view')}` : ''}` : `${picked} of ${plural(locs.length, 'place')} picked` });
+      facts: picked === locs.length ? `${plural(locs.length, 'place')}${views ? ` · ${plural(views, 'view')}` : ''}` : toPick.length ? `${plural(toPick.length, 'place')} to pick: ${names(toPick.map((l) => l.name))}` : `${picked} of ${plural(locs.length, 'place')} picked` });
+  }
+
+  // 3. characters: a face picked and a sheet approved for each (a group has its sheet only)
+  const cast = s.characters;
+  const ready = (c: (typeof cast)[number]) => (c.extra || faceDone(c)) && (!!c.sheet?.approved || !!c.reused);
+  if (!locked && !cast.length) steps.push({ id: 'characters', done: false, facts: after('the script'), row: { kind: 'page', page: 'character' } });
+  else if (!cast.length) steps.push({ id: 'characters', done: false, facts: 'no characters yet', row: { kind: 'page', page: 'character' } });
+  else {
+    // a face to pick: a round whose faces have landed (one asked and still being made is not a pick yet)
+    const toPick = cast.filter((c) => !c.extra && !faceDone(c) && (c.face?.rounds ?? []).some((r) => r.candidates.some((k) => !!k.path)));
+    const done = cast.every(ready);
+    steps.push({ id: 'characters', done, row: { kind: 'page', page: 'character' },
+      facts: done ? plural(cast.length, 'character') : toPick.length ? `${plural(toPick.length, 'face')} to pick: ${names(toPick.map((c) => c.name))}` : `${cast.filter(ready).length} of ${plural(cast.length, 'character')} ready` });
   }
 
   // 4. shot lists: a shot list for every scene of the script

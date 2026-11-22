@@ -7,3 +7,4 @@ export const IconPen = (p: P) => <S {...p}><path d="M4 20h4L19 9l-4-4L4 16z" /><
 export const IconLock = (p: P) => <S {...p}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></S>;
 export const IconLink = (p: P) => <S {...p}><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1" /><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" /></S>;
 export const IconClock = (p: P) => <S {...p}><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></S>;
+export const IconAsk = (p: P) => <S {...p}><path d="M20 12a7 7 0 0 1-10.3 6.2L5 19.5l1.3-4.2A7 7 0 1 1 20 12z" /></S>;

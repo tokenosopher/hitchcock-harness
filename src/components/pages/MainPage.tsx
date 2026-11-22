@@ -4,11 +4,14 @@
 // design/boards/Main.dc.html. Since ASKS 46 (14 Nov 2026) a row under the flow names what shows below ("Waiting for
 // you", and the pressed step beside it); a pressed step shows its content there at once, and a place inside Locations
 // or Views opens deeper with ?at=<id>. The change between them fades in; the flow above never moves.
+// A step that is its own page (Story, Scenes, Finish, Sound, Release; lib/flow.ts PAGE_STEPS) opens that page at once,
+// with nothing in between; an old ?open= address of one goes on to the page.
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePage } from '@/components/data/ui';
 import { picksWaiting, type FlowKey } from '@/components/lib/derive';
-import { defaultOpen, flowOf, ORDER, type Flow } from '@/components/lib/flow';
+import { defaultOpen, flowOf, ORDER, PAGE_STEPS, stepHref, type Flow } from '@/components/lib/flow';
+import { goBack } from '@/components/shell/BackLink';
 import type { FilmState, Stage } from '@/server/types';
 import { Header } from '@/components/shell/Header';
 import { PageBody, Loading } from '@/components/shell/StageTitle';
@@ -48,7 +51,8 @@ function stepLine(s: FilmState, flow: Flow, k: FlowKey, wn: WhatsNext): string {
   if (k === 'views') return viewsLine(s);
   if (k === 'shots') return shotsLine(s);
   // what waits for the user first, then the steps left, as What's next's tab says it
-  if (k === 'edit') { const n = waitItemsOf(flow, s).length; return ["What's next", n ? waitWords(n) : '', wn.view?.count].filter(Boolean).join(' · '); }
+  // while pick-ups or retakes are being made it says what they are and where each stands instead
+  if (k === 'edit') { const n = waitItemsOf(flow).length; return (flow.work ? [flow.work.line, n && !flow.work.go.length ? waitWords(n) : ''] : ["What's next", n ? waitWords(n) : '', wn.view?.count]).filter(Boolean).join(' · '); }
   if (k === 'release' && wn.posted) return [flow.nodes.release.status, `${wn.posted.n} of ${wn.posted.of} posted`].filter(Boolean).join(' · ');
   if (k === 'faces' || k === 'clothing' || k === 'sheet' || k === 'voices' || k === 'elements') return castLine(s, k as CastPart);
   return flow.nodes[k].status;
@@ -61,7 +65,9 @@ export function MainPage() {
   const params = useSearchParams();
   const flow = useMemo(() => (state ? flowOf(state, tasks) : undefined), [state, tasks]);
   const asked = params.get('open') as FlowKey | null;
-  const open: FlowKey = asked && ORDER.includes(asked) ? asked : flow ? defaultOpen(flow) : 'gate';
+  const toPage = asked && PAGE_STEPS.includes(asked) ? stepHref(base, asked) : undefined;
+  useEffect(() => { if (toPage) router.replace(toPage); }, [toPage, router]);
+  const open: FlowKey = asked && ORDER.includes(asked) && !toPage ? asked : flow ? defaultOpen(flow) : 'gate';
   const at = (open === 'loc' || open === 'views') ? params.get('at') ?? undefined : undefined;
 
   const firstReady = flow?.gate.find((i) => i.state === 'ready' && i.prediction);
@@ -75,11 +81,13 @@ export function MainPage() {
   const [wn, setWn] = useState<WhatsNext>({});
   const onRead = useCallback((w: WhatsNext) => setWn(w), []);
   const lines = useMemo(() => (state && flow ? boardLines(state, flow, wn) : undefined), [state, flow, wn]);
-  if (!state || !flow) return <Loading error={error} />;
+  if (!state || !flow || toPage) return <Loading error={error} />;
 
   const onOpen = (k: FlowKey) => {
-    router.replace(`${pathname}?open=${k}`, { scroll: false });
     ui.addChip({ id: 'node', label: flow.nodes[k].chip });
+    // a step that is its own page opens it, as a link does (Back returns to the flow)
+    if (PAGE_STEPS.includes(k)) { router.push(stepHref(base, k)); return; }
+    router.replace(`${pathname}?open=${k}`, { scroll: false });
   };
   // one place is its own page (as a character is): opening it adds to the browser's history, so Back returns to the
   // step it was opened from (QC round two); pressing steps replaces the address, as tabs do
@@ -104,7 +112,7 @@ export function MainPage() {
       <PageBody>
         <StepBar waiting={flow.waiting} step={open === 'gate' ? undefined : n.name} line={place ? undefined : stepLine(state, flow, open, wn)} deep={!!place}
           right={place || open === 'gate' ? undefined : <NodeRight s={state} n={n} base={base} />}
-          back={place ? `Back to ${n.name}` : undefined} backPhoneOnly onBack={() => onOpen(open)} onWaiting={() => onOpen('gate')} />
+          back={place ? `Back to ${n.name}` : undefined} backPhoneOnly onBack={() => goBack(router, `${pathname}?open=${open}`)} onWaiting={() => onOpen('gate')} />
         {open !== 'gate' && <StepIntro key={open} step={open} className="duration-200 animate-in fade-in-0 motion-reduce:animate-none" />}
         {/* a new step or place fades in; the flow above stays where it is */}
         <div key={`${open}:${place?.id ?? ''}`} data-step-view={open} aria-label={open === 'gate' ? 'Your picks' : n.name} role="region"
@@ -130,10 +138,13 @@ function boardLines(s: FilmState, flow: Flow, wn: WhatsNext): BoardLines {
   const asking = flow.asks.filter((c) => c.place === 'edit' || c.place === 'scenes' || c.place === 'finish' || c.place === 'sound').length;
   const running = [N.scenes, N.finish, N.sound].some((x) => x.state === 'running');
   const edit = asking ? { line: `${asking === 1 ? '1 waits' : `${asking} wait`} for you · ${edit0.line}`, g: 'now' as const } : running && edit0.g !== 'now' ? { ...edit0, g: 'run' as const } : edit0;
+  // pick-ups or retakes being made: what they are and where each stands, in place of What's next's step
+  const work = flow.work;
+  const editW = work ? { line: asking && !work.go.length ? `${asking === 1 ? '1 waits' : `${asking} wait`} for you · ${work.headline}` : work.headline, g: (work.go.length || asking ? 'now' : 'run') as Glyph } : edit;
   const p = wn.posted;
   const delivered = s.film.status === 'delivered';
   const release: BoardLines['release'] = p
     ? { line: `${p.n} of ${p.of} posted`, g: p.n >= p.of ? 'done' : wn.view?.current === 'posted' ? 'now' : 'todo' }
     : { line: N.release.short || 'not yet', g: delivered ? 'done' : 'todo' };
-  return { box: castBoxLines(s, flow), edit, next: wn.next, release };
+  return { box: castBoxLines(s, flow), edit: editW, next: work ? work.detail : wn.next, nextG: work ? (work.go.length ? 'now' : 'run') : undefined, release };
 }

@@ -58,6 +58,9 @@ export interface CharacterRef {
   imageElement?: boolean;
   /** Taken whole from the library or an earlier film: a sheet and a picked face with no rounds behind them. */
   reused?: boolean;
+  /** The library entry a reused character came from (cast/<folder>/meta.json, written when it was taken): the film it
+   *  was made for, and the entry's id. */
+  reusedFrom?: { title: string; slug?: string; entry?: string };
   /** The pick files themselves (cast/<folder>/pick-face.png, pick-wardrobe.png, the newest version), so a character
    *  taken whole from the library, with no rounds, still shows its face (ASKS 46, 14 Nov 2026). */
   picks?: { face?: string; wardrobe?: string };
@@ -216,8 +219,15 @@ export interface FilmState {
   story?: StoryInfo;
   /** Stage 11's sound work, counted by folder group (mix, music, sfx, lines, fixes, reads, stems): the Sound node's status. */
   sound?: SoundSummary;
+  /** Pick-ups by their folders : every FIX-<name>/ under generations/ or blocks/ and under
+   *  previz/, with how far its files go. The board's Edit step reads them (lib/editWork.ts) to say what is being made
+   *  while a pick-up has not landed. Read by src/server/films/read/pickups.ts. */
+  pickups?: PickupWork[];
   warnings?: string[];          // what the readers could not parse ("spend.md: 7 rows name no amount")
   updatedAt: string;            // ISO
+  /** In the browser only, never from the server: the gate picks "Done picking" sent that the state does not show
+   *  answered yet (components/data/film.tsx). gateItems leaves them out, so they do not wait for the user again. */
+  sentKeys?: string[];
 }
 
 // ---- QC (build step 3, 8 Nov). The critic sub-agent (recipes/qc-critic.md) writes one file per round:
@@ -261,6 +271,20 @@ export interface QCReport {
 }
 
 /** One (stage, target): its latest report and every round in order. */
+/** One pick-up's files: new previz, boards, the board check (a previz QC report on it), the prompt, takes. */
+export interface PickupWork {
+  name: string;                 // "FIX-S4-reel"
+  scenes: string[];             // the scenes its name names ("FIX-S2S3-reel" → S2, S3); one guessed from its files when none
+  previz: boolean;              // previz/FIX-…/ holds a scene file or a built scene
+  boards: number;               // storyboard versions under previz/FIX-…/storyboard/
+  checked: boolean;             // the board check: a previz QC report on it (qc/previz-FIX-…-r<n>.json)
+  prompts: number;              // prompt versions under its generations folder
+  promptPassed?: boolean;       // the newest prompt's check passed
+  landed: number;               // takes with a clip
+  generating: number;           // takes asked for, no clip yet, not stopped
+  stopped: number;              // takes blocked or failed
+  dropped?: boolean;            // dropped.txt in either folder: no longer being made
+}
 export interface QCEntry { key: string; stage: string; target: string; latest: QCReport; history: QCReport[] }
 
 /** The files of stages 9 to 12, by name only: cut/ (edits and drafts), the 1080 masters (cut/*1080*, video/1080/),
@@ -342,7 +366,7 @@ export interface FeedCard {
   id?: string;                  // the card's own id, said in chat; a card that asks must have one
   title: string;
   sub?: string;
-  text?: string[];              // paragraphs, markdown marks stripped
+  text?: string[];              // paragraphs as written: line breaks, "- " lists and **bold** kept (the card draws them)
   who?: string;                 // the card's own "who": who the character it asks about is, in a sentence or two
   date?: string;                // ISO, from the card's "updated"
   section: string;              // the review record's section heading
@@ -449,12 +473,13 @@ export interface HarnessContext {
   playhead?: string;            // SMPTE, when on a page with a player
 }
 /** `text` is the newest version's. `by`: who wrote a version, the user on the Story page or Alma. `settled`: the version the
- *  user said the script is to be written from. */
+ *  user said the script is to be written from; `via` how that is known: story/settled.json (the page's button), the locked
+ *  script's "## Story" heading naming it (settled in the chat), or the script lock alone (src/lib/story-settled.ts). */
 export interface StoryInfo {
   versions: { version: string; path: string; date?: string; by: 'you' | 'alma' }[];
   current: string;
   text: string;
-  settled?: { version: string; at?: string };
+  settled?: { version: string; at?: string; via?: 'file' | 'script' | 'lock' };
 }
 export interface Chip {
   id: string; label: string; ref?: string;   // ref = file path or ID the chip points at
@@ -462,6 +487,9 @@ export interface Chip {
   image?: string;
   /** While this chip is in the box, the box asks this instead of the page's own words (never sent to Alma). */
   placeholder?: string;
+  /** The chip opened the message box about its thing (a card's "Say something else", "Ask Alma about S1"): what the
+   *  message is about, in words, which Alma reads ahead of the message (the box itself starts empty). */
+  about?: string;
 }
 
 /** The models Alma can run on, as the Claude Code CLI names them (`--model`). '' leaves it to Claude Code's own setting. */
