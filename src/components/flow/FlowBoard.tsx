@@ -5,11 +5,11 @@
 // there is only Edit and Release ("once we've done the takes … there should be basically just the end, which is the
 // edit section"); the pages Scenes, Finish and Sound open from Edit's list and by their addresses. Every box is a button
 // that shows its step under the board and puts its chip in "Alma sees". A box with a live sub-agent shimmers and
-// names the agent in its line. On the phone the flow folds behind a one-line summary and the rows stack.
+// names the agent in its line. On the phone the flow folds behind a one-line summary and the rows stack; a press on a
+// step folds it again (sliding up) as the step opens, so it never has to be closed by hand.
 import { useEffect, useState } from 'react';
 import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
-import { picksWaiting } from '@/components/lib/derive';
 import { IconCheck } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 
@@ -45,20 +45,23 @@ export interface BoardLines {
   box?: Partial<Record<FlowKey, string>>;
   /** Edit: "7 of 7 scenes have takes" and its mark. */
   edit?: { line: string; g: Glyph };
-  /** Edit's second line: "Next: check the 1080p shots" (What's next's current step). */
+  /** Edit's second line: "Next: check the 1080p shots" (What's next's current step), or, while pick-ups are being
+   *  made, where each stands ("S1 at boards · S3, S4 at prompts"). */
   next?: string;
+  /** That line's mark: yours to look at (the default), or being made. */
+  nextG?: Glyph;
   /** Release's line and mark: "0 of 6 posted", dashed until it is reachable. */
   release?: { line: string; g: Glyph };
 }
 
-interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; className?: string }
+interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; secondG?: Glyph; className?: string }
 
-function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, className }: BoxProps) {
+function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, secondG = 'now', className }: BoxProps) {
   const line = lineOf(n, short, tick);
   const todo = g === 'todo';
   const liveNow = n.aims.some((a) => a.task.state === 'running');
   return (
-    <button type="button" onClick={() => onOpen(n.key)} aria-pressed={on} aria-label={gate ? `Gate, your picks, ${line}` : aria(n, name, line)} data-box={n.key}
+    <button type="button" onClick={() => onOpen(n.key)} aria-pressed={on} aria-label={gate ? `Gate, your picks, ${line}` : aria(n, name, second ? `${line}; ${second}` : line)} data-box={n.key}
       title={n.aims.length ? n.aims.map((a) => a.task.title).join('\n') : n.status || undefined}
       className={cn('box-border flex min-h-[42px] min-w-0 cursor-pointer flex-col justify-center gap-px rounded-lg border px-[9px] pb-1.5 pt-[5px] text-left transition-[background-color,border-color,box-shadow] duration-200 max-[760px]:min-h-11',
         on ? 'border-ink bg-[#141416] shadow-[inset_0_0_0_1px_#FAFAFA]' : todo ? 'border-dashed border-edge-strong bg-transparent hover:bg-panel' : 'border-edge bg-panel hover:bg-raised',
@@ -66,12 +69,12 @@ function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(
       <span className={cn("truncate text-[12.5px] font-medium @max-[640px]/flow:whitespace-normal", todo && !on ? 'text-sub' : 'text-ink')}>
         {gate && <span className="font-normal text-mute @max-[640px]/flow:hidden">Gate · </span>}{name}
       </span>
-      <span key={line} className={cn('flex min-w-0 items-center gap-[5px] text-[11px]', line.startsWith('Alma ›') ? 'line-in text-ink-3' : g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub')}>
+      <span key={line} className={cn('flex min-w-0 items-center gap-[5px] text-[11px]', line.startsWith('Alma ›') ? 'line-in text-ink-3' : cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub'))}>
         <StepGlyph g={g} /><span className="truncate @max-[640px]/flow:whitespace-normal @max-[640px]/flow:[overflow-wrap:anywhere]">{line}</span>
       </span>
       {second && (
-        <span key={second} className="flex min-w-0 items-center gap-[5px] text-[11px] text-warn duration-200 animate-in fade-in-0">
-          <StepGlyph g="now" /><span className="truncate @max-[640px]/flow:whitespace-normal">{second}</span>
+        <span key={second} data-box-second className={cn('flex min-w-0 items-center gap-[5px] text-[11px] duration-200 animate-in fade-in-0 motion-reduce:animate-none', secondG === 'now' ? 'text-warn' : 'text-ink-3')}>
+          <StepGlyph g={secondG} /><span className="truncate @max-[640px]/flow:whitespace-normal">{second}</span>
         </span>
       )}
     </button>
@@ -82,10 +85,12 @@ function RowLabel({ children }: { children: React.ReactNode }) {
   return <span className="self-center text-[11px] uppercase tracking-[0.08em] text-mute max-[760px]:col-span-2 max-[760px]:self-start max-[760px]:pt-1">{children}</span>;
 }
 
-export function FlowBoard({ flow, open, onOpen, lines = {} }: { flow: Flow; open: FlowKey; onOpen: (k: FlowKey) => void; lines?: BoardLines }) {
+export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: Flow; open: FlowKey; onOpen: (k: FlowKey) => void; lines?: BoardLines }) {
   const N = flow.nodes;
   const [tick, setTick] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  // on the phone a press folds the flow and opens the step in the same tap (on the desktop the board stays as it is)
+  const onOpen = (k: FlowKey) => { setExpanded(false); openStep(k); };
   const live = Object.values(N).some((n) => n.aims.some((a) => a.task.state === 'running'));
   useEffect(() => {
     if (!live) return;
@@ -113,11 +118,17 @@ export function FlowBoard({ flow, open, onOpen, lines = {} }: { flow: Flow; open
         {flow.done && !count ? (
           <><span className="font-semibold text-ink">Delivered{flow.deliveredOn ? ` ${flow.deliveredOn}` : ''}</span><span className="truncate text-sub">· every step done</span></>
         ) : (
-          <><span className="font-semibold text-ink">The flow</span><span className="truncate text-sub">· {count ? picksWaiting(count) : 'nothing waiting for you'}</span></>
+          <><span className="font-semibold text-ink">The flow</span><span key={count ? 'n' : flow.work?.headline ?? ''} className="truncate text-sub duration-200 animate-in fade-in-0 motion-reduce:animate-none">· {count ? flow.waitWords : flow.work ? flow.work.headline : 'nothing waiting for you'}</span></>
         )}
         <svg className={cn('ml-auto flex-none transition-transform duration-200', expanded && 'rotate-180')} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
-      <div data-flow className={cn('flex flex-col gap-2', !expanded && 'max-[760px]:hidden', 'max-[760px]:pt-3 max-[760px]:duration-200 max-[760px]:animate-in max-[760px]:fade-in-0')}>
+      {/* on the phone it opens and folds by sliding its height and fading, both ways (Reveal's way); folded, it is
+          hidden from the keyboard and the screen reader once the slide has run */}
+      <div data-flow-fold={expanded ? 'open' : 'folded'}
+        className={cn('grid min-[761px]:grid-rows-[1fr] max-[760px]:transition-[grid-template-rows,opacity,visibility] max-[760px]:duration-200 max-[760px]:ease-out motion-reduce:transition-none',
+          expanded ? 'max-[760px]:grid-rows-[1fr] max-[760px]:opacity-100' : 'max-[760px]:invisible max-[760px]:grid-rows-[0fr] max-[760px]:opacity-0')}>
+      <div className="min-h-0 max-[760px]:overflow-hidden">
+      <div data-flow className="flex flex-col gap-2 max-[760px]:pt-3">
         <div className="flex min-h-[22px] flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <span className="lbl">The flow</span>
           {/* the press is 24 px tall around the 22 px chip drawn (QC round two); the row does not move */}
@@ -125,7 +136,9 @@ export function FlowBoard({ flow, open, onOpen, lines = {} }: { flow: Flow; open
             className="group/story -my-px inline-flex h-6 cursor-pointer items-center text-[11.5px] text-ink-3 max-[760px]:my-0 max-[760px]:h-11">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-md border px-2 transition-colors duration-200 max-[760px]:h-11',
               open === 'story' ? 'border-ink bg-[#141416]' : 'border-edge bg-transparent group-hover/story:bg-panel')}>
-              <StepGlyph g={glyphOf(story.state)} /><span className="font-medium text-ink">Story</span>{story.short}
+              <span key={glyphOf(story.state)} className="inline-flex duration-200 animate-in fade-in-0 motion-reduce:animate-none"><StepGlyph g={glyphOf(story.state)} /></span><span className="font-medium text-ink">Story</span>
+              {/* the story or the script waiting on the user reads as the boxes' "yours to look at" does: orange */}
+              <span key={story.short} className={cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', glyphOf(story.state) === 'now' && 'text-warn')}>{story.short}</span>
             </span>
           </button>
           <span className="ml-auto flex flex-wrap items-center gap-3 text-[11.5px] text-sub max-[760px]:hidden" aria-label="Key">
@@ -140,9 +153,11 @@ export function FlowBoard({ flow, open, onOpen, lines = {} }: { flow: Flow; open
           {PEOPLE.map(box)}
           <RowLabel>Then</RowLabel>
           <Box n={N.gate} on={open === 'gate'} tick={tick} onOpen={onOpen} name="Your picks" short={gateLine} g={gateG} gate />
-          <Box n={editNode} on={open === 'edit' || open === 'scenes' || open === 'finish' || open === 'sound'} tick={tick} onOpen={onOpen} short={edit.line} g={edit.g} second={lines.next} className="col-span-2 max-[760px]:col-span-1" />
+          <Box n={editNode} on={open === 'edit' || open === 'scenes' || open === 'finish' || open === 'sound'} tick={tick} onOpen={onOpen} short={edit.line} g={edit.g} second={lines.next} secondG={lines.nextG} className="col-span-2 max-[760px]:col-span-1" />
           <Box n={N.release} on={open === 'release'} tick={tick} onOpen={onOpen} short={release.line} g={release.g} className="max-[760px]:col-span-2" />
         </div>
+      </div>
+      </div>
       </div>
     </section>
   );

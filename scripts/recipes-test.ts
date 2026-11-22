@@ -106,7 +106,7 @@ const EDIT_SAYS = [
 for (const line of EDIT_SAYS) if (!edit.includes(line)) fail(`edit.md does not say: ${line.slice(0, 90)}`);
 // the timeline from day one (15 Nov 2026): the one cut route Alma posts to, its three actions as the route takes them,
 // and the line in dispatch.md that says when
-for (const line of ['**You never write a planned clip**', "-d '{\"action\":\"update\"}'", '{"action":"take","scene":"S3","take":"take 1"}', '{"action":"boards","scene":"S3"}', 'except `cut/plan`, below.', 'It renders once every scene\'s take is in.']) {
+for (const line of ['**You never write a planned clip**', "-d '{\"action\":\"update\"}'", '{"action":"take","scene":"S3","take":"take 1"}', '{"action":"boards","scene":"S3"}', '{"action":"layout","scene":"S3","previz":2}', '**"Update the timeline" leaves a scene with `layout` clips as it is**', 'except `cut/plan`, below.', 'It renders once every scene\'s take is in.']) {
   if (!edit.includes(line)) fail(`edit.md does not say: ${line}`);
 }
 if (!dispatch.includes('**The timeline follows the work.** After the script lock, after the shot lists and after each scene\'s boards, bring the timeline up to date')) fail('dispatch.md does not say when to bring the timeline up to date');
@@ -134,11 +134,11 @@ for (const o of [{ loudness: { lufs: -14, truePeak: -1 }, small: true as const }
 if (!/- `small: true`/.test(edit) || !/"Smaller file"/.test(edit)) fail('edit.md does not list the option small, or how the user asks for it ("Smaller file")');
 if (!/you never write `final\.path`, a smaller final included/.test(rel)) fail('release.md does not say the smaller final is named by the user, never written by Alma');
 
-// Film Flow v3.2 (16 Nov 2026): every note the app and the QC recipe name is a v3.2 note, and none of the recipes or
+// Film Flow v3.3: every note the app and the QC recipe name is a v3.3 note, and none of the recipes or
 // Alma's prompt still speaks of the old way (the review page and its build and tunnel, DaVinci Resolve, the long take,
 // a finished film apart from the app's master, answers "by ID"). When the rules folder answers (read under a time limit, it can
 // hang on a permission prompt), each note named is there and the Release note's "Before every upload" still reads.
-const FLOW = 'Flow v3.2 - ';
+const FLOW = 'Flow v3.3 - ';
 const qcRecipe = readFileSync(RECIPES.qc, 'utf8');
 const recipeNotes = [...qcRecipe.matchAll(/\| (Flow v[\d.]+ - [^|(]+?)\s*(?:\(|\|)/g)].map((m) => m[1].trim());
 if (recipeNotes.length < 12) fail(`qc-critic.md: only ${recipeNotes.length} stage notes found in its table`);
@@ -161,13 +161,13 @@ let vaultNotes = 0;
 const releaseMd = vaultRead(path.join(FLOW_DIR, `${RELEASE_NOTE}.md`));
 if (releaseMd === undefined) console.log(`· the rules folder did not answer (${FLOW_DIR}): the notes on disk were not checked`);
 else {
-  for (const nm of new Set([...QC_SPECS.map((q) => q.note), ...recipeNotes, 'Flow v3.2 - 6b Acting', 'Flow v3.2 - 6c Fight scene'])) {
+  for (const nm of new Set([...QC_SPECS.map((q) => q.note), ...recipeNotes, 'Flow v3.3 - 6b Acting', 'Flow v3.3 - 6c Fight scene'])) {
     if (vaultRead(path.join(FLOW_DIR, `${nm}.md`)) === undefined) fail(`the rules folder has no note "${nm}" in ${FLOW_DIR}`); else vaultNotes++;
   }
   if (!releaseMd.split('\n').some((l) => BEFORE_EVERY_UPLOAD.test(l))) fail(`${RELEASE_NOTE}: no step opens "Before every upload" any more`);
   else if (beforeEveryUploadIn(releaseMd).length < 3) fail(`${RELEASE_NOTE}: "Before every upload" reads as only ${beforeEveryUploadIn(releaseMd).length} items`);
-  const five = vaultRead(path.join(FLOW_DIR, 'Flow v3.2 - 5 Previz and storyboards.md')) ?? '';
-  if (!/Size, Placement, Angle, Lens, Mount, Focus/.test(five)) fail('Flow v3.2 - 5 no longer has the shot block qc-critic.md names (Size, Placement, Angle, Lens, Mount, Focus)');
+  const five = vaultRead(path.join(FLOW_DIR, 'Flow v3.3 - 5 Previz and storyboards.md')) ?? '';
+  if (!/Size, Placement, Angle, Lens, Mount, Focus/.test(five)) fail('Flow v3.3 - 5 no longer has the shot block qc-critic.md names (Size, Placement, Angle, Lens, Mount, Focus)');
 }
 
 // the Story page's script save (ASKS 64): the message kind the harness sends is the one the story recipe explains
@@ -176,7 +176,7 @@ else {
   const sent = scriptEditedMessage({ from: 'v1', version: 'v2', changes: [{ scene: 'S2', index: 6, kind: 'line', old: 'a', new: 'b', status: 'applies', label: 'S2 line 4' }] }, 'assets/films/x/script.md');
   if (!sent.includes(`<harness-action kind="${SCRIPT_EDITED_KIND}"`)) fail('the script save does not send its harness-action kind');
   if (!story.includes(`kind="${SCRIPT_EDITED_KIND}"`)) fail(`story.md does not explain kind="${SCRIPT_EDITED_KIND}"`);
-  if (!story.includes('Flow v3.2 - 1 Setup and story')) fail('story.md does not point to the stage 1 note for the script\'s rules');
+  if (!story.includes('Flow v3.3 - 1 Setup and story')) fail('story.md does not point to the stage 1 note for the script\'s rules');
   if (!sent.includes('recipes/story.md')) fail('the script save\'s message does not name recipes/story.md');
   for (const bit of ['## Earlier drafts', 'the user\'s edit on the Story page', 'Re-time']) if (!story.includes(bit)) fail(`story.md does not say "${bit}"`);
 }

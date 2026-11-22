@@ -12,7 +12,15 @@
 //                         same content, so the master is current and the final has no amber note (ASKS 49)
 //   sample-left-posting   everything up to the final, which is the master of the cut; Reddit and YouTube posted of six
 //   sample-left-done      everything done: every platform posted
-import type { FeedCard, FilmRef, FilmState, Timeline } from '@/server/types';
+//   sample-left-pickups   the shape of a real film at its edit: every scene in the cut, nothing
+//                         approved yet, and three pick-ups being made for S1, S2 and S3 (new previz and boards, the
+//                         board check), each a running sub-agent "pick-up · FIX-…"; no take of theirs landed
+//   sample-left-pickupqc  pick-ups with their own checks: S1's first boards check ended at round 3 of 3
+//                         and its pick-up FIX-S1-sit is at round 2 of its own (an older S1 pick-up checked before it);
+//                         S4's pick-up has its boards and its prompt checked; S3's pick-up its boards; S2's pick-up
+//                         was dropped, so S2 shows its own check; S5 has no pick-up (S4 to S6 are scenes this
+//                         sample adds after S3)
+import type { FeedCard, FilmRef, FilmState, PickupWork, QCCategory, QCEntry, QCMiss, QCReport, ThreadEvent, Timeline } from '@/server/types';
 import type { SeedanceMark } from '@/components/edit/marks';
 import type { LeftFile } from '@/components/edit/left';
 import type { ReleaseFile } from '@/components/release/file';
@@ -24,7 +32,7 @@ const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
 const FROM = 'assets/films/the-lighthouse/';
 
-type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done';
+type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-pickups' | 'sample-left-pickupqc';
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
 export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-start': ref('sample-left-start', "Sample · what's next: nothing done", 9),
@@ -33,7 +41,11 @@ export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-same': ref('sample-left-same', "Sample · what's next: a move and its undo", 10),
   'sample-left-posting': ref('sample-left-posting', "Sample · what's next: posting", 12),
   'sample-left-done': ref('sample-left-done', "Sample · what's next: done", 12),
+  'sample-left-pickups': ref('sample-left-pickups', 'Sample · three pick-ups being made', 8),
+  'sample-left-pickupqc': ref('sample-left-pickupqc', 'Sample · pick-ups with their own checks', 8),
 };
+/** The samples where nothing is approved, ticked or full size yet. */
+const START = (slug: string) => slug === 'sample-left-start' || slug === 'sample-left-pickups' || slug === 'sample-left-pickupqc';
 const isLeft = (slug: string): slug is Id => slug in LEFT_SAMPLES;
 export const leftSampleFilms = (): FilmRef[] => Object.values(LEFT_SAMPLES);
 
@@ -95,14 +107,124 @@ export function leftSampleState(slug: string): FilmState | undefined {
     cut: { name: `cut ${cur.version}`, fps: cur.fps, source: { cut: `cut ${cur.version}`, from: [`cut/${cur.version}.json`], date: '2026-11-14', label: `from cut/${cur.version}.json` },
       versions: c.versions, current: cur },
     post: { cuts: [], masters: [], captions: [] },
-    feed: { counts: slug === 'sample-left-start' ? {} : { edit: 1 }, asks: [] },
+    feed: { counts: START(slug) ? {} : { edit: 1 }, asks: [] },
+    ...(slug === 'sample-left-pickups' ? { pickups: PICKUPS } : {}),
+    // the pick-up checks sample is a longer cut of the film: three more scenes after S3, so the checks of S4 to S6 have a place
+    ...(slug === 'sample-left-pickupqc' ? { pickups: PICKUPS_QC, qc: PICKUP_QC, scenes: [...lighthouse.scenes, ...EXTRA_SCENES] } : {}),
   };
 }
+
+// ---- sample-left-pickups: the three pick-ups' folders, and Alma's sub-agents on them
+
+const pickup = (name: string, scene: string, o: Partial<PickupWork>): PickupWork => ({ name, scenes: [scene], previz: true, boards: 0, checked: false, prompts: 0, landed: 0, generating: 0, stopped: 0, ...o });
+/** S1 has its boards and waits for their check; S3 is at its new previz; S2 is at the check after three boards. An
+ *  older pick-up of S1 landed long ago and says nothing. */
+const PICKUPS: PickupWork[] = [
+  pickup('FIX-S1-wide', 'S1', { boards: 1 }),
+  pickup('FIX-S3-window', 'S3', {}),
+  pickup('FIX-S2-desk', 'S2', { boards: 3 }),
+  pickup('FIX-bottle-S1', 'S1', { boards: 0, previz: false, prompts: 2, promptPassed: true, landed: 1 }),
+];
+const tAt = (m: number) => `2026-11-21T09:${String(m).padStart(2, '0')}:00.000Z`;
+const pickupTask = (id: string, name: string, m: number): ThreadEvent => ({
+  kind: 'task', id, at: tAt(m), task: { id, title: `Alma › pick-up · ${name}`, state: 'running', startedAt: tAt(m), steps: [{ at: tAt(m), text: 'Bash · Build the new previz in Blender' }] },
+});
+
+// ---- sample-left-pickupqc: pick-ups with their own boards and prompt checks
+
+/** S4 to S6 for this sample only: S3's shape under new ids and names. */
+const EXTRA_SCENES: FilmState['scenes'] = [['S4', 'Morning'], ['S5', 'The answer'], ['S6', 'Night falls']].map(([id, title]) => {
+  const s3 = lighthouse.scenes.find((x) => x.id === 'S3')!;
+  return { ...s3, id, title, folder: `blocks/${id}`, takes: [], inCut: undefined, promptVersions: [] };
+});
+
+/** S1's sit pick-up is being re-boarded (round 2 of its own check); an older S1 pick-up landed and was checked the day
+ *  before; S3's and S4's pick-ups have their board checks, S4's its prompt check too; S2's pick-up was dropped. */
+const PICKUPS_QC: PickupWork[] = [
+  pickup('FIX-S1-door', 'S1', { boards: 2, checked: true, prompts: 1, promptPassed: true, landed: 1 }),
+  pickup('FIX-S1-sit', 'S1', { boards: 4, checked: true }),
+  pickup('FIX-S2-cup', 'S2', { boards: 1, checked: true, dropped: true }),
+  pickup('FIX-S3-bench', 'S3', { boards: 3, checked: true }),
+  pickup('FIX-S4-reel', 'S4', { boards: 6, checked: true, prompts: 1 }),
+];
+const miss = (id: string, category: QCCategory, sub: string, where: string, title: string, fix: string, fixedIn?: string): QCMiss =>
+  ({ id, category, sub, where, title, finding: `${title}.`, fix, open: !fixedIn, ...(fixedIn ? { fixedIn } : {}) });
+const qcRound = (stage: string, target: string, label: string, round: number, score: number, at: string, misses: QCMiss[], next = ''): QCReport =>
+  ({ stage, target, label, round, score, model: 'opus', at, inputs: [], misses, next, file: `qc/${stage}-${target}-r${round}.json` });
+const qcOf = (...history: QCReport[]): QCEntry => {
+  const latest = history[history.length - 1];
+  return { key: `${latest.stage}-${latest.target}`, stage: latest.stage, target: latest.target, latest, history };
+};
+const S1_OWN = [
+  miss('m1', 'camera+geometry', 'camera', 'shots 1 → 2', 'Neighbouring shots change only size, not position', 'Move shot 2’s camera to the left of the table.', 'boards v6'),
+  miss('m2', 'blocking+fluidity', 'fluidity', 'shot 3', 'The sit-down is one beat of four seconds', 'Split it into two beats of two seconds.', 'boards v7'),
+  miss('m3', 'prop', 'prop', 'shot 1', 'The cup is in his hand in the text but on the table in the panel', 'Write the cup on the table in shot 1’s text.'),
+  miss('m4', 'lines', 'view', 'shot 2', 'Shot 2’s text names the street view, the panel shows the yard', 'Name the yard view in shot 2’s text.'),
+];
+const PICKUP_QC: Record<string, QCEntry> = Object.fromEntries([
+  qcOf(
+    qcRound('previz', 'S1', 'S1 boards v5', 1, 6.9, '2026-11-20T09:10:00Z', S1_OWN.map((m) => ({ ...m, open: true, fixedIn: undefined }))),
+    qcRound('previz', 'S1', 'S1 boards v6', 2, 7.8, '2026-11-20T10:05:00Z', S1_OWN.map((m) => (m.id === 'm1' ? m : { ...m, open: true, fixedIn: undefined }))),
+    qcRound('previz', 'S1', 'S1 boards v7', 3, 8.3, '2026-11-20T11:00:00Z', S1_OWN, 'Next: round 3 of 3 ends at 8.3 with 2 open text fixes (0 cr); whether to apply them and lock is your call.'),
+  ),
+  qcOf(qcRound('previz', 'FIX-S1-door', 'FIX-S1-door boards v2', 1, 8.6, '2026-11-20T16:00:00Z', [])),
+  qcOf(
+    qcRound('previz', 'FIX-S1-sit', 'FIX-S1-sit boards v3', 1, 7.4, '2026-11-21T10:01:00Z', [
+      miss('m1', 'blocking+fluidity', 'blocking', 'shot 2', 'He sits in the end seat, which the wide shows taken', 'Free the end seat in the wide.'),
+      miss('m2', 'camera+geometry', 'geometry', 'shot 2b', 'The new close-up is on the far side of the line', 'Put the camera on the students’ side.'),
+    ]),
+    qcRound('previz', 'FIX-S1-sit', 'FIX-S1-sit boards v4', 2, 7.9, '2026-11-21T11:20:00Z', [
+      miss('m1', 'blocking+fluidity', 'blocking', 'shot 2', 'He sits in the end seat, which the wide shows taken', 'Free the end seat in the wide.', 'boards v4'),
+      miss('m2', 'camera+geometry', 'geometry', 'shot 2b', 'The new close-up is on the far side of the line', 'Put the camera on the students’ side.', 'boards v4'),
+      miss('m3', 'blocking+fluidity', 'fluidity', '2 → 2b', 'His hand is on the bench in 2 and on his knee in 2b', 'Keep the hand on the bench across the cut.'),
+      miss('m4', 'lines', 'lines', 'shot 2b', 'The line runs 0.4 s past the shot’s end at the measured rate', 'Give 2b half a second more, from shot 3.'),
+      miss('m5', 'prop', 'prop', 'shot 2', 'The cup is missing from the table in the pick-up’s wide', 'Put the cup back on the table as in S1’s wide.'),
+    ]),
+  ),
+  qcOf(
+    qcRound('previz', 'S2', 'S2 boards v4', 1, 7.6, '2026-11-20T09:30:00Z', [miss('m1', 'camera+geometry', 'camera', 'shot 1', 'The wide is shot from the view of another camera', 'Paint the wide’s own view.', 'boards v5')]),
+    qcRound('previz', 'S2', 'S2 boards v5', 2, 8.8, '2026-11-20T10:30:00Z', [miss('m1', 'camera+geometry', 'camera', 'shot 1', 'The wide is shot from the view of another camera', 'Paint the wide’s own view.', 'boards v5')]),
+  ),
+  qcOf(qcRound('previz', 'FIX-S2-cup', 'FIX-S2-cup boards v1', 1, 6.2, '2026-11-21T09:40:00Z', [miss('m1', 'prop', 'prop', 'shot 4', 'The cup changes hands between panels', 'Keep it in Tobias’s hand.')])),
+  qcOf(
+    qcRound('previz', 'S3', 'S3 boards v3', 1, 8.1, '2026-11-20T09:50:00Z', [miss('m1', 'lines', 'lines', 'shot 2', 'Two lines share one shot', 'Give each line its own shot.', 'boards v4')]),
+    qcRound('previz', 'S3', 'S3 boards v4', 2, 8.7, '2026-11-20T10:50:00Z', [miss('m1', 'lines', 'lines', 'shot 2', 'Two lines share one shot', 'Give each line its own shot.', 'boards v4')]),
+  ),
+  qcOf(qcRound('previz', 'FIX-S3-bench', 'FIX-S3-bench boards v3', 1, 8.0, '2026-11-21T10:30:00Z', [
+    miss('m1', 'camera+geometry', 'camera', 'shot 1', 'From behind Tobias the front bench is cut off', 'Re-aim to show the whole front bench.'),
+  ])),
+  qcOf(
+    qcRound('previz', 'S4', 'S4 boards v4', 1, 7.7, '2026-11-20T10:10:00Z', [miss('m1', 'blocking+fluidity', 'fluidity', 'shot 3', 'The tap lands between beats', 'Put the tap on the beat.', 'boards v5')]),
+    qcRound('previz', 'S4', 'S4 boards v5', 2, 8.9, '2026-11-20T11:10:00Z', [miss('m1', 'blocking+fluidity', 'fluidity', 'shot 3', 'The tap lands between beats', 'Put the tap on the beat.', 'boards v5')]),
+  ),
+  qcOf(
+    qcRound('previz', 'FIX-S4-reel', 'FIX-S4-reel boards v5', 1, 7.9, '2026-11-21T09:50:00Z', [miss('m1', 'camera+geometry', 'camera', 'shot 7a', 'Tobias looks off the lens at the end of 7a', 'Turn his eye line to Maren.', 'boards v6')]),
+    qcRound('previz', 'FIX-S4-reel', 'FIX-S4-reel boards v6', 2, 8.7, '2026-11-21T10:04:00Z', [miss('m1', 'camera+geometry', 'camera', 'shot 7a', 'Tobias looks off the lens at the end of 7a', 'Turn his eye line to Maren.', 'boards v6')]),
+  ),
+  qcOf(
+    qcRound('prompt', 'S4', 'S4 prompt v3', 1, 8.2, '2026-11-20T12:00:00Z', [miss('m1', 'lines', 'lines', 'shot 2', 'The line is cut a word short', 'Write the whole line.', 'prompt v4')]),
+    qcRound('prompt', 'S4', 'S4 prompt v4', 2, 8.8, '2026-11-20T12:40:00Z', [miss('m1', 'lines', 'lines', 'shot 2', 'The line is cut a word short', 'Write the whole line.', 'prompt v4')]),
+  ),
+  qcOf(qcRound('prompt', 'FIX-S4-reel', 'FIX-S4-reel prompt v1', 1, 7.6, '2026-11-21T11:40:00Z', [
+    miss('m1', 'lines', 'lines', 'shot 7a', 'The laughter is written as a line, not a sound', 'Write the laughter as a sound under the tap.'),
+    miss('m2', 'camera+geometry', 'camera', 'shot 1', 'The close-up names the wide’s view', 'Name the close-up’s own view.'),
+  ])),
+].map((e) => [e.key, e]));
+
+export const LEFT_THREADS: Record<string, ThreadEvent[]> = {
+  'sample-left-pickups': [
+    { kind: 'user', id: 'u-notes', at: tAt(20), text: 'S1: the wide from lower. S2: Maren from behind Tobias, over the desk. S3: the window close-up with the light, then the wide.' },
+    { kind: 'assistant_text', id: 'a-notes', at: tAt(21), text: 'Three pick-ups are being built from your notes: new previz and boards for each, the board check, then the prompt and a go card.' },
+    pickupTask('t-fix-s1', 'FIX-S1-wide', 22),
+    pickupTask('t-fix-s3', 'FIX-S3-window', 22),
+    pickupTask('t-fix-s4', 'FIX-S2-desk', 22),
+  ],
+};
 
 /** The record's yes for cut v1 (a card at the edit stage, answered). */
 export function leftSampleFeed(slug: string): FeedCard[] | undefined {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start') return [];
+  if (START(slug)) return [];
   return [{
     key: 'YES-cut-v1-480p', id: 'YES-cut-v1-480p', title: 'Is cut v1 the one at 480p?', date: '2026-11-13T21:10:00Z', section: 'Edit', place: 'edit', ids: [], placed: 'card', media: [],
     text: ['The whole cut at 480p, before the 1080p.'],
@@ -113,7 +235,7 @@ export function leftSampleFeed(slug: string): FeedCard[] | undefined {
 /** GET …/full: the upscaled cut of v1 and the FIX-bottle take with its own full-size file; nothing for the first sample. */
 export function leftSampleFull(slug: string): unknown {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start') return { bases: [], takes: {}, label: 'upscaled' };
+  if (START(slug)) return { bases: [], takes: {}, label: 'upscaled' };
   const take = `assets/films/${slug}/blocks/FIX-bottle/takes/FIX-bottle-seedance-take2-480p.mp4`;
   return { bases: [{ version: 'v1', path: `assets/films/${slug}/video/1080/cut-v1-1080.mp4`, frames: 1655, label: 'Higgsfield' }], takes: { [take]: take.replace('-480p.', '-1080p.') }, label: 'Higgsfield' };
 }
@@ -128,7 +250,7 @@ export function leftMarksSeed(slug: string): SeedanceMark[] | undefined {
 /** The user's ticks the sample starts with. */
 export function leftTicksSeed(slug: string): LeftFile | undefined {
   if (!isLeft(slug)) return undefined;
-  if (slug === 'sample-left-start' || slug === 'sample-left-1080') return { ticks: {} };
+  if (START(slug) || slug === 'sample-left-1080') return { ticks: {} };
   return { ticks: { sound: { at: '2026-11-14T08:30:00.000Z', cut: 'v1' } } };
 }
 

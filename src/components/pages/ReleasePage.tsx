@@ -25,6 +25,7 @@ import { fmtBytes, PanelHead, smpteFrames, SubLabel, ToConfirm } from './postCom
 import { useRelease } from '@/components/release/ui';
 import { ClosedRelease, OpenRelease } from '@/components/release/ReleaseOpen';
 import { Feed, ShownLink } from '@/components/feed/Feed';
+import { StepRunning } from '@/components/flow/RunningNow';
 import { Reveal } from '@/components/shell/Reveal';
 import { releaseWords } from '@/components/lib/flow';
 import { StepIntro } from '@/components/intro/StepIntro';
@@ -159,7 +160,7 @@ function KitRelease({ r }: { r: ReleaseInfo }) {
                         {!sent && (
                           <span className="flex flex-none items-center gap-2">
                             <ToConfirm />
-                            <Btn onClick={() => ui.prefill(`${c.label} in the kit: `, { id: `confirm:${c.label}`, label: `kit · ${c.label.toLowerCase()}` })}>Confirm</Btn>
+                            <Btn onClick={() => ui.about({ id: `confirm:${c.label}`, label: `kit · ${c.label.toLowerCase()}` }, `confirming ${c.label} in the kit`, `Confirm ${c.label.toLowerCase()} in the kit…`)}>Confirm</Btn>
                           </span>
                         )}
                       </div>
@@ -254,6 +255,7 @@ function KitRelease({ r }: { r: ReleaseInfo }) {
         <StageTitle kicker="Stage 12 · Release" title="Release" sub={sent ? `Out on ${plural(out.length, 'platform')}. The posts, the finished files, and the thumbnails and copy made for them.` : 'Every line and every post on your word: you pick the thumbnail and each platform’s copy; nothing goes out without your go.'}
           right={<QCChip spec={qcSpec('kit')} targets={{ target: FILM_TARGET, label: 'kit', entry: qcEntry(state, 'kit', FILM_TARGET), ready: !!r.kit, waitsFor: r.kit ? 'the social kit and the platform checklist' : 'social/kit.md' }} />} />
         <StepIntro step="release" />
+        <StepRunning step="release" />
 
         {/* ---- the delivery strip */}
         <Card>

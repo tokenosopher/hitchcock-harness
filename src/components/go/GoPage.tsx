@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { usePage } from '@/components/data/ui';
 import { fmtDate } from '@/components/lib/format';
 import { qcEntry, qcSpec } from '@/components/lib/qc';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import { Header } from '@/components/shell/Header';
 import { Loading, PageBody, StageTitle } from '@/components/shell/StageTitle';
 import { QCChip } from '@/components/shell/QCChip';
@@ -67,13 +68,14 @@ export function GoPage() {
   const balance = review.balance ?? threadBalance(events);
   const after = balance ? Math.round((balance.credits - total) * 100) / 100 : undefined;
   const go = () => {
-    ui.prefill(goMessage(ready), { id: 'go:video', label: `Go · ${ready.map((s) => s.id).join(' ')} · ≈ ${fmtCr(total)}` });
+    // the go as a chip with its quote on it; the press on Send stays the user's
+    ui.command({ id: 'go:video', label: `Go · ${ready.map((s) => s.id).join(' ')} · ≈ ${fmtCr(total)}` }, goMessage(ready));
     ui.setThreadOpen(true);
   };
   const sel = review.scenes.find((s) => s.id === selected);
   const change = () => {
-    if (sel) ui.prefill(`Before the go, change ${sel.id}: `, { id: `scene:${sel.id}`, label: `${sel.id} · ${sel.title}${sel.prompt ? ` · prompt ${sel.prompt.version}` : ''}` });
-    else ui.prefill('Before the go, change: ');
+    if (sel) ui.about({ id: `scene:${sel.id}`, label: `${sel.id} · ${sel.title}${sel.prompt ? ` · prompt ${sel.prompt.version}` : ''}` }, `a change to ${sel.id} before the go for the video`, `What should change in ${sel.id} before the go…`);
+    else ui.about({ id: 'go:change', label: 'Go · change first' }, 'a change before the go for the video', 'What should change before the go…');
     ui.setThreadOpen(true);
   };
 
@@ -85,7 +87,7 @@ export function GoPage() {
         <StageTitle kicker="Stage 7 · the one hard spend gate" title="Go for the video"
           sub={<>Every scene the go starts: its shots, the newest prompt in full, every reference at the number the prompt cites it by, the check and the credits. Nothing runs until you send the go to Alma.{review.rate ? <> Credits at <span title={review.rate.basis} className="cursor-help underline decoration-faint decoration-dotted underline-offset-2">{review.rate.crPerSec} cr/s ({review.rate.resolution})</span>, from spend.md.</> : ' spend.md has no seedance_2_5 rate yet, so there is no quote.'}</>}
           right={shown.length ? <QCChip spec={qcSpec('prompt')} chipLabel="prompts"
-            targets={shown.map((s) => ({ target: s.id, label: `${s.id} prompt${s.prompt ? ` ${s.prompt.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!s.prompt, waitsFor: s.prompt ? `${s.id} prompt ${s.prompt.version}` : `${s.id}'s first prompt` }))} /> : undefined} />
+            targets={shown.map((s) => withPickupCheck(state, 'prompt', { target: s.id, label: `${s.id} prompt${s.prompt ? ` ${s.prompt.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!s.prompt, waitsFor: s.prompt ? `${s.id} prompt ${s.prompt.version}` : `${s.id}'s first prompt` }))} /> : undefined} />
         <StepIntro step="go" />
 
         <div className="flex flex-wrap items-center justify-between gap-3">

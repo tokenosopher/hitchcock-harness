@@ -12,7 +12,10 @@ import { elementKeys, readCharacters } from '../src/server/films/read/cast';
 import { Warnings, type FilmCtx } from '../src/server/films/util';
 import { castLines, facePath } from '../src/components/characters/Cards';
 import { blockOrder } from '../src/components/characters/CharacterView';
-import { clothingParts, faceDone, elementParts } from '../src/components/lib/derive';
+import { clothingParts, faceDone, elementParts, voiceDone } from '../src/components/lib/derive';
+import { flowOf } from '../src/components/lib/flow';
+import { waitItemsOf } from '../src/components/flow/waitList';
+import type { TastePickX } from '../src/server/films/read/taste';
 import type { CharacterRef, FilmState } from '../src/server/types';
 
 let bad = 0, n = 0;
@@ -60,6 +63,39 @@ async function film(): Promise<string> {
   return dir;
 }
 
+/** A voice picked on Alma's card and recorded only in taste.md, before pick.py saved it in voices/ (a row that
+ *  names option "3" bare once gave no pick, so the voice still showed as waiting). The bare option number is the pick; the picked voice is not on "Waiting for you". */
+async function voiceFromTaste(): Promise<void> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'cast-test-voice-'));
+  try {
+    for (let i = 1; i <= 3; i++) {
+      await put(dir, `cast/C02-tobias/r1-faces/C02-tobias-r1-${i}.png`, Buffer.concat([PNG, Buffer.from(`p${i}`)]));
+      await put(dir, `voices/options/C02-tobias-r1-${i}.mp3`, 'mp3');
+    }
+    await put(dir, 'cast/C02-tobias/pick-face.png', Buffer.concat([PNG, Buffer.from('p1')]));
+    await put(dir, 'voices/options.json', JSON.stringify({ C02: { name: 'Tobias', options: [1, 2, 3].map((o) => ({ option: o, round: 'r1', file: `voices/options/C02-tobias-r1-${o}.mp3` })) } }));
+    const row = (pick: string): TastePickX => ({ film: 'Test', date: '2026-11-21', what: 'C02 Tobias: which voice (round 1)', prediction: '1', pick, right: false });
+    const read = async (rows: TastePickX[]) => (await readCharacters({ dir, warn: new Warnings() }, undefined, rows, false)).find((c) => c.id === 'C02')!;
+    const before = await read([]);
+    ok('voice: options landed and nothing picked, the voice waits', !voiceDone(before) && before.voice?.rounds[0]?.candidates.length === 3, before.voice);
+    const st = (c: CharacterRef) => ({ characters: [c], locations: [], scenes: [], spend: { lines: [] }, film: { status: 'in-progress' } } as unknown as FilmState);
+    ok('voice: unpicked, it is a choice on "Waiting for you"', waitItemsOf(flowOf(st(before), [])).some((x) => x.key === 'gate:pick:C02:voice'), waitItemsOf(flowOf(st(before), [])).map((x) => x.key));
+    const after = await read([row('3: 3 · 95 Hz, slow and dark, a middle range')]);
+    ok('voice: the taste row\'s bare option "3" is the pick', after.voice?.pick?.candidateId === '3' && voiceDone(after), after.voice?.pick);
+    ok('voice: the prediction "1" is read too', after.voice?.rounds[0]?.prediction === '1', after.voice?.rounds[0]?.prediction);
+    ok('voice: a picked voice is not on "Waiting for you" and counts nothing', !waitItemsOf(flowOf(st(after), [])).length && flowOf(st(after), []).waiting === 0, waitItemsOf(flowOf(st(after), [])).map((x) => x.key));
+    ok('voice: a number inside the words is not a pick ("about 3 voices")', !(await read([row('none yet: about 3 voices more')])).voice?.pick);
+    // the kit's own record (pick.py): voices/cast.json names the picked preview; with no "chosen" in options.json and no
+    // taste row, that entry alone is the pick (Tobias's voice as the film holds it)
+    await put(dir, 'voices/cast.json', JSON.stringify({ C02: { name: 'Tobias', source: 'design option 3 (r1 round)', preview: 'voices/options/C02-tobias-r1-3.mp3', note: 'picked on the voice card' } }));
+    const kit = await read([]);
+    ok('voice: voices/cast.json alone is the pick, option 3 from its preview and source', kit.voice?.pick?.candidateId === '3' && voiceDone(kit), kit.voice?.pick);
+    ok('voice: picked in cast.json, not on "Waiting for you"', !waitItemsOf(flowOf(st(kit), [])).length, waitItemsOf(flowOf(st(kit), [])).map((x) => x.key));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
 const dir = await film();
 try {
@@ -77,7 +113,7 @@ try {
   ok('C04: the element is final, from the look C04a', x.element?.state === 'final' && x.element.path === 'elements/C04a/takes/take1/E-C04a-take1-1080p.mp4', x.element);
   ok('C04: registered as an image element through his looks', x.imageElement === true);
   ok('C04: the card says Video element done', castLines(x).find((l) => l.key === 'elements')?.mark === 'done', castLines(x));
-  ok('C04: the flow counts his element final', elementParts({ characters: chars, film: { status: 'in-progress' } } as unknown as FilmState, []).find((p) => p.id === 'C04')?.line === 'final');
+  ok('C04: the flow counts his element final', elementParts({ characters: chars, film: { status: 'in-progress' } } as unknown as FilmState, []).find((p) => p.id === 'C04')?.line === 'Video element · done');
   ok('C04: his page opens on the video element', blockOrder(x)[0] === 'element', blockOrder(x));
   // the same from a folder alone, under the character's own ID
   ok('C05: a draft found on disk under elements/C05', by('C05').element?.state === 'draft' && by('C05').element?.path === 'elements/C05/takes/take2/E-C05-take2-480p.mp4', by('C05').element);
@@ -105,6 +141,7 @@ try {
 } finally {
   await rm(dir, { recursive: true, force: true });
 }
+await voiceFromTaste();
 console.log(`${n - bad} of ${n} checks passed`);
 if (bad) process.exit(1);
 }

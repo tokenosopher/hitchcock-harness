@@ -3,10 +3,12 @@
 // film as a strip of scenes, and under the timeline every take of the open scene cut into its shots, where a
 // click tries a shot in its place.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SceneRef, Timeline } from '@/server/types';
+import type { SceneRef, ShotView, Timeline } from '@/server/types';
 import { mediaUrl } from '@/components/media/Media';
+import { shortViewNames, ViewThumb } from '@/components/media/ViewThumb';
 import { cn } from '@/lib/utils';
-import { inFilm, shotClips, shotsOf, type BySrc, type SceneRun, type TakeShots } from './shots';
+import { inFilm, shotClips, shotKey, shotsOf, subTag, type BySrc, type SceneRun, type Shot, type TakeShots } from './shots';
+import { cellLabel, cellsOf, columnBox, columnsOf, columnWeights, gridColumns } from './shotCols';
 import { useNoSwipeBack } from './swipe';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -91,7 +93,8 @@ export function FilmStrip({ runs, total, frame, open, shots, absent = [], onPick
   );
 }
 
-export interface Trying { scene: string; n: number; src: string; k?: number }
+/** A shot of a take being watched or chosen: `tag` tells it from another shot of its take with the same number ("7b"). */
+export interface Trying { scene: string; n: number; src: string; k?: number; into?: { to: number; layout: number }; tag?: string }
 
 /** One shot of one take, played from the take's own file: the player jumps to where the shot starts, plays it
  *  and stops at its end. The take's whole length stays under the controls. A second click plays it again. */
@@ -150,7 +153,7 @@ const clock = (iso: string) => {
  *  the take it came from, oldest first, numbered per source. A variation whose source is not here goes last. */
 function rowsOf(all: TakeShots[], used: Set<string>, names: Map<string, string>): Row[] {
   const sourceOf = (t: TakeShots) => (t.variation ? all.find((s) => s !== t && isSource(s, t.variation!.from)) : undefined);
-  const inUse = (t: TakeShots) => shotsOf(t).some((s) => used.has(`${t.src}#${s.n}`));
+  const inUse = (t: TakeShots) => shotsOf(t).some((s) => used.has(shotKey(t.src, s)));
   const name = (t: TakeShots) => names.get(t.src) ?? t.name;
   const roots = all.filter((t) => !sourceOf(t) && t.state !== 'making')
     .sort((a, b) => Number(inUse(b)) - Number(inUse(a)) || name(a).localeCompare(name(b), undefined, { numeric: true }));
@@ -193,37 +196,61 @@ function useSeen(key: string): [Set<string>, (src: string) => void] {
  *  ringed; a click watches another and selects it (ASKS 52). A take with no clip is one slim row; a variation sits
  *  under the take it came from (ASKS 51). The line across the takes is the film's playhead: drag it, or click the row
  *  of shot names (ASKS 53). */
-export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, seenKey, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge }: {
+export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, seenKey, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge, foreign, markOf, views, viewSrc }: {
   scene: SceneRef | { id: string; title?: string; takes?: SceneRef['takes'] }; takes: TakeShots[]; by: BySrc; names: Map<string, string>; tl: Timeline;
   /** Where the video is: the shot, and how far through it (0 to 1). The line crosses a long shot slowly, a short one fast. */
   head?: { n: number; p: number };
-  watching?: Trying; selShot?: number; base: string; onShot: (t: TakeShots, n: number) => void;
-  /** The shots selected to watch the film with ("<src>#<n>"), in any scene; `selecting` while there is any. */
-  picks?: Set<string>; selecting?: boolean; onUnpick?: (t: TakeShots, n: number) => void;
+  watching?: Trying; selShot?: number; base: string;
+  /** A shot of a take clicked: its take, the scene's shot number (its column) and, for a shot with a letter, its id
+   *  ("7b"), which tells it from the take's other shot of that number. The same for the calls below. */
+  onShot: (t: TakeShots, n: number, tag?: string) => void;
+  /** The shots selected to watch the film with ("<src>#<n>", "<src>#7b"), in any scene; `selecting` while there is any. */
+  picks?: Set<string>; selecting?: boolean; onUnpick?: (t: TakeShots, n: number, tag?: string) => void;
   /** Where the "new" marks of variations already clicked are kept in this browser. */
   seenKey: string;
   /** A shot (or a scene) can be out of the film (13 Nov). Without these the grid only watches; a column with
    *  nothing in the film still shows switched off. `onBring`: a click on a cell of such a column puts that shot
    *  back; `onTakeOut`: the × on the ringed cell takes the column's shot out; `onSceneOut`: the whole scene. */
-  onBring?: (t: TakeShots, n: number) => void; onTakeOut?: (t: TakeShots, n: number) => void; onSceneOut?: () => void;
+  onBring?: (t: TakeShots, n: number, tag?: string) => void; onTakeOut?: (t: TakeShots, n: number, tag?: string) => void; onSceneOut?: () => void;
   /** A right-click (or the menu key) on a cell (`n`) or on a take's name (no `n`). */
-  onMenu?: (at: { x: number; y: number }, t: TakeShots, n?: number) => void;
+  onMenu?: (at: { x: number; y: number }, t: TakeShots, n?: number, tag?: string) => void;
   /** The line dragged, or the names row clicked: shot `n`, `p` of the way through. `onSeekEdge`: past the scene's
    *  left (-1) or right (1) edge; true when the playhead went on into the scene there. */
   onSeek?: (n: number, p: number) => void; onSeekEdge?: (dir: -1 | 1) => boolean;
+  /** The takes shown are of a layout the film does not use: `from` their layout's number, `into` the one the
+   *  film uses. Their columns are their own layout's shots; nothing of theirs is "out", a click selects a shot to try in
+   *  a place of the film's layout. */
+  foreign?: { from: number; into: number };
+  /** A shot of another layout's take: the place it goes in the film's layout, whether that is a safe swap, and the
+   *  warnings of the swap (never a reason to refuse it). */
+  markOf?: (t: TakeShots, n: number, tag?: string) => { to: number; safe: boolean; warnings: string[] } | undefined;
+  /** The painted view behind each shot of the scene, and how to reach a view's file from the film folder. */
+  views?: ShotView[]; viewSrc?: (rel: string) => string;
 }) {
   const used = useMemo(() => inFilm(tl, by), [tl, by]);
   const sceneIn = useMemo(() => shotClips(tl, by, scene.id).length > 0, [tl, by, scene.id]);
   const rows = useMemo(() => rowsOf(takes.filter((t) => t.scene === scene.id), used, names), [takes, scene.id, used, names]);
   const mine = useMemo(() => rows.map((r) => r.t).filter((t) => t.state !== 'making'), [rows]);
-  // a column a shot of the scene: a pick-up that redoes shot 5 sits in column 5, the cells before it empty (ASKS 60)
-  const cols = Math.max(1, ...mine.flatMap((t) => shotsOf(t).map((s) => s.n)));
+  // a column a shot of the scene: a pick-up that redoes shot 5 sits in column 5, the cells before it empty;
+  // its shots "7a" and "7b" both sit in column 7, side by side, the column as wide as they need (shotCols.ts)
+  const lists = useMemo(() => mine.map((t) => shotsOf(t)), [mine]);
+  const cols = columnsOf(lists);
+  const weights = useMemo(() => columnWeights(lists, cols), [lists, cols]);
   // a column none of whose takes is in the film: that shot is out, the film goes from the shot before to the one after
-  const out = useMemo(() => new Set(Array.from({ length: cols }, (_, i) => i + 1).filter((n) => !mine.some((t) => used.has(`${t.src}#${n}`)))), [cols, mine, used]);
+  const out = useMemo(() => (foreign ? new Set<number>() : new Set(Array.from({ length: cols }, (_, i) => i + 1).filter((n) => !mine.some((t, k) => lists[k].some((s) => s.n === n && used.has(shotKey(t.src, s))))))), [cols, mine, lists, used, foreign]);
   const anyShot = mine.some((t) => shotsOf(t).length > 0);
   const hot = selShot;
   const stopped = (scene.takes ?? []).filter((t) => t.stopped && !t.path);
-  const grid = { gridTemplateColumns: `104px repeat(${cols}, minmax(0, 1fr))` };
+  const grid = { gridTemplateColumns: gridColumns(weights) };
+  // a take whose shots moved to other columns since it was last drawn (its shots file was written after it landed): its
+  // cells fade in where they now are, nothing jumps
+  const placeOf = (t: TakeShots) => shotsOf(t).map((x) => x.tag ?? x.n).join(',');
+  const placeSig = JSON.stringify(rows.map((r) => [r.t.src, placeOf(r.t)]));
+  const [placed, setPlaced] = useState({ sig: placeSig, moved: new Set<string>() });
+  if (placed.sig !== placeSig) {
+    const was = new Map(JSON.parse(placed.sig) as [string, string][]);
+    setPlaced({ sig: placeSig, moved: new Set(rows.filter((r) => was.has(r.t.src) && was.get(r.t.src) !== placeOf(r.t)).map((r) => r.t.src)) });
+  }
   const box = useRef<HTMLDivElement>(null);
   // a sideways swipe over the takes is never the browser's back (swipe.ts)
   const outer = useRef<HTMLDivElement>(null);
@@ -239,8 +266,8 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
   };
 
   // ---- the playhead from the takes (ASKS 53): the line's handle, the line, the names row
-  const seekRef = useRef({ cols, onSeek, onSeekEdge });
-  useEffect(() => { seekRef.current = { cols, onSeek, onSeekEdge }; });
+  const seekRef = useRef({ cols, weights, onSeek, onSeekEdge });
+  useEffect(() => { seekRef.current = { cols, weights, onSeek, onSeekEdge }; });
   const drag = useRef<{ id: number; shift: number; x0: number; moved: boolean; line: boolean } | null>(null);
   /** The pointer's place in the grid: a shot and how far through it, or past an edge. */
   const placeAt = (clientX: number, shift: number): { n: number; p: number } | { edge: -1 | 1 } | undefined => {
@@ -248,12 +275,14 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
     if (!el) return undefined;
     const r = el.getBoundingClientRect();
     const x = clientX - r.left + shift;
-    const c = seekRef.current.cols;
-    const w = (r.width - 104 - c * 4) / c;
+    const { cols: c, weights: ws } = seekRef.current;
     if (x < 104 - 14) return { edge: -1 };
     if (x > r.width + 14) return { edge: 1 };
-    const k = Math.max(0, Math.min(c - 1, Math.floor((x - 108) / (w + 4))));
-    const p = (x - (108 + k * (w + 4)) - 2) / Math.max(1, w - 4);
+    // the column under the pointer (each as wide as its shares), and how far across its cell
+    let k = 0;
+    while (k < c - 1 && x >= columnBox(ws, k + 2, r.width).left) k++;
+    const b = columnBox(ws, k + 1, r.width);
+    const p = (x - b.left - 2) / Math.max(1, b.width - 4);
     return { n: k + 1, p: Math.max(0, Math.min(1, p)) };
   };
   const seekTo = (clientX: number) => {
@@ -304,38 +333,46 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
     const under = document.elementsFromPoint(e.clientX, e.clientY).map((x) => (x as HTMLElement).closest?.('[data-shot]')).find(Boolean) as HTMLElement | undefined;
     under?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY }));
   };
-  const menuAt = (e: React.MouseEvent<HTMLElement>, t: TakeShots, n?: number) => {
+  const menuAt = (e: React.MouseEvent<HTMLElement>, t: TakeShots, n?: number, tag?: string) => {
     if (!onMenu) return;
     e.preventDefault();
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
     // the menu key's own event has no pointer: under the cell then
     const kb = e.clientX === 0 && e.clientY === 0;
-    onMenu(kb ? { x: r.left + 8, y: r.bottom + 4 } : { x: e.clientX, y: e.clientY }, t, n);
+    onMenu(kb ? { x: r.left + 8, y: r.bottom + 4 } : { x: e.clientX, y: e.clientY }, t, n, tag);
   };
-  const menuKey = (e: React.KeyboardEvent<HTMLElement>, t: TakeShots, n?: number) => {
+  const menuKey = (e: React.KeyboardEvent<HTMLElement>, t: TakeShots, n?: number, tag?: string) => {
     if (!onMenu || !(e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) return;
     e.preventDefault();
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
-    onMenu({ x: r.left + 8, y: r.bottom + 4 }, t, n);
+    onMenu({ x: r.left + 8, y: r.bottom + 4 }, t, n, tag);
   };
 
   if (!rows.length && !stopped.length) return <p className="text-[12.5px] text-sub">{scene.id} has no take with a clip yet. When one lands it is cut into its shots and shows here.</p>;
-  const left = (n: number, p: number) => `calc(104px + 6px + (100% - 104px - ${cols * 4}px) / ${cols} * ${n - 1} + ${(n - 1) * 4}px + ((100% - 104px - ${cols * 4}px) / ${cols} - 4px) * ${Math.max(0, Math.min(1, p))})`;
+  // the line across the takes: column `n`, `p` of the way across its cell (each column as wide as its shares)
+  const shares = weights.reduce((a, b) => a + b, 0);
+  const left = (n: number, p: number) => {
+    const before = weights.slice(0, n - 1).reduce((a, b) => a + b, 0), own = weights[n - 1] ?? 1;
+    return `calc(104px + 6px + (100% - 104px - ${cols * 4}px) / ${shares} * ${before} + ${(n - 1) * 4}px + ((100% - 104px - ${cols * 4}px) / ${shares} * ${own} - 4px) * ${Math.max(0, Math.min(1, p))})`;
+  };
   return (
     <div ref={outer} className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3 text-[12px] text-sub">
-        {sceneIn || !anyShot ? (
+        {foreign ? (
+          <span key="foreign" data-takes-foreign={foreign.from} className="line-in min-w-0"><span className="font-medium text-ink">Layout {foreign.from}’s takes</span> · click a shot to try it in Layout {foreign.into}.</span>
+        ) : sceneIn || !anyShot ? (
           <span key="in" className="min-w-0"><span className="font-medium text-ink">{scene.id}{scene.title ? ` · ${scene.title}` : ''}</span> · every take, already cut into its shots. Click any shot to watch it.</span>
         ) : (
           <span key="out" data-scene-out className="line-in min-w-0"><span className="font-medium text-ink">{scene.id}{scene.title ? ` · ${scene.title}` : ''}</span> · not in the film now. Click any shot to bring it back in its place.</span>
         )}
         <span className="flex flex-none items-center gap-3 whitespace-nowrap">
-          {sceneIn && onSceneOut && (
+          {sceneIn && onSceneOut && !foreign && (
             <button type="button" data-scene-take-out onClick={onSceneOut} title={`Take every shot of ${scene.id} out of the film. The scene before runs straight into the one after. ⌘Z brings it back.`}
               className="line-in group/out -my-px flex h-6 cursor-pointer items-center text-[11.5px] text-sub transition-colors duration-150 hover:text-ink"><span className="flex h-[22px] items-center rounded-md border border-edge-strong px-2 transition-colors duration-150 group-hover/out:border-sub">Take the scene out</span></button>
           )}
+          {foreign && <span className="line-in flex items-center gap-1.5" title={`The same framing and line as a shot of Layout ${foreign.into}: it can go in that shot's place as it is.`}><i aria-hidden="true" className="rounded-[4px] bg-black/80 px-1 text-[10px] not-italic leading-[14px] text-ink">safe</i>safe swap</span>}
           <span className="flex items-center gap-1.5"><i aria-hidden="true" className="inline-block h-2.5 w-3.5 rounded-[3px] border-[1.5px] border-ink" />in the film now</span>
           <span aria-hidden={out.size === 0} title="A shot with no take in the film: the film goes from the shot before to the shot after. Click any of its takes to put it back."
             className={cn('flex items-center gap-1.5 transition-opacity duration-200', out.size ? 'opacity-100' : 'opacity-0')}>
@@ -367,6 +404,8 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
         </div>
         {rows.map(({ t, source, n: vn, depth }) => {
           const shots = shotsOf(t);
+          const place = placeOf(t);
+          const moved = placed.moved.has(t.src);
           const v = t.variation;
           const srcName = source ? cap(names.get(source.src) ?? source.name) : undefined;
           const name = v && vn ? `${srcName ?? cap(names.get(t.src) ?? t.name)}, variation ${vn}` : cap(names.get(t.src) ?? t.name);
@@ -394,7 +433,7 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                     <span className="truncate">Could not be made · {v.failed}</span>
                   </span>
                 ) : (
-                  <span className="relative col-span-full col-start-2 grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }} title={v?.note ? `“${v.note}”` : undefined}>
+                  <span className="relative col-span-full col-start-2 grid gap-1" style={{ gridTemplateColumns: gridColumns(weights).replace(/^104px /, '') }} title={v?.note ? `“${v.note}”` : undefined}>
                     {Array.from({ length: cols }, (_, i) => (
                       <span key={i} className="h-[68px] p-0.5"><i aria-hidden="true" className="node-live sheen-calm block h-[64px] rounded-[7px] border border-dashed border-[#45454d] bg-[#0d0d0f]" /></span>
                     ))}
@@ -410,21 +449,30 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
             <div key={t.src} className="flex flex-col gap-1">
             <div data-take-row={t.src} className={cn('grid items-stretch gap-1 rounded-[9px] transition-colors duration-500', flash === t.src && 'bg-[#1c1c20]')} style={grid}>
               {nameCell}
-              {Array.from({ length: cols }, (_, i) => {
-                const s = shots.find((x) => x.n === i + 1);
-                if (!s) return <span key={i} className={cn('h-[68px] rounded-[9px] transition-colors duration-200', hot === i + 1 && 'bg-[#141417]')} />;
-                const key = `${t.src}#${s.n}`;
+              {cellsOf(shots, cols).map((cell, i) => {
+                // a cell's key carries where the take's shots are: moved to other columns, they are drawn anew and fade in
+                const ck = `${i}:${place}`;
+                if (!cell.length) return <span key={ck} className={cn('h-[68px] rounded-[9px] transition-colors duration-200', hot === i + 1 && 'bg-[#141417]')} />;
+                // one shot of the take: drawn alone in its cell, as before; two or more of one number ("7a", "7b"):
+                // side by side in the column's cell, each named
+                const shotCell = (s: Shot, share: boolean) => {
+                const tag = subTag(s);
+                const label = cellLabel(s, share);
+                const said = label ?? String(s.n);
+                const key = shotKey(t.src, s);
                 const isIn = used.has(key);
                 const isPick = !!picks?.has(key);
-                const isWatch = isPick || (watching?.src === t.src && watching.n === s.n);
+                const isWatch = isPick || (watching?.src === t.src && watching.n === s.n && (watching.tag ?? undefined) === tag);
                 const isOut = out.has(s.n);
                 const bring = isOut && !!onBring && t.state === 'ready';
                 const canOut = isIn && !!onTakeOut && !selecting;
+                const mark = markOf?.(t, s.n, tag);
                 return (
-                  <div key={i} data-col={s.n} className={cn('group/cell relative rounded-[9px] p-0.5 transition-[background-color,opacity] duration-200', hot === i + 1 && 'bg-[#141417]', isOut && !isWatch && 'opacity-45 hover:opacity-90 has-[:focus-visible]:opacity-90')}>
-                    <button type="button" aria-pressed={isWatch} onClick={() => { if (v) markSeen(t.src); if (bring) onBring!(t, s.n); else onShot(t, s.n); }} data-shot={key} data-in={isIn ? '' : undefined} data-pick={isPick ? '' : undefined}
-                      onContextMenu={(e) => menuAt(e, t, s.n)} onKeyDown={(e) => menuKey(e, t, s.n)}
-                      title={`${name} · shot ${s.n} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}`}
+                  <div key={share ? key : ck} data-col={share ? undefined : s.n} className={cn('group/cell relative rounded-[9px] p-0.5 transition-[background-color,opacity] duration-200', !share && hot === i + 1 && 'bg-[#141417]', !share && moved && 'line-in', isOut && !isWatch && 'opacity-45 hover:opacity-90 has-[:focus-visible]:opacity-90')}>
+                    <button type="button" aria-pressed={isWatch} onClick={() => { if (v) markSeen(t.src); if (bring) onBring!(t, s.n, tag); else onShot(t, s.n, tag); }} data-shot={key} data-in={isIn ? '' : undefined} data-pick={isPick ? '' : undefined}
+                      onContextMenu={(e) => menuAt(e, t, s.n, tag)} onKeyDown={(e) => menuKey(e, t, s.n, tag)}
+                      data-safe={mark?.safe ? mark.to : undefined} data-warn={mark && !mark.safe ? mark.warnings.length : undefined}
+                      title={`${name} · shot ${said} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}${mark ? `\n${mark.safe ? `A safe swap for shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}: the same framing and line.` : `Goes in place of shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}.`}${mark.warnings.length ? `\n${mark.warnings.join('\n')}` : ''}` : ''}`}
                       className={cn('group @container relative block h-[64px] w-full cursor-pointer overflow-hidden rounded-[7px] border bg-panel text-left transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] disabled:cursor-default',
                         isWatch ? 'border-dashed border-ink shadow-[0_0_0_1px_#FAFAFA]' : isIn ? 'border-ink shadow-[0_0_0_1px_#FAFAFA]' : isOut ? 'border-dashed border-edge-strong hover:border-sub' : 'border-edge hover:border-sub')}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- a poster frame from /api/media, cached on disk */}
@@ -432,13 +480,25 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                         className="absolute inset-y-0 left-0 h-full w-full object-cover object-[50%_28%] transition-opacity duration-200 group-hover:opacity-100 @[84px]:w-[36px] @[84px]:object-center" style={{ opacity: isIn || isWatch ? 1 : 0.72 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       {/* a wide cell: the whole frame at the left, the length beside it; a narrow one: the length over the frame */}
                       <span className="absolute bottom-1 left-1 rounded-[4px] bg-black/75 px-1.5 text-[11px] leading-4 text-ink [font-variant-numeric:tabular-nums] @[84px]:bottom-auto @[84px]:left-[44px] @[84px]:top-1/2 @[84px]:-translate-y-1/2 @[84px]:bg-transparent @[84px]:px-0 @[84px]:text-[13px]">{secs(s.out - s.in)}</span>
+                      {/* the shot's own name when its column alone does not say it ("7a"); another layout's shot:
+                          "safe" with the place it is the same as, else the place it would go, in amber */}
+                      {(label || mark) && (
+                        <span className="absolute left-1 top-1 flex max-w-[calc(100%-8px)] items-center gap-0.5">
+                          {label && <span data-shot-tag={label} className="rounded-[4px] bg-black/80 px-1 text-[10px] font-medium leading-[14px] text-ink [font-variant-numeric:tabular-nums]">{label}</span>}
+                          {mark && (
+                            <span data-mark={mark.safe ? 'safe' : 'warn'} className={cn('line-in truncate rounded-[4px] bg-black/80 px-1 text-[10px] leading-[14px] [font-variant-numeric:tabular-nums]', mark.safe ? 'text-ink' : 'text-warn')}>
+                              {mark.safe ? `safe → ${mark.to}` : `→ ${mark.to}`}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </button>
                     {/* take the shot out: on the ringed cell, shown on hover and keyboard focus (always on a touch screen);
                         hidden while shots are selected */}
                     {onTakeOut && (
                       <button type="button" data-take-out={key} tabIndex={canOut ? 0 : -1} aria-hidden={!canOut} disabled={!canOut}
-                        onClick={(e) => { e.stopPropagation(); if (canOut) onTakeOut(t, s.n); }}
-                        aria-label={`Take ${scene.id} shot ${s.n} out of the film`} title="Take this shot out of the film. What follows closes up. ⌘Z brings it back."
+                        onClick={(e) => { e.stopPropagation(); if (canOut) onTakeOut(t, s.n, tag); }}
+                        aria-label={`Take ${scene.id} shot ${said} out of the film`} title="Take this shot out of the film. What follows closes up. ⌘Z brings it back."
                         className={cn('absolute right-1.5 top-1.5 z-[2] flex size-[18px] items-center justify-center rounded-full border border-edge-strong bg-black/85 text-ink transition-[opacity,background-color,border-color] duration-150 ease-out hover:border-ink hover:bg-[#1c1c20] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink',
                           canOut ? 'cursor-pointer opacity-0 group-hover/cell:opacity-100 group-has-[:focus-visible]/cell:opacity-100 [@media(hover:none)]:opacity-90' : 'pointer-events-none opacity-0')}>
                         <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 1l6 6M7 1 1 7" /></svg>
@@ -447,13 +507,21 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                     {/* a selected shot: a small × to unselect it */}
                     {onUnpick && (
                       <button type="button" data-unpick={key} tabIndex={isPick ? 0 : -1} aria-hidden={!isPick} disabled={!isPick}
-                        onClick={(e) => { e.stopPropagation(); if (isPick) onUnpick(t, s.n); }}
-                        aria-label={`Unselect ${name} shot ${s.n}`} title="Unselect this shot"
+                        onClick={(e) => { e.stopPropagation(); if (isPick) onUnpick(t, s.n, tag); }}
+                        aria-label={`Unselect ${name} shot ${said}`} title="Unselect this shot"
                         className={cn('absolute right-1.5 top-1.5 z-[2] flex size-4 items-center justify-center rounded-full bg-ink text-bg transition-[opacity,transform] duration-150 ease-out hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink focus-visible:ring-offset-1 focus-visible:ring-offset-bg',
                           isPick ? 'cursor-pointer opacity-100' : 'pointer-events-none scale-75 opacity-0')}>
                         <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden="true" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M1 1l6 6M7 1 1 7" /></svg>
                       </button>
                     )}
+                  </div>
+                );
+                };
+                if (cell.length === 1) return shotCell(cell[0], false);
+                return (
+                  <div key={ck} data-col={i + 1} data-cell-shots={cell.length} className={cn('grid min-w-0 rounded-[9px] transition-colors duration-200', hot === i + 1 && 'bg-[#141417]', moved && 'line-in')}
+                    style={{ gridTemplateColumns: `repeat(${cell.length}, minmax(0, 1fr))` }}>
+                    {cell.map((s) => shotCell(s, true))}
                   </div>
                 );
               })}
@@ -478,6 +546,21 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
           </div>
         ))}
       </div>
+      {/* the painted view behind each shot, under its column; a shot that names none shows nothing. Not for
+          another layout's takes: their columns are not the shots the views were named for. */}
+      {views && views.length > 0 && !foreign && (() => { const labels = shortViewNames(views); return (
+        <div data-shot-views="" className="grid items-center gap-1" style={grid}>
+          <span className="pr-1.5 text-[12px] leading-tight text-sub" title="The painted view of the location each shot stands in front of, from the scene's prompt">Views</span>
+          {Array.from({ length: cols }, (_, i) => {
+            const vw = views.find((x) => x.shot === i + 1);
+            return (
+              <span key={i} className={cn('rounded-[9px] p-0.5 transition-colors duration-200', hot === i + 1 && 'bg-[#141417]')}>
+                {vw && viewSrc ? <ViewThumb view={vw} src={viewSrc(vw.path)} scene={scene.id} label={labels.get(vw.tag)} className="h-[44px] w-full" /> : <span aria-hidden="true" className="block h-[44px]" />}
+              </span>
+            );
+          })}
+        </div>
+      ); })()}
     </div>
   );
 }

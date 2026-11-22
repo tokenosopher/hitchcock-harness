@@ -43,6 +43,14 @@ export interface FullInfo {
   times?: Record<string, string>;
 }
 
+/** Any full-size picture at all: an upscaled base of a version, a take's own 1080p file, a whole take upscaled, or a
+ *  piece's full-size original. The 1080p view and its switch show when this is true (also when the only full-size
+ *  files are upscaled takes, with no base and no take's own 1080p). */
+export function hasFull(info: FullInfo | undefined): boolean {
+  if (!info) return false;
+  return info.bases.length > 0 || [info.takes, info.upscaled, info.originals].some((m) => !!m && Object.keys(m).length > 0);
+}
+
 export type PieceKind = 'take' | 'upscaled' | 'original' | 'base' | 'small';
 /** A stretch of the timeline [from, to) in frames, played from `src` starting at `t0` seconds, `rate` seconds of file
  *  per second of film. `drawn`: the player and the master draw the clip's mirror and fades over it (a file of the

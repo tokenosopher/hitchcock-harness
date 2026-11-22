@@ -19,6 +19,9 @@ import { Media } from '@/components/media/Media';
 import { sceneNow, TONE_BAR, TONE_CHIP, TONE_DOT, type SceneNow } from '@/components/lib/scenes';
 import { cn } from '@/lib/utils';
 import { Feed, ShownLink } from '@/components/feed/Feed';
+import { StepRunning } from '@/components/flow/RunningNow';
+import { qcTargets } from '@/components/qc/targets';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import { refData } from '@/components/lib/refPick';
 import { sceneRefOf, takeRefOf } from '@/components/shell/refItems';
 import type { InlineRef } from '@/lib/refs';
@@ -66,7 +69,7 @@ function TestTile({ c, i, state, href, size, used, best }: { c: FeedCard; i: num
   const clip = c.media.find((m) => m.kind === 'video')!;
   const tail = /-([A-Za-z])$/.exec(c.id ?? '')?.[1];
   return (
-    <Link href={href} title={`Test take${used ? ', in the cut' : ''}: ${c.title}${c.text?.[0] ? `. ${c.text[0].slice(0, 160)}` : ''}`} aria-label={`Test take${used ? ', in the cut' : ''}, ${c.title}`} className="group/tile relative z-[1] flex flex-none flex-col items-center gap-1 no-underline">
+    <Link href={href} title={`Test take${used ? ', in the cut' : ''}: ${c.title}${c.text?.[0] ? `. ${c.text[0].replace(/\*\*|`/g, "").slice(0, 160)}` : ''}`} aria-label={`Test take${used ? ', in the cut' : ''}, ${c.title}`} className="group/tile relative z-[1] flex flex-none flex-col items-center gap-1 no-underline">
       <span className={cn('relative block overflow-hidden rounded-[5px] border bg-tile transition-[opacity,transform] duration-200 ease-out group-hover/tile:-translate-y-px group-hover/tile:opacity-100', best ? 'border-ink ring-1 ring-ink' : used ? 'border-dashed border-ink/70' : 'border-dashed border-edge-strong opacity-75', size)}>
         <Media path={filmPath(state, clip.path)} w={120} t={0.5} missingLabel="" className="absolute inset-0" />
       </span>
@@ -280,8 +283,13 @@ export function ScenesPage() {
       <PageBody wide>
         <StageTitle kicker="Stages 6 to 8 · Scene prompts, takes and redos" title="Scenes"
           sub={<ScenesSummary state={state} tasks={tasks} />}
-          right={<QCChip spec={qcSpec('prompt')} chipLabel="prompts"
-            targets={scenes.map((s) => { const p = s.promptVersions[s.promptVersions.length - 1]; return { target: s.id, label: `${s.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!p, waitsFor: p ? `${s.id} prompt ${p.version}` : `${s.id}'s first prompt` }; })} />} />
+          right={<span className="flex flex-wrap items-center gap-2">
+            <QCChip spec={qcSpec('prompt')} chipLabel="prompts"
+              targets={scenes.map((s) => { const p = s.promptVersions[s.promptVersions.length - 1]; return withPickupCheck(state, 'prompt', { target: s.id, label: `${s.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!p, waitsFor: p ? `${s.id} prompt ${p.version}` : `${s.id}'s first prompt` }); })} />
+            {/* the take checks' chip, as the Scenes step under the flow showed it beside the prompts' */}
+            <QCChip spec={qcSpec('take')} chipLabel="take checks" targets={qcTargets(state, 'take')} />
+          </span>} />
+        <StepRunning step="scenes" />
         <StepIntro step="scenes" />
 
         <ScenesOverview state={state} base={base} tasks={tasks} />

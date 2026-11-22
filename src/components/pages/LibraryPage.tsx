@@ -1,6 +1,6 @@
 'use client';
 // The library across films (design/boards/Library.dc.html): faces, voices, whole characters and places, each
-// tagged with its film and role; search; "Use in <film>" prefills that film's composer. Its thread is the
+// tagged with its film and role; search; "Use in <film>" puts it in that film's composer as a chip. Its thread is the
 // Library's own Alma session ("Library · across films"). Nothing here writes: the picks happen in the film.
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -37,19 +37,24 @@ const matches = (it: LibraryItem, q: string) => {
   return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
 };
 
-/** Puts a message about this entry into the film's composer (its saved draft and chips) and opens the film. */
+/** Puts this entry into the film's composer as a chip (its saved chips; the words there kept) and opens the film: the
+ *  box asks what it is for, and Alma reads which entry it is (22 Nov 2026: a chip, not words written for the user). */
 function useInFilm() {
   const router = useRouter();
   return (film: FilmRef, it: LibraryItem) => {
     const key = `hh:ui:${film.slug}`;
     const what = it.kind === 'location' ? 'place' : it.kind;
-    const chip = { id: `lib:${it.id}`, label: `library · ${it.name} · ${it.film.title}`, ref: `library/${KIND_FOLDER[it.kind]}/${it.id}` };
-    const draft = `Use the library ${what} ${it.name} (${it.film.title}${it.candidate ? `, ${it.candidate}` : ''}) for `;
+    const chip = {
+      id: `lib:${it.id}`, label: `Use · ${it.name} · ${it.film.title}`, ref: `library/${KIND_FOLDER[it.kind]}/${it.id}`,
+      about: `Use the library ${what} ${it.name} (${it.film.title}${it.candidate ? `, ${it.candidate}` : ''}). The user says what for`,
+      placeholder: 'Use it for…',
+    };
     try {
-      const prev = JSON.parse(localStorage.getItem(key) ?? '{}') as { chips?: { id: string }[] };
-      const chips = [...(prev.chips ?? []).filter((c) => c.id !== chip.id), chip];
-      localStorage.setItem(key, JSON.stringify({ ...prev, chips, draft }));
-    } catch { /* storage blocked: the film opens without the draft */ }
+      const prev = JSON.parse(localStorage.getItem(key) ?? '{}') as { chips?: { id: string; about?: string; command?: string }[] };
+      // one such chip at a time, as a button's chip in the box (ui.tsx putChip)
+      const chips = [...(prev.chips ?? []).filter((c) => c.id !== chip.id && !c.about && !c.command), chip];
+      localStorage.setItem(key, JSON.stringify({ ...prev, chips }));
+    } catch { /* storage blocked: the film opens without the chip */ }
     router.push(`/films/${film.slug}`);
   };
 }
@@ -78,7 +83,7 @@ function UseIn({ it, films }: { it: LibraryItem; films: FilmRef[] }) {
           className={cn('absolute right-0 top-[38px] z-10 w-[280px] rounded-[10px] border border-edge-strong bg-panel p-1 shadow-[0_16px_48px_#000] transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none', menu.shown ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-1 opacity-0')}>
           {films.map((f) => (
             <button key={f.slug} role="menuitem" type="button" onClick={() => use(f, it)} className="flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-2 text-left text-[13px] text-[#E4E4E7] hover:bg-raised">
-              <span className="font-medium">{f.title}</span><span className="text-[12px] text-sub">prefills its composer</span>
+              <span className="font-medium">{f.title}</span><span className="text-[12px] text-sub">goes in its composer</span>
             </button>
           ))}
         </div>

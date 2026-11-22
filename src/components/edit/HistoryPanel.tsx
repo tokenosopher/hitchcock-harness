@@ -4,7 +4,12 @@
 // (POST …/cut/goto, nothing written but the history's pointer); a press on a version's row opens it as one step (POST
 // …/cut/restore). Only the open groups are drawn: the steps between two versions stay folded until asked for, so a
 // history of 1,000 steps opens as fast as one of ten. The model is historyList.ts (pure).
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+// Beside each step the user can write why they made it : "Why?" opens a line under the step;
+// the reason is kept in the film's harness/cut-reasons.json by the step's rev (reasons.ts, POST …/cut/reasons) and
+// shown under the step from then on. Alma reads them before she changes the cut and at the debrief.
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { reasonsByRev, REASON_MAX, type ReasonsFile, type StepReason } from './reasons';
+import { useJson } from '@/components/pages/postCommon';
 import { cn } from '@/lib/utils';
 import { IconChevronRight } from '@/components/shell/icons';
 import type { HistorySummary } from './history';
@@ -37,7 +42,75 @@ function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
 
 const Pill = () => <span data-cut-now className="ml-auto inline-flex h-[18px] flex-none items-center rounded-full border border-ink px-[7px] text-[11px] font-medium text-ink duration-200 animate-in fade-in-0">The cut now</span>;
 
+/** The reasons of the film's steps and the way to set one; absent where the panel has no film (nothing to keep). */
+interface Reasons { of: (rev: number) => StepReason | undefined; set: (r: StepRow, words: string) => Promise<boolean> }
+const ReasonsCtx = createContext<Reasons | undefined>(undefined);
+
+/** The line under a step: its reason, or the box to write one. */
+function ReasonLine({ r, editing, onEdit }: { r: StepRow; editing: boolean; onEdit: (on: boolean) => void }) {
+  const rs = useContext(ReasonsCtx);
+  const had = rs?.of(r.step.rev);
+  const [words, setWords] = useState(had?.reason ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  if (!rs) return null;
+  const keep = async (w: string) => {
+    setBusy(true);
+    const ok = await rs.set(r, w);
+    setBusy(false);
+    setErr(!ok);
+    if (ok) onEdit(false);
+  };
+  return (
+    <>
+      <Reveal open={!!had && !editing}>
+        <button type="button" data-step-reason={r.step.rev} onClick={() => { setWords(had?.reason ?? ''); onEdit(true); }} title="Change the reason"
+          className="flex w-full min-w-0 cursor-pointer items-baseline gap-1.5 border-0 bg-transparent py-0.5 pl-[42px] pr-2 text-left text-[11.5px] leading-snug text-sub hover:text-ink">
+          <span className="flex-none text-mute">Why:</span><span className="min-w-0 break-words">{had?.reason}</span>
+        </button>
+      </Reveal>
+      <Reveal open={editing}>
+        <form className="flex flex-wrap items-center gap-1.5 py-1 pl-[42px] pr-2" onSubmit={(e) => { e.preventDefault(); void keep(words); }}>
+          <input autoFocus={editing} value={words} maxLength={REASON_MAX} disabled={busy} onChange={(e) => setWords(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onEdit(false); } }}
+            placeholder="Why you made this change, in a line" aria-label={`Why: ${r.step.words}`}
+            className="h-7 min-w-0 flex-[1_1_220px] rounded-md border border-line bg-panel px-2 text-[12.5px] text-ink placeholder:text-mute" />
+          <button type="submit" disabled={busy} className="h-7 cursor-pointer rounded-md bg-ink px-2.5 text-[12px] font-medium text-bg disabled:opacity-60">{busy ? 'Keeping…' : 'Keep'}</button>
+          {had && <button type="button" disabled={busy} onClick={() => void keep('')} className="h-7 cursor-pointer rounded-md border-0 bg-transparent px-2 text-[12px] text-sub hover:text-ink">Take it away</button>}
+          <button type="button" onClick={() => onEdit(false)} className="h-7 cursor-pointer rounded-md border-0 bg-transparent px-2 text-[12px] text-sub hover:text-ink">Cancel</button>
+          {err && <span role="alert" className="basis-full text-[11.5px] text-bad">Not kept: the harness server did not answer.</span>}
+        </form>
+      </Reveal>
+    </>
+  );
+}
+
 function StepLine({ r, now, busy, onGo }: { r: StepRow; now: number; busy: boolean; onGo: (rev: number) => void }) {
+  const rs = useContext(ReasonsCtx);
+  const [editing, setEditing] = useState(false);
+  // a reason is asked of the user's own steps (and kept for any step that has one)
+  const can = !!rs && (r.step.by === 'user' || r.step.by === 'restore' || !!rs.of(r.step.rev));
+  const had = rs?.of(r.step.rev);
+  return (
+    <div className="group/step flex flex-col">
+      <div className="relative flex items-center">
+        <StepButton r={r} now={now} busy={busy} onGo={onGo} />
+        {can && !had && !editing && (
+          <button type="button" data-step-why={r.step.rev} onClick={() => setEditing(true)} aria-label={`Say why: ${r.step.words}`}
+            className={cn('absolute right-1 top-1/2 h-[18px] -translate-y-1/2 cursor-pointer rounded-[5px] border border-edge-strong bg-bg px-1.5 text-[11px] text-ink-3 opacity-0 transition-opacity duration-200 hover:text-ink focus-visible:opacity-100 group-hover/step:opacity-100 [@media(hover:none)]:opacity-100',
+              r.now && 'opacity-100')}>
+            Why?
+          </button>
+        )}
+      </div>
+      <ReasonLine r={r} editing={editing} onEdit={setEditing} />
+    </div>
+  );
+}
+
+function StepButton({ r, now, busy, onGo }: { r: StepRow; now: number; busy: boolean; onGo: (rev: number) => void }) {
+  const rs = useContext(ReasonsCtx);
+  const why = !!rs && (r.step.by === 'user' || r.step.by === 'restore') && !rs.of(r.step.rev);
   return (
     <button type="button" data-history-step={r.step.rev} data-undone={r.undone ? '' : undefined} data-now={r.now ? '' : undefined}
       disabled={busy && !r.now} onClick={() => { if (!r.now) onGo(r.step.rev); }}
@@ -49,7 +122,7 @@ function StepLine({ r, now, busy, onGo }: { r: StepRow; now: number; busy: boole
       <span className="min-w-0 truncate" title={r.step.words}>{stepText(r.step)}</span>
       {r.undone && <span className="ml-2.5 flex-none text-[11px] text-sub">Undone</span>}
       {r.now ? <Pill /> : null}
-      <span className={cn('flex-none pl-2.5 text-[11px] text-sub', !r.now && 'ml-auto')}>{stepWho(r.step)} · {stepWhen(r.step.at, now)}</span>
+      <span className={cn('flex-none pl-2.5 text-[11px] text-sub', !r.now && 'ml-auto', why && 'transition-[padding] duration-200 group-hover/step:pr-[52px] [@media(hover:none)]:pr-[52px]', why && r.now && 'pr-[52px]')}>{stepWho(r.step)} · {stepWhen(r.step.at, now)}</span>
     </button>
   );
 }
@@ -72,11 +145,32 @@ function StretchLine({ s, open, onToggle, now, busy, onGo }: { s: Stretch; open:
 
 export interface HistoryMarks { approved?: string; masters?: Set<string>; final?: string }
 
-export function HistoryPanel({ history, versions, unreadable, names, equals, marks, keys, busy, onGo, onOpen }: {
+export function HistoryPanel({ film, history, versions, unreadable, names, equals, marks, keys, busy, onGo, onOpen }: {
+  /** The film whose reasons are read and kept; without it the steps take no reason. */
+  film?: string;
   history: HistorySummary; versions: VersionInfo[]; unreadable: Record<string, string[]>; names: VersionNames; equals?: string;
   marks: HistoryMarks; keys: { undo: string; redo: string }; busy: boolean;
   onGo: (rev: number) => void; onOpen: (version: string) => void;
 }) {
+  const [stamp, setStamp] = useState(0);
+  const read = useJson<ReasonsFile>(film ? `/api/films/${film}/cut/reasons` : undefined, String(stamp));
+  const [mine, setMine] = useState<ReasonsFile | undefined>();
+  const file = mine ?? read.data;
+  const byRev = useMemo(() => (file ? reasonsByRev(file) : new Map<number, StepReason>()), [file]);
+  const reasons = useMemo<Reasons | undefined>(() => (!film ? undefined : {
+    of: (rev) => byRev.get(rev),
+    set: async (r, words) => {
+      try {
+        const res = await fetch(`/api/films/${film}/cut/reasons`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ step: { rev: r.step.rev, words: r.step.words, at: r.step.at, by: r.step.by }, reason: words }) });
+        if (!res.ok) return false;
+        setMine((await res.json()) as ReasonsFile);
+        setStamp((n) => n + 1);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  }), [film, byRev]);
   const model = useMemo(() => historyModel(history, versions, unreadable, equals), [history, versions, unreadable, equals]);
   // the time the page reads "today" and "yesterday" against, taken once
   const [now] = useState(() => Date.now());
@@ -126,6 +220,7 @@ export function HistoryPanel({ history, versions, unreadable, names, equals, mar
   );
 
   return (
+    <ReasonsCtx.Provider value={reasons}>
     <div data-history-panel className="flex flex-col rounded-[10px] border border-line duration-200 animate-in fade-in-0">
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-2 pb-1 pt-2">
         <span className="text-[13px] font-medium text-ink">History</span>
@@ -170,8 +265,9 @@ export function HistoryPanel({ history, versions, unreadable, names, equals, mar
         {!since.length && !model.versions.length && <span className="px-2 py-2 text-[12.5px] text-sub">No steps yet.</span>}
       </div>
       <p className="m-0 border-t border-line px-2 pb-2 pt-1.5 text-[11.5px] leading-[1.4] text-sub">
-        Press a step to go to it. Dimmed steps are undone. Redo brings them back; a new edit clears them. Saved versions are never deleted.
+        Press a step to go to it. Dimmed steps are undone. Redo brings them back; a new edit clears them. Saved versions are never deleted.{reasons ? ' Why? beside a step of yours keeps your reason for it, for Alma.' : ''}
       </p>
     </div>
+    </ReasonsCtx.Provider>
   );
 }

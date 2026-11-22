@@ -7,7 +7,7 @@
 // button (or the step to do now, by hand) in the bar at the foot. Every target 44 px (.touch-targets).
 import Link from 'next/link';
 import { Header } from '@/components/shell/Header';
-import { IconChevronLeft } from '@/components/shell/icons';
+import { BackLink } from '@/components/shell/BackLink';
 import { cn } from '@/lib/utils';
 import type { FilmState } from '@/server/types';
 import { appName, nextUp, platformStatus, postedCount, threadWords, waves } from './derive';
@@ -81,7 +81,8 @@ export function PhonePlatform({ rel, file, p, now, state, base }: { rel: Rel; fi
     <div data-phone-platform={p.id} className="touch-targets flex min-h-full flex-none flex-col">
       <Header crumbs={[{ label: state.film.title, href: base }, { label: 'Release', href: `${base}/release${qs}` }, { label: p.name }]} meta="" phoneSub={`Release · ${p.name}`} />
       <div className="flex flex-col gap-1.5 px-4 pt-3">
-        <Link href={`${base}/release${qs}`} data-phone-back className="-ml-1 inline-flex min-h-[44px] w-fit items-center gap-1 text-[13px] text-sub no-underline"><IconChevronLeft size={14} />Release</Link>
+        {/* the flow's way back (BackLink.tsx), 44 px on the phone */}
+        <BackLink back={{ label: 'Back to Release', href: `${base}/release${qs}` }} phone className="w-fit" />
         <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{p.name} by hand</h1>
         <span className="text-[13px] text-sub">from {p.account}</span>
         <div data-state-line className="pt-1"><StateWords st={st} big className="flex-wrap whitespace-normal" /></div>

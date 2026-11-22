@@ -2,7 +2,7 @@
 // The QC panel: the "Next" sentence, the 0–10 score
 // track with the 8.5 mark and a dot per round, open misses first and the resolved folded, each miss with its
 // colour group, finding, exact fix, "fixed in" and expandable evidence; a sticky footer of three actions.
-// Not run: "Not run · waits for <x>" (or "ready to run on <x>"), the checks folded, Run QC. Every action only prefills the composer.
+// Not run: "Not run · waits for <x>" (or "ready to run on <x>"), the checks folded, Run QC. Every action only puts its ask in the composer, as a chip.
 import { useEffect, useMemo, useState } from 'react';
 import { useFilm } from '@/components/data/film';
 import { useUI } from '@/components/data/ui';
@@ -30,6 +30,11 @@ export interface QCTarget {
   /** What the check needs that is not there yet (the cut's 480p, 14 Nov): Run QC asks for it first, says so in
    *  `words`, waits, and only then asks Alma; `run` answers why it could not be had, if so. */
   before?: { words: string; run: () => Promise<string | undefined> };
+  /** A pick-up's own check shown as its scene's current one (lib/pickupCheck.ts): the pick-up ("FIX-S1-sit"),
+   *  which the panel's requests name as the file target (qc/<stage>-FIX-S1-sit-r<n>.json). */
+  pickup?: string;
+  /** The scene's own check while a pick-up's is current: kept below the misses as the earlier record, folded. */
+  earlier?: { label: string; entry: QCEntry };
 }
 
 /** The chip's words after "QC · <label> · ". */
@@ -75,8 +80,10 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
   const history = t.entry?.history ?? [];
   const label = t.label;
   const status = targetStatus(t);
-  const chip = { id: `qc:${spec.stage}:${t.target}`, label: `QC · ${label}` };
-  // the check's own need first (the cut's 480p), said while it runs; then the request in Alma's box
+  // the file the rounds are written to: the pick-up's own when its check is the one shown
+  const file = t.pickup ?? t.target;
+  const chip = { id: `qc:${spec.stage}:${file}`, label: `QC · ${label}` };
+  // the check's own need first (the cut's 480p), said while it runs; then the request in Alma's box, as a chip
   const [getting, setGetting] = useState<{ words: string; error?: string }>();
   const run = async (round: number) => {
     if (t.before) {
@@ -86,7 +93,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
       if (why) { setGetting({ words: t.before.words, error: why }); return; }
       setGetting(undefined);
     }
-    ui.prefill(runQCText(recipe, spec, t.target, label, round), chip);
+    ui.command({ ...chip, label: `Run QC round ${round} · ${label}` }, runQCText(recipe, spec, file, label, round));
   };
   const waiting = !!getting && !getting.error;
 
@@ -101,7 +108,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
   const { tasks } = useThread();
   const word = (w: string) => new RegExp(`(^|[^A-Za-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9]|$)`, 'i');
   const fixing = !!r && tasks.some((k) => (k.state === 'running' || k.state === 'queued') && /\b(qc|critic|fix(es|ing)?)\b/i.test(k.title)
-    && (word(t.target).test(k.title) || (!/^[A-Z]+\d/.test(t.target) && word(spec.stage).test(k.title))));
+    && (word(file).test(k.title) || (!/^(?:[A-Z]+\d|FIX-)/.test(file) && word(spec.stage).test(k.title))));
   const fileOf = (p: string) => (state ? repoPath(state.film.folder, state.film.repo, p) : p);
   const nine = (state?.film.aspect ?? '9:16') === '9:16';
 
@@ -118,6 +125,11 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
                 ? `These misses come from ${t.source} on the takes in the cut. Alma’s critic (Opus) has not graded this yet; it reads ${spec.reads} against ${spec.note}.`
                 : `Alma’s critic (Opus) reads ${spec.reads}, and grades 1 to 10 against ${spec.note}${spec.stage === 'previz' ? ', camera design and action fluidity included' : ''}.`}
             </span>
+            {t.pickup && (
+              <span data-qc-pickup className="max-w-[560px] text-[12.5px] leading-normal text-ink-3">
+                This is the check of the pick-up <span className="whitespace-nowrap font-mono text-[11.5px]">{t.pickup}</span>, the newest work on {t.target}.{t.earlier ? ` ${t.target}’s first check is kept below as the earlier record.` : ''}
+              </span>
+            )}
           </div>
         </div>
         {onClose && (
@@ -208,7 +220,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
 
           {shown(open).map((m) => (
             <MissRow key={m.id} m={m} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine}
-              onClick={() => { setRow(row === m.id ? undefined : m.id); ui.addChip({ id: `qcmiss:${t.target}:${m.id}`, label: `QC · ${m.where ?? label} · ${m.sub || m.category}` }); }} />
+              onClick={() => { setRow(row === m.id ? undefined : m.id); ui.addChip({ id: `qcmiss:${file}:${m.id}`, label: `QC · ${m.where ?? label} · ${m.sub || m.category}` }); }} />
           ))}
           {!shown(open).length && (
             <div className={cn('border-b border-line text-[12.5px] text-mute', compact ? 'px-4 py-3' : 'px-[18px] py-3.5')}>
@@ -229,6 +241,8 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
             </>
           )}
 
+          {t.earlier && <EarlierCheck e={t.earlier} compact={compact} fileOf={fileOf} nine={nine} />}
+
           {/* the rounds run by themselves (the user, 12 Nov): nothing here asks. A button appears only when the user may
               want to push: nothing is running for it, or the three rounds are used up. */}
           <Footer compact={compact} note={t.source ? 'The critic grades it from round 1.'
@@ -242,13 +256,13 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
               <span className="inline-flex h-[34px] items-center gap-2 whitespace-nowrap text-[12.5px] text-ink-3"><span aria-hidden="true" className="dot-run size-2 rounded-full bg-sub" />fixes running</span>
             ) : lastRound && open.length ? (
               <button type="button"
-                onClick={() => ui.prefill(`About the ${open.length} QC ${open.length === 1 ? 'miss' : 'misses'} still open on ${label} after round ${r.round} (${open.map((m) => m.id).join(', ')}): `, chip)}
+                onClick={() => ui.about(chip, `the ${open.length} QC ${open.length === 1 ? 'miss' : 'misses'} still open on ${label} after round ${r.round} (${open.map((m) => m.id).join(', ')}): what to do with them`, `What should Alma do with ${open.length === 1 ? 'it' : 'them'}…`)}
                 className="h-[34px] cursor-pointer whitespace-nowrap rounded-lg border border-edge-strong bg-transparent px-3 text-[13px] font-medium text-ink hover:bg-raised">
                 Tell Alma what to do with them
               </button>
             ) : !lastRound && open.length ? (
               <button type="button" title="Alma does this by herself; this only asks her to start now if she has not"
-                onClick={() => ui.prefill(`Apply the ${open.length} open QC ${open.length === 1 ? 'fix' : 'fixes'} on ${label} (qc/${spec.stage}-${t.target}-r${r.round}.json: ${open.map((m) => m.id).join(', ')}), 0 credits; then run QC round ${r.round + 1} with the recipe at ${recipe}.`, chip)}
+                onClick={() => ui.command({ ...chip, label: `Apply ${open.length} QC ${open.length === 1 ? 'fix' : 'fixes'} · ${label} · 0 cr` }, `Apply the ${open.length} open QC ${open.length === 1 ? 'fix' : 'fixes'} on ${label} (qc/${spec.stage}-${file}-r${r.round}.json: ${open.map((m) => m.id).join(', ')}), 0 credits; then run QC round ${r.round + 1} with the recipe at ${recipe}.`)}
                 className="h-[34px] cursor-pointer whitespace-nowrap rounded-lg px-2.5 text-[12.5px] font-medium text-sub hover:text-ink">
                 Not started? Nudge Alma
               </button>
@@ -256,7 +270,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
             {/* the lock shows once there is something to lock: a pass with nothing open */}
             {(lockable || r.locked) && (
               <button type="button" disabled={r.locked} aria-disabled={r.locked}
-                onClick={() => ui.prefill(`${lockWord ?? 'Lock'} ${label}: QC ${fmtScore(r.score ?? 0)}, round ${r.round}.`, chip)}
+                onClick={() => ui.command({ ...chip, label: `${lockWord ?? 'Lock'} · ${label} · QC ${fmtScore(r.score ?? 0)}` }, `${lockWord ?? 'Lock'} ${label}: QC ${fmtScore(r.score ?? 0)}, round ${r.round}.`)}
                 className="inline-flex h-[34px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-edge-strong bg-transparent px-3 text-[13px] font-medium text-ink hover:bg-raised disabled:cursor-not-allowed disabled:border-edge disabled:text-mute">
                 <Lock />{r.locked ? 'Locked' : lockWord ?? 'Lock'}
               </button>
@@ -265,6 +279,41 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
         </>
       )}
     </section>
+  );
+}
+
+/** The scene's own check while a pick-up's is current: one quiet folded row under the misses; opened, its
+ *  rounds on the score track and what was still open when it ended, dimmed, as the record. */
+function EarlierCheck({ e, compact, fileOf, nine }: { e: { label: string; entry: QCEntry }; compact?: boolean; fileOf: (p: string) => string; nine: boolean }) {
+  const [shown, setShown] = useState(false);
+  const [row, setRow] = useState<string>();
+  const r = e.entry.latest;
+  const left = openOf(r);
+  const pad = compact ? 'px-4' : 'px-[18px]';
+  return (
+    <div data-qc-earlier className="border-b border-line">
+      <button type="button" aria-expanded={shown} onClick={() => setShown(!shown)}
+        className={cn('flex w-full cursor-pointer items-start gap-2 border-0 bg-transparent py-[11px] text-left text-[12.5px] leading-[1.45] hover:bg-tile', pad)}>
+        <IconChevronRight size={13} className={cn('mt-[2px] flex-none text-sub transition-transform', shown && 'rotate-90')} />
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <span className="font-medium text-ink-3">Earlier check</span>
+          <span className="tabular-nums text-mute">{e.label} · {qcStatus(e.entry)} · before the pick-up</span>
+        </span>
+      </button>
+      <Reveal open={shown}>
+        <div className={cn('flex flex-col gap-3 pb-3', pad)}>
+          <span className="max-w-[560px] text-[12px] leading-normal text-mute">
+            The scene’s own check, kept as the record: {e.entry.history.length} {e.entry.history.length === 1 ? 'round' : 'rounds'}, the last {r.score === null ? 'with no score' : `at ${fmtScore(r.score)}`}{left.length ? `, ${left.length} still open when it ended` : ''}. The pick-up’s check above is the one that counts now.
+          </span>
+          <ScoreTrack history={e.entry.history} />
+        </div>
+        {left.length > 0 && (
+          <div className="border-t border-line opacity-60 [&>*:last-child]:border-b-0">
+            {left.map((m) => <MissRow key={m.id} m={m} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine} onClick={() => setRow(row === m.id ? undefined : m.id)} />)}
+          </div>
+        )}
+      </Reveal>
+    </div>
   );
 }
 

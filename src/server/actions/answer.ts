@@ -4,6 +4,7 @@
 // own harness/answers.json so the gate stops asking, and tells Alma, who applies it and marks the card.
 // Faces, wardrobe, sheets, voices, locations and props keep their own path (pick.ts): those copy files.
 import type { FeedCard } from '../types';
+import { defuse, defuseFields } from '../../lib/defuse';
 import { readFeed } from '../films/read/feed';
 import { pokeFilm } from '../films/watcher';
 import { Warnings } from '../films/util';
@@ -12,7 +13,6 @@ import { filmTarget } from './film';
 import { makePick, PickError, type PickInput, type PickResult } from './pick';
 import { appendTasteRow, pickedWhere, type TasteRow } from './taste';
 import { Writer, type WriteRecord } from './writes';
-import { asTyped } from '../claude/typed';
 
 export interface AnswerInput {
   card: string;                 // the card's key (its id)
@@ -26,7 +26,7 @@ export interface AnswerResult {
   dryRun: boolean;
   film: string;
   card: string;
-  kind: 'pick' | 'yes' | 'go';
+  kind: 'pick' | 'yes' | 'go' | 'why';
   option?: string;
   writes: WriteRecord[];
   tasteRow?: string;
@@ -37,7 +37,8 @@ export interface AnswerResult {
 const today = (): string => new Date().toISOString().slice(0, 10);
 const attr = (v: string): string => v.replace(/"/g, '&quot;');
 
-export async function answerCard(input: AnswerInput, film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<AnswerResult> {
+export async function answerCard(raw: AnswerInput, film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<AnswerResult> {
+  const input = defuseFields(raw); // the user's note and the page name reach Alma: a typed <harness-action> is defused
   const ft = await filmTarget(film, opts.repo);
   if (!ft) throw new PickError(`no film "${film}"`, 404);
   const feed = await readFeed({ dir: ft.dir, warn: new Warnings() }, ft.slug);
@@ -46,12 +47,15 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
   if (!card.ask) throw new PickError(`the card "${card.title}" does not ask for anything`, 409);
   if (card.ask.answer) throw new PickError(`the card "${card.title}" is already answered`, 409);
   const { kind } = card.ask;
+  if (kind === 'debrief') throw new PickError('the debrief is answered on its own page (POST …/debrief)', 409);
+  if (kind === 'pick' && card.sounds?.length) throw new PickError(`the card "${card.title}" is answered one sound at a time (POST …/pick, kind sfx)`, 409);
+  if (kind === 'why') return answerWhy(card, input, ft, opts);
   const opt = kind === 'pick' ? card.ask.options.find((o) => o.id === input.option) : undefined;
   if (kind === 'pick' && !opt) throw new PickError(`option must be one of ${card.ask.options.map((o) => o.id).join(', ') || '(the card lists none)'}`, 400);
   // a yes or a go with a no button of its own ("Cancel the ask"): option "no" is that button (Release, stage 3)
   const saidNo = kind !== 'pick' && input.option === 'no' && !!card.ask.noLabel;
 
-  const where = asTyped(input.from ?? 'Hitchcock Harness');
+  const where = defuse(input.from ?? 'Hitchcock Harness');
   const w = new Writer(`answer ${kind} ${card.key}${opt ? ` ${opt.id}` : ''}`, ft.show, !!opts.dryRun);
   let tasteRow: string | undefined;
   if (kind === 'pick' && opt) {
@@ -75,7 +79,7 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
 
   const attrs = [['kind', 'answer'], ['ask', kind], ['card', card.id ?? card.key], ...(opt ? [['option', opt.id]] : saidNo ? [['option', 'no']] : []), ...(card.ask.prediction ? [['prediction', card.ask.prediction]] : [])]
     .map(([k, v]) => `${k}="${attr(v)}"`).join(' ');
-  const said = input.note ? ` Their words: "${asTyped(input.note)}".` : '';
+  const said = input.note ? ` Their words: "${defuse(input.note)}".` : '';
   const what =
     saidNo ? `The user pressed “${card.ask.noLabel}” (no) on the card “${card.title}”`
     : kind !== 'pick' && card.ask.yesLabel ? `The user pressed “${card.ask.yesLabel}” on the card “${card.title}”`
@@ -99,6 +103,39 @@ export async function answerCard(input: AnswerInput, film: string, opts: { dryRu
   return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, card: card.key, kind, option: opt?.id, writes: w.records, tasteRow, message, notified };
 }
 
+/** The answer to a why card (Flow v3.3 - 9 Edit step 8): a likely answer tapped, the user's own words, or a
+ *  skip. Kept in harness/answers.json at once; Alma keeps it on the card in the user's words. No taste.md row: it is
+ *  not a choice between candidates. */
+async function answerWhy(card: FeedCard, input: AnswerInput, ft: NonNullable<Awaited<ReturnType<typeof filmTarget>>>, opts: { dryRun?: boolean; notify?: boolean }): Promise<AnswerResult> {
+  const skip = input.option === 'skip';
+  const tapped = skip ? undefined : card.ask!.options.find((o) => o.id === input.option);
+  if (input.option && !skip && !tapped) throw new PickError(`option must be skip or one of ${card.ask!.options.map((o) => o.id).join(', ') || '(the card lists none)'}`, 400);
+  const words = input.note?.trim();
+  if (!skip && !tapped && !words) throw new PickError('a why answer needs the user\'s words, a likely answer, or skip', 400);
+  const w = new Writer(`answer why ${card.key}`, ft.show, !!opts.dryRun);
+  const at = new Date().toISOString();
+  const option = skip ? 'skip' : tapped?.id;
+  if (!opts.dryRun) await saveAnswer(ft.slug, card.key, { option, at, note: words, kind: 'why' });
+  await w.wrote('harness/answers.json', `${ft.slug} · ${card.key}`);
+  const attrs = [['kind', 'answer'], ['ask', 'why'], ['card', card.id ?? card.key], ...(option ? [['option', option]] : [])].map(([k, v]) => `${k}="${attr(v)}"`).join(' ');
+  const said = skip ? 'skipped the question' : [tapped ? `tapped “${tapped.label}”` : '', words ? `wrote "${words}"` : ''].filter(Boolean).join(' and ');
+  const message = [
+    `<harness-action ${attrs}/> On the card “${card.title}”, the user ${said}, on ${input.from ?? 'Hitchcock Harness'}.`,
+    '',
+    'The harness wrote nothing in the film folder.',
+    skip ? 'Yours: set "answer" on that card in review/cards.json to {"option": "skip", "at": "<now>"}, and ask nothing more about it.'
+      : 'Yours: set "answer" on that card in review/cards.json with the user\'s words as they are ({"option": …, "note": "<their words>", "at": "<now>"}), and do with the reason what your stage note says.',
+  ].join('\n');
+  let notified = false;
+  if (!opts.dryRun && opts.notify !== false) {
+    const { sendToAlma } = await import('../claude/thread');
+    await sendToAlma(ft.slug, message);
+    notified = true;
+  }
+  if (!opts.dryRun) pokeFilm(ft.slug);
+  return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, card: card.key, kind: 'why', option, writes: w.records, message, notified };
+}
+
 export interface ChoicesResult { ok: true; dryRun: boolean; film: string; answers: AnswerResult[]; picks: PickResult[]; message: string; notified: boolean }
 
 /** Everything the user chose and set aside, sent with one button ("Done picking"): answers to cards that ask, and
@@ -106,7 +143,8 @@ export interface ChoicesResult { ok: true; dryRun: boolean; film: string; answer
  *  taken stops them all before anything is written; then each is written as it would be by itself, and Alma gets
  *  ONE message that lists them, not a turn per choice. */
 export async function sendChoices(input: { answers: AnswerInput[]; picks: PickInput[] }, film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<ChoicesResult> {
-  const { answers, picks } = input;
+  const answers = input.answers.map((i) => defuseFields(i));
+  const picks = input.picks.map((i) => defuseFields(i));
   if (!answers.length && !picks.length) throw new PickError('no choices given');
   if (new Set(answers.map((i) => i.card)).size !== answers.length) throw new PickError('a card is named twice');
   if (new Set(picks.map((i) => `${i.kind}:${i.target}`)).size !== picks.length) throw new PickError('one thing is picked twice');
@@ -122,7 +160,8 @@ export async function sendChoices(input: { answers: AnswerInput[]; picks: PickIn
     const card = feed.cards.find((c) => c.key === r.card);
     const opt = card?.ask?.options.find((o) => o.id === r.option);
     const bits = [`card="${attr(card?.id ?? r.card)}"`, `ask="${r.kind}"`, ...(r.option ? [`option="${attr(r.option)}"`] : []), ...(card?.ask?.prediction ? [`prediction="${attr(card.ask.prediction)}"`] : [])];
-    return `- ${bits.join(' ')} · “${card?.title ?? r.card}”${opt && opt.label && opt.label !== opt.id ? ` · ${opt.label}` : ''}${r.kind === 'go' && card?.ask?.cost ? ` · the go covers: ${card.ask.cost}` : ''}`;
+    const words = r.kind === 'why' ? answers.find((i) => i.card === r.card)?.note : undefined;
+    return `- ${bits.join(' ')} · “${card?.title ?? r.card}”${opt && opt.label && opt.label !== opt.id ? ` · ${opt.label}` : ''}${r.option === 'skip' ? ' · skipped' : ''}${words ? ` · their words: "${words}"` : ''}${r.kind === 'go' && card?.ask?.cost ? ` · the go covers: ${card.ask.cost}` : ''}`;
   });
   // a pick's own message already says what was picked, what the harness wrote and what is Alma's: it is kept whole
   const blocks = doneP.map((r) => r.message.split('\n').filter(Boolean).map((l, n) => (n ? `  ${l}` : `- ${l.replace(/ Continue the flow from there\.$/, '')}`)).join('\n'));
@@ -147,13 +186,14 @@ export interface AnswersResult { ok: true; dryRun: boolean; film: string; answer
 /** Several cards answered with one button (the gate's "send all picks"). Every answer is checked first, so one that
  *  cannot be taken stops them all before anything is written; then each is written as a single answer is, and Alma
  *  gets ONE message that lists them, not a turn per card. */
-export async function answerCards(inputs: AnswerInput[], film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<AnswersResult> {
+export async function answerCards(raw: AnswerInput[], film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<AnswersResult> {
+  const inputs = raw.map((i) => defuseFields(i));
   if (!inputs.length) throw new PickError('no answers given');
   if (new Set(inputs.map((i) => i.card)).size !== inputs.length) throw new PickError('a card is named twice');
   for (const i of inputs) await answerCard(i, film, { dryRun: true, repo: opts.repo });
   const done: AnswerResult[] = [];
   for (const i of inputs) done.push(await answerCard(i, film, { dryRun: opts.dryRun, notify: false, repo: opts.repo }));
-  const where = asTyped(inputs[0].from ?? 'Hitchcock Harness');
+  const where = defuse(inputs[0].from ?? 'Hitchcock Harness');
   const ft = (await filmTarget(film, opts.repo))!;
   const feed = await readFeed({ dir: ft.dir, warn: new Warnings() }, ft.slug);
   const lines = done.map((r) => {

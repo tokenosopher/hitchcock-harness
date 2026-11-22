@@ -1,7 +1,7 @@
 'use client';
 // Characters as one view (ASKS 46, boards 4 and 6; the user: "It should just be characters. We shouldn't have any
 // tab"). One card per character, the same cards for every people step on the flow (Faces, Clothing, Sheet, Voices,
-// Video elements), with that step's part to the fore: its picture, and its line in bold in the card's list. The cards
+// Character elements), with that step's part to the fore: its picture, and its line in bold in the card's list. The cards
 // fill in as picks are made. A face is shown whole, in a box of the portrait's own shape; a group picture whole on
 // black. A press opens the character.
 import Link from 'next/link';
@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import type { CharacterRef, FilmState } from '@/server/types';
 import type { Flow } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
-import { clothingDone, faceDone, speaks, voiceDone } from '@/components/lib/derive';
+import { clothingDone, faceDone, needsNewElement, speaks, voiceDone, type Part } from '@/components/lib/derive';
 import { fmtDate, repoPath } from '@/components/lib/format';
 import { Media, mediaUrl } from '@/components/media/Media';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
@@ -20,7 +20,7 @@ import type { InlineRef } from '@/lib/refs';
 
 export type CastPart = 'faces' | 'clothing' | 'sheet' | 'voices' | 'elements';
 export const CAST_PARTS: CastPart[] = ['faces', 'clothing', 'sheet', 'voices', 'elements'];
-export const PART_NAME: Record<CastPart, string> = { faces: 'Faces', clothing: 'Clothing', sheet: 'Sheet', voices: 'Voices', elements: 'Video elements' };
+export const PART_NAME: Record<CastPart, string> = { faces: 'Faces', clothing: 'Clothing', sheet: 'Sheet', voices: 'Voices', elements: 'Character elements' };
 
 type Mark = 'done' | 'draft' | 'none' | 'todo';
 export interface CastLine { key: CastPart; label: string; mark: Mark }
@@ -116,13 +116,13 @@ export function WholePicture({ path, alt, className, children }: { path?: string
   );
 }
 
-function Caption({ children }: { children: React.ReactNode }) {
+function Caption({ children, className }: { children: React.ReactNode; className?: string }) {
   // cut with an ellipsis on a narrow card: the whole words on hover (QC round two)
-  return <span title={typeof children === 'string' ? children : undefined} className="absolute bottom-1.5 left-1.5 z-[1] max-w-[calc(100%-12px)] truncate rounded-[4px] bg-black/75 px-1.5 py-0.5 text-[11px] text-ink-3">{children}</span>;
+  return <span title={typeof children === 'string' ? children : undefined} className={cn(className, "absolute bottom-1.5 left-1.5 z-[1] max-w-[calc(100%-12px)] truncate rounded-[4px] bg-black/75 px-1.5 py-0.5 text-[11px] text-ink-3")}>{children}</span>;
 }
 
 /** The card's picture for the part in front. */
-function Picture({ s, c, part }: { s: FilmState; c: CharacterRef; part: CastPart }) {
+function Picture({ s, c, part, line }: { s: FilmState; c: CharacterRef; part: CastPart; line?: string }) {
   const toRepo = (rel?: string) => (rel ? repoPath(s.film.folder, s.film.repo, rel) : undefined);
   const group = isGroup(c);
   if (part === 'faces' || part === 'clothing') {
@@ -148,10 +148,12 @@ function Picture({ s, c, part }: { s: FilmState; c: CharacterRef; part: CastPart
       </span>
     );
   if (part === 'elements') {
-    if (!speaks(c)) return <span className="flex aspect-[16/9] w-full items-center px-3 text-[12px] text-sub">No lines, so no video element</span>;
+    // one line per character saying what it has; only a video element shows a player
+    if (!speaks(c)) return <span key={line} data-element-line className="line-in flex aspect-[16/9] w-full items-center px-3 text-[12px] text-sub">{line ?? 'Image element only · no lines, no video element needed'}</span>;
     return (
       <span className="relative block aspect-[16/9] w-full bg-black">
-        <Media path={toRepo(c.element?.path)} w={640} t={0.5} play fit="contain" alt={`${c.name} video element`} missingLabel={c.element?.path ? undefined : 'not made yet'} className="absolute inset-0 size-full bg-black" />
+        <Media path={toRepo(c.element?.path)} w={640} t={0.5} play fit="contain" alt={`${c.name} video element`} missingLabel={c.element?.path ? undefined : line ? '' : 'not made yet'} className="absolute inset-0 size-full bg-black" />
+        {line && <Caption key={line} className="line-in">{line}</Caption>}
       </span>
     );
   }
@@ -193,7 +195,12 @@ function facesWords(all: CharacterRef[]): string {
 function partWords(all: CharacterRef[], part: CastPart): string {
   const done = (k: CastPart) => doneOf(all, k);
   if (part === 'voices') { const quiet = all.filter((c) => !speaks(c)).length; return `${done('voices')} picked${quiet ? `, ${quiet} ${quiet === 1 ? 'has' : 'have'} no lines` : ''}`; }
-  if (part === 'elements') { const need = all.filter(speaks).length; return `${done('elements')} of ${need} done`; }
+  // the new video elements only: the ones from the library are done already, the silent and the extras need none
+  if (part === 'elements') {
+    const need = all.filter(needsNewElement);
+    const lib = all.filter((c) => speaks(c) && !needsNewElement(c)).length;
+    return `${need.filter((c) => c.element?.state === 'final').length} of ${need.length} done${lib ? `, ${lib} from the library` : ''}`;
+  }
   return `${done(part)} of ${all.length} ${part === 'sheet' ? 'done' : 'picked'}`;
 }
 
@@ -212,7 +219,7 @@ export function castBoxLines(s: FilmState, flow: Flow): Partial<Record<FlowKey, 
   return out;
 }
 
-export function CharacterCards({ s, part, base, onChip }: { s: FilmState; part: CastPart; base: string; onChip?: (id: string, label: string, ref?: string) => void }) {
+export function CharacterCards({ s, part, base, onChip, parts }: { s: FilmState; part: CastPart; base: string; onChip?: (id: string, label: string, ref?: string) => void; /** the step's rows, for their lines (Character elements) */ parts?: Part[] }) {
   const all = castAll(s);
   if (!all.length) return <p className="m-0 text-[13px] text-sub">No characters in cast/ yet.</p>;
   const wide = part === 'sheet' || part === 'elements' || part === 'voices';
@@ -222,7 +229,7 @@ export function CharacterCards({ s, part, base, onChip }: { s: FilmState; part: 
         const lines = castLines(c);
         return (
           <article key={c.id} data-cast-card={c.id} {...refData(characterRefOf(s, c))} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-edge bg-panel">
-            <Picture s={s} c={c} part={part} />
+            <Picture s={s} c={c} part={part} line={parts?.find((p) => p.id === c.id)?.line} />
             <Link href={`${base}/character/${encodeURIComponent(c.id)}?from=${part}`} onClick={() => onChip?.(`char:${c.id}`, `${c.id} · ${c.name}`)} aria-label={`Open ${c.name}`}
               className="flex min-w-0 flex-1 flex-col gap-1 border-t border-line px-2.5 pb-2.5 pt-2 text-ink no-underline transition-colors duration-150 hover:bg-raised/60">
               <span className="truncate text-[13px] font-medium">{c.name}</span>

@@ -18,8 +18,10 @@ import { Badge, Btn } from '@/components/shell/atoms';
 import { IconChevronLeft, IconChevronRight, IconFile, IconPlay } from '@/components/shell/icons';
 import { useFilmPage, filmPath } from './common';
 import { Media, mediaUrl } from '@/components/media/Media';
+import { shortViewNames, ViewThumb } from '@/components/media/ViewThumb';
 import { cutSegments, cutSpan, cutToConfirm, outsideCutClips } from '@/components/lib/cut';
 import { ScenePromptPanel } from '@/components/go/ScenePromptPanel';
+import { SentPanel } from '@/components/go/SentPanel';
 import { useJson } from './postCommon';
 import { cn } from '@/lib/utils';
 import { Feed, OtherClips } from '@/components/feed/Feed';
@@ -167,6 +169,8 @@ export function ScenePage() {
   const misses = openMisses(sc, state.cut);
   const total = sc.seconds ?? Math.max(...sc.takes.map((t) => t.seconds ?? 0), 1);
   const shotN = sc.shots ?? 0;
+  const views = sc.shotViews ?? [];
+  const viewLabels = shortViewNames(views);
   const pickIdx = take && take.kind === 'pickup' ? pickups.findIndex((p) => p.id === take.id) : pickups.length - 1;
   const shownPickup = pickups[pickIdx] ?? pickups[pickups.length - 1];
   const select = (t: TakeRef) => { setTakeId(t.id); setPos(0); setPlaying(false); ui.addChip({ id: `take:${t.id}`, label: takeLabel(t.id), ref: t.path }); };
@@ -189,12 +193,13 @@ export function ScenePage() {
   return (
     <>
       <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Scenes', href: `${base}/scenes` }, { label: `${sc.id} · ${sc.title}` }]}
+        back={{ label: 'Back to Scenes', href: `${base}/scenes`, soft: true }}
         meta={<>{[fmtSecs(sc.seconds), shotN ? `${shotN} shots` : '', loc ?? '', `${sc.takes.length} takes`, fmtCredits(sceneCredits(sc), 'credits')].filter(Boolean).join(' · ')} · <span className="font-mono">{filmPath(state, sc.folder)}</span></>}
         phoneSub={`${fmtSecs(sc.seconds)} · ${shotN} shots · ${sc.takes.length} takes`}
         actions={<>
           {prev ? <Link href={`${base}/scenes/${prev.id}`} aria-label={`Previous scene, ${prev.id}`} className="flex size-8 items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconChevronLeft size={14} /></Link> : <span className="flex size-8 items-center justify-center rounded-lg border border-line text-faint"><IconChevronLeft size={14} /></span>}
           {next ? <Link href={`${base}/scenes/${next.id}`} aria-label={`Next scene, ${next.id}`} className="flex size-8 items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconChevronRight size={14} /></Link> : <span className="flex size-8 items-center justify-center rounded-lg border border-line text-faint"><IconChevronRight size={14} /></span>}
-          <HeaderLink icon={<IconFile size={14} />} onClick={() => ui.prefill(`Show the shot plan and previz for ${sc.id}`)}>Shot plan and previz</HeaderLink>
+          <HeaderLink icon={<IconFile size={14} />} onClick={() => ui.command({ id: `plan:${sc.id}`, label: `Shot plan and previz · ${sc.id}` }, `Show the shot plan and previz for ${sc.id}`)}>Shot plan and previz</HeaderLink>
         </>} />
 
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 pb-5 pt-6 max-[760px]:px-4">
@@ -260,6 +265,18 @@ export function ScenePage() {
                 </div>
               </div>
             </div>
+            {/* the painted view behind each shot; a shot that names none shows nothing */}
+            {shotN > 0 && views.length > 0 && (
+              <div data-shot-views="" className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
+                <span className="text-[12.5px] text-ink-3" title={`The painted view of the location each shot stands in front of, from ${sc.id}’s prompt ${views[0].from ?? ''}`.trim()}>Views</span>
+                <div className="flex gap-1">
+                  {Array.from({ length: shotN }, (_, i) => {
+                    const v = views.find((x) => x.shot === i + 1);
+                    return v ? <ViewThumb key={i} view={v} src={filmPath(state, v.path)} scene={sc.id} label={viewLabels.get(v.tag)} className="h-11 flex-1" /> : <span key={i} aria-hidden="true" className="h-11 flex-1" />;
+                  })}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
               <span className="text-[12.5px] text-ink-3">The cut</span>
               {span ? (
@@ -356,7 +373,7 @@ export function ScenePage() {
               </p>
               {state.film.status !== 'delivered' && (
                 <div className="flex gap-2">
-                  <Btn onClick={() => ui.prefill(`Duplicate ${takeLabel(take.id)} with one change: `, { id: `take:${take.id}`, label: takeLabel(take.id) })}>Duplicate with one change</Btn>
+                  <Btn onClick={() => ui.about({ id: `take:${take.id}`, label: `Duplicate · ${takeLabel(take.id)}` }, `Duplicate ${takeLabel(take.id)} with one change. The user says the change`, 'What one change…')}>Duplicate with one change</Btn>
                 </div>
               )}
               {(!take.path || take.finding) && <p className="m-0 max-w-[640px] text-[13px] leading-[1.5] text-ink-2">{takeStanding(take).detail}</p>}
@@ -384,6 +401,8 @@ export function ScenePage() {
                   </button>
                 )) : <span className="text-[12.5px] text-sub">No misses recorded for this take.</span>}
               </div>
+              {/* what went to the model for this take: settings, references, the prompt as sent */}
+              <SentPanel key={take.id} state={state} take={take} />
             </div>
           ) : (
             <p className="m-0 px-6 py-5 text-[13px] text-sub">No takes yet. The prompt and the quote come first; nothing runs until you say go.</p>

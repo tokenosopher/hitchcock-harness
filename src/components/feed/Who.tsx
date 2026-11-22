@@ -21,9 +21,10 @@ export function whoIs(briefMd: string | undefined, id: string): string | undefin
   return lines.map((l) => l.replace(/^\s*[-*]\s*/, '').replace(/\*\*/g, '').replace(/`/g, '').trim()).join(' ');
 }
 
-export function Who({ state, ids, text, face = true }: { state: FilmState; ids: string[]; text?: string; face?: boolean }) {
+/** `shown`: the card's own files; a face among them is not shown a second time beside the words. */
+export function Who({ state, ids, text, face = true, shown: files }: { state: FilmState; ids: string[]; text?: string; face?: boolean; shown?: string[] }) {
   const cast = ids.filter((i) => /^C\d+[a-z]?$/.test(i)).map((i) => state.characters.find((c) => c.id === i || c.id === i.replace(/[a-z]$/, ''))).filter((c): c is CharacterRef => !!c);
-  const rows = [...new Map(cast.map((c) => [c.id, c])).values()].map((c) => ({ c, who: (cast.length === 1 && text) || whoIs(state.brief?.markdown, c.id), pic: face ? pickedFace(c) : undefined }));
+  const rows = [...new Map(cast.map((c) => [c.id, c])).values()].map((c) => ({ c, who: (cast.length === 1 && text) || whoIs(state.brief?.markdown, c.id), pic: face && !files?.some((f) => f === pickedFace(c) || f === `${c.folder}/pick-face.png`) ? pickedFace(c) : undefined }));
   const shown = rows.filter((r) => r.who || r.pic);
   if (!shown.length) return text ? <p className="m-0 max-w-[72ch] text-[12.5px] leading-normal text-ink-3"><span className="text-sub">Who: </span>{text}</p> : null;
   return (

@@ -3,10 +3,12 @@
 // Every node's state is read off the FilmState; "running" also comes from the thread's live task cards.
 import type { FeedCard, FilmState, TaskCard } from '@/server/types';
 import {
-  clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
-  partsStatus, roundNo, sheetParts, voiceParts, type FlowKey, type GateItem, type Part, type TaskAim,
+  atStoryStage, clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
+  partsStatus, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
+  type StoryWait, type TaskAim,
 } from './derive';
 import { fmtDate } from './format';
+import { editWork, type EditWork } from './editWork';
 
 /** locked = a check; done = white dot; running = pulsing dot; pick = ring (waits for the user); waiting = dashed border. */
 export type NodeState = 'locked' | 'done' | 'running' | 'pick' | 'waiting';
@@ -35,13 +37,20 @@ export interface Flow {
   asks: FeedCard[];
   /** Cards that ask and are being worked on instead of answered: shown as in progress, options locked. */
   working: FeedCard[];
-  /** Everything waiting for the user: the gate's picks plus the open asks. */
+  /** Everything waiting for the user to choose now: the story or the script waiting on them, the open asks, and the
+   *  gate's picks that can be made (derive.ts waitingKeys). */
   waiting: number;
+  /** The same in a few words (derive.ts waitingWords): "2 picks waiting", "waits for your lock"; empty when nothing waits. */
+  waitWords: string;
+  /** The story or the script waiting on the user, as "Waiting for you" lists it (derive.ts storyWait). */
+  story?: StoryWait;
   faceGate: number;       // face picks still open (the small gate in chain B)
   masterGate: number;     // master picks still open (the small gate in chain A)
   /** The film went out: the board reads as a record. `deliveredOn` is the day, as shown ("9 Nov"). */
   done: boolean;
   deliveredOn?: string;
+  /** Pick-ups or retakes being made for scenes in the cut: the Edit step says these instead of What's next. */
+  work?: EditWork;
 }
 
 export const CHAIN_A: FlowKey[] = ['loc', 'views', 'shots', 'previz'];
@@ -56,6 +65,12 @@ export const PEOPLE: FlowKey[] = ['faces', 'clothing', 'sheet', 'voices', 'eleme
 export const THEN: FlowKey[] = ['gate', 'edit', 'release'];
 /** A step that is no longer a box opens under the box that holds it now. */
 export const BOX_OF: Partial<Record<FlowKey, FlowKey>> = { scenes: 'edit', finish: 'edit', sound: 'edit' };
+/** The steps whose content is their own page: a press on the flow opens that page at once.
+ *  Every other step shows its content under the flow on Main. */
+export const PAGE_STEPS: FlowKey[] = ['story', 'scenes', 'finish', 'sound', 'release'];
+const PAGE_OF: Partial<Record<FlowKey, string>> = { story: 'story', scenes: 'scenes', finish: 'finish', sound: 'sound', release: 'release' };
+/** Where a press on a step goes: its page, or Main with the step open under the flow. */
+export const stepHref = (base: string, k: FlowKey): string => (PAGE_OF[k] ? `${base}/${PAGE_OF[k]}` : `${base}?open=${k}`);
 
 function fromParts(parts: Part[]): NodeState {
   if (!parts.length) return 'waiting';
@@ -86,8 +101,15 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const delivered = s.film.status === 'delivered';
   const gate = gateItems(s, tasks);
   const asks = s.feed?.asks ?? [];
-  const waiting = gate.length + asks.length;
-  const node = (key: FlowKey, num: string, name: string, o: Partial<FlowNode> & { state: NodeState; status: string }): FlowNode => {
+  // what the user can choose now, as "Waiting for you" lists it: the story or the script waiting on them, each card that
+  // asks, and each pick whose round landed
+  const keys = waitingKeys(s, tasks, gate);
+  const waiting = keys.length;
+  // the story or the script waiting on the user (derive.ts storyWait); once "Lock" or "Settle" is pressed it is Alma's
+  // move until the files show it (lib/sent.ts)
+  const sw = storyWait(s, tasks);
+  const storyWaits = sw && !sw.sent ? sw : undefined;
+  const node = (key: FlowKey, num: string, name: string, { also = 0, ...o }: Partial<FlowNode> & { state: NodeState; status: string; also?: number }): FlowNode => {
     const aims = o.aims ?? allAims(o.parts ?? []);
     // a live sub-agent makes a node run; a delivered film has nothing left waiting
     let state = o.state;
@@ -97,7 +119,9 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     if (live && state !== 'locked') state = 'running';
     if (delivered && (state === 'waiting' || state === 'pick')) state = 'done';
     // a card that asks about this work waits for the user, on a delivered film too
-    const here = key === 'gate' ? 0 : asks.filter((c) => c.place === key).length;
+    // (`also`: what else waits on this step besides the cards, counted with them: the script waiting for the lock)
+    const cards = key === 'gate' ? 0 : asks.filter((c) => c.place === key).length;
+    const here = cards ? cards + also : 0;
     if (here) {
       if (!live) state = 'pick';
       status = [here === 1 ? 'waits for you' : `${here} wait for you`, status].filter(Boolean).join(' · ');
@@ -109,9 +133,19 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // 1 Story
   const versions = s.script?.versions ?? [];
   const locked = versions.find((v) => v.version === s.script?.current && v.locked) ?? versions.find((v) => v.locked);
+  const draft = s.script ? `${s.script.current ?? 'draft'} draft` : s.story ? `story ${s.story.current}${s.story.settled?.version === s.story.current ? ' settled' : ''}` : 'no story yet';
+  const storyCards = asks.filter((c) => c.place === 'story').length;
   const story = node('story', '1', 'Story', {
-    state: locked ? 'locked' : s.script || s.story ? 'running' : 'waiting',
-    status: locked ? `${locked.version} locked` : s.script ? `${s.script.current ?? 'draft'} draft` : s.story ? `story ${s.story.current}${s.story.settled?.version === s.story.current ? ' settled' : ''}` : 'no story yet',
+    // the draft or the story waiting on the user is theirs to look at, not Alma running: it runs only while
+    // a story sub-agent is live (node above), or while Alma has the next move (a settled story to write the script from,
+    // a lock or a settle just sent); a film past the story whose script has no lock flag (made before the harness had
+    // one) is done
+    state: locked ? 'locked' : storyWaits ? 'pick' : !(s.script || s.story) ? 'waiting' : atStoryStage(s) ? 'running' : 'done',
+    status: locked ? `${locked.version} locked`
+      : storyWaits ? (storyCards ? draft : storyWaits.status)
+      : sw?.sent ? (sw.kind === 'script' ? `${sw.version} draft · lock sent` : `story ${sw.version} · settle sent`)
+      : draft,
+    also: storyWaits ? 1 : 0,
     aims: liveAims(tasks, 'story'), href: 'story', kicker: locked ? 'Stage 1 · locked' : 'Stage 1 · Setup and story',
     body: locked
       ? `Script ${locked.version} is locked: ${plural(s.scenes.length, 'scene')}, ${plural(s.script?.lines.filter((l) => l.speaker).length ?? 0, 'line')}. Both chains started from it.`
@@ -197,10 +231,16 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
 
   // Then, in order
   const elP = elementParts(s, tasks);
-  const elements = node('elements', '3b', 'Video elements', { state: fromParts(elP), status: elP.every((p) => p.state === 'done') && elP.length ? `${elP.length} of ${elP.length} final` : elP.some((p) => p.state !== 'waiting') ? partsStatus(elP, 'final') : 'after picks',
-    short: elP.length ? `${elP.filter((p) => p.state === 'done').length} of ${elP.length}` : 'after picks',
+  // the count is the new video elements only: a reused character's element, a silent character and a group of
+  // extras never count or spin; while one is made it reads as the one being made ("1 of 1"), not as the ones done
+  const newP = elP.filter((p) => p.newElement);
+  const newDone = newP.filter((p) => p.state === 'done').length;
+  const newMaking = newP.filter((p) => p.state === 'running' || p.state === 'queued').length;
+  const elements = node('elements', '3b', 'Character elements', { state: fromParts(elP),
+    status: !newP.length ? (elP.length ? 'no new video element needed' : 'after picks') : newDone === newP.length ? `${newDone} of ${newP.length} final` : newP.some((p) => p.state !== 'waiting') ? partsStatus(newP, 'final') : 'after picks',
+    short: newP.length ? `${Math.min(newP.length, newDone + newMaking)} of ${newP.length}` : elP.length ? 'none new needed' : 'after picks',
     parts: elP, href: 'character/elements', kicker: 'Stage 3 · after the gate',
-    body: 'One video element per character (1920×1080 split screen, 5 s, a hard cut each second), built from the picked face, clothing, sheet and voice.' });
+    body: 'One video element per speaking character (1920×1080 split screen, 5 s, a hard cut each second), built from the picked face, clothing, sheet and voice; a silent character or a group of extras has its image element only.' });
 
   const scenes = s.scenes;
   const landed = scenes.flatMap((sc) => sc.takes.filter((t) => t.kind === 'take' && t.path));
@@ -250,14 +290,16 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const proxyBusy = tlProxy?.state === 'queued' || tlProxy?.state === 'running';
   // the terminal workflow rendered a newer cut than the timeline holds: the edit is still moving, not done
   const ahead = tlCur ? s.cut?.recordAhead : undefined;
+  // pick-ups or retakes under way for scenes in the cut: Edit runs, or waits for you on a go, and says so
+  const work = editWork(s, tasks);
   const edit = node('edit', '9', 'Edit', {
     // once the film is delivered, a final made outside the timeline is history, not an edit in progress
-    state: tlCur ? (proxyBusy || editAims.length || (ahead && !delivered) ? 'running' : 'done') : cuts.length ? 'done' : 'waiting',
-    status: tlCur && delivered && ahead ? `final edit: ${ahead.label.replace(new RegExp(`^${s.film.slug.replace(/-/g, '[ -]')}[ -]*`, 'i'), '') || ahead.label} (${fmtDate(ahead.date)}) · the timeline here stops at ${tlCur.version}`
+    state: work ? (work.go.length ? 'pick' : 'running') : tlCur ? (proxyBusy || editAims.length || (ahead && !delivered) ? 'running' : 'done') : cuts.length ? 'done' : 'waiting',
+    status: work ? work.line : tlCur && delivered && ahead ? `final edit: ${ahead.label.replace(new RegExp(`^${s.film.slug.replace(/-/g, '[ -]')}[ -]*`, 'i'), '') || ahead.label} (${fmtDate(ahead.date)}) · the timeline here stops at ${tlCur.version}`
       : tlCur
       ? [`${tlCur.version} · ${plural(tlVersions.length, 'version')}`, proxyBusy ? `480p ${tlProxy?.state === 'running' ? `${Math.round(tlProxy.percent ?? 0)}%` : 'queued'}` : tlProxy?.state === 'failed' ? '480p failed' : '', ahead ? `record ahead: ${ahead.label}` : ''].filter(Boolean).join(' · ')
       : cuts.length ? plural(cuts.length, 'cut') : 'own tracks',
-    short: tlCur ? (proxyBusy ? (tlProxy?.state === 'running' ? `${Math.round(tlProxy.percent ?? 0)}%` : 'queued') : tlProxy?.state === 'failed' ? 'failed' : tlCur.version) : cuts.length ? plural(cuts.length, 'cut') : '',
+    short: work ? work.headline : tlCur ? (proxyBusy ? (tlProxy?.state === 'running' ? `${Math.round(tlProxy.percent ?? 0)}%` : 'queued') : tlProxy?.state === 'failed' ? 'failed' : tlCur.version) : cuts.length ? plural(cuts.length, 'cut') : '',
     aims: editAims, kicker: 'Stage 9 · after Scenes', href: 'edit',
     parts: tlCur
       ? [...tlVersions].reverse().slice(0, 4).map((v) => ({ id: v.version, name: v.note ?? v.version, state: 'done' as const, line: `${v.by === 'alma' ? 'Alma' : v.by === 'migration' ? 'migration' : 'you'} · cut/${v.version}.json`, aims: [] }))
@@ -313,10 +355,13 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     asks,
     working: s.feed?.working ?? [],
     waiting,
+    waitWords: waiting ? waitingWords(keys) : '',
+    ...(storyWaits ? { story: storyWaits } : {}),
     faceGate: faceP.filter((p) => p.state !== 'done').length,
     masterGate: open.length,
     done: delivered,
     deliveredOn: delivered && out.length ? fmtDate(out[0].date) : undefined,
+    work,
   };
 }
 
@@ -325,7 +370,9 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
 export function defaultOpen(f: Flow): FlowKey {
   if (f.waiting) return 'gate';
   const k = ORDER.find((x) => f.nodes[x].state === 'running') ?? ORDER.find((x) => x !== 'gate' && f.nodes[x].state !== 'done' && f.nodes[x].state !== 'locked') ?? 'release';
-  return BOX_OF[k] ?? k;
+  const box = BOX_OF[k] ?? k;
+  // a step that is its own page is not opened under the flow: Main shows "Waiting for you" instead
+  return PAGE_STEPS.includes(box) ? 'gate' : box;
 }
 
 /** "Faces C02 · locations L01 · voices C01": what the live sub-agents work on, by node. */

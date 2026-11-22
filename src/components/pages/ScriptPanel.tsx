@@ -6,6 +6,11 @@
 // src/server/actions/script.ts). If script.md changes while the user types, each edit is checked against the newer text:
 // one that still fits goes on top; one on a line Alma changed too is chosen; Lock waits until the edits are saved or
 // discarded. After the lock the lines are read only and a click hands a line to Alma, as before.
+// The cards (title card, a card between scenes, end card; src/lib/script-cards.ts) show in their place in the film,
+// and their words are edited as a line is ("it should be as editable as everything else that's in the
+// script"): click its first line or the line under it, type, Enter keeps; the same save, version and word to Alma.
+// After the lock, or on an earlier version, a click hands the card to Alma. A card a version changed is marked the way
+// a changed line is.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { FilmState, TaskCard } from '@/server/types';
@@ -15,14 +20,18 @@ import { fmtClock, fmtDate } from '@/components/lib/format';
 import { FILM_TARGET, openOf, qcEntry } from '@/components/lib/qc';
 import { Btn, Card, Dot, type DotState } from '@/components/shell/atoms';
 import { Reveal } from '@/components/shell/Reveal';
-import { IconCheck } from '@/components/shell/icons';
+import { IconCheck, IconChevronLeft } from '@/components/shell/icons';
 import { useTypingAway } from '@/components/shell/typing';
+import { cardChanges, cardLineLabel, scriptCards, type CardChange, type ScriptCard } from '@/lib/script-cards';
 import { checkEdits, earlierAsScript, fingerprint, sceneTableWords, scriptRows, idRows, type EditCheck, type ScriptEdit } from '@/lib/script-edit';
 import { cn } from '@/lib/utils';
 import { filmPath } from './common';
 import { ToConfirm } from './postCommon';
 import { isSaveKey, SaveBar } from './SaveBar';
 import { IconClock, IconLink, IconLock, IconPen } from './storyIcons';
+import { almaFetch } from '@/components/data/almaOutbox';
+import { markSent } from '@/components/data/choices';
+import { storySent } from '@/components/lib/sent';
 
 /** "v4" → 4; drafts ("Draft 2") sort before the numbered versions of the same day. */
 const order = (v: string) => (/^v(\d+(?:\.\d+)?)/.exec(v) ? 100 + parseFloat(v.slice(1)) : parseFloat(/\d+/.exec(v)?.[0] ?? '0'));
@@ -84,11 +93,15 @@ function ChainRowView({ r }: { r: ChainRow }) {
 
 const wc = (t: string) => t.split(/\s+/).filter(Boolean).length;
 const keyOf = (scene: string, index: number) => `${scene}:${index}`;
+/** A card's line: `card:<its place among the cards>:<0 first line, 1 the line under it>`. */
+const cardKey = (index: number, part: number) => `card:${index}:${part}`;
+const editKey = (e: Pick<ScriptEdit, 'scene' | 'index' | 'kind' | 'part'>) => (e.kind === 'card' ? cardKey(e.index, e.part ?? 0) : keyOf(e.scene, e.index));
+const cardScene = (c: ScriptCard) => c.place.before ?? c.place.after ?? c.place.in ?? 'S1';
 type Row = ScriptScene['rows'][number];
 const rowWords = (r: Row) => (r.kind === 'line' ? r.text.replace(/^"|"$/g, '') : r.text);
 const label = (sc: string, r: Row, rows: Row[]) => (r.kind === 'line' ? `${sc} line ${r.n}` : `${sc} direction ${rows.filter((x) => x.kind === 'action').indexOf(r) + 1}`);
 
-export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: FilmState; film: string; tasks: TaskCard[]; base: string; onEdits: (n: number) => void }) {
+export function ScriptPanel({ state, film, tasks, base, onEdits, version }: { state: FilmState; film: string; tasks: TaskCard[]; base: string; onEdits: (n: number) => void; /** The version to open at (a card's link). */ version?: string }) {
   const ui = useUI();
   const md = state.script?.markdown ?? '';
   // oldest first, as on the board (the reader lists them newest first)
@@ -96,7 +109,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
   const current = state.script?.current ?? versions[versions.length - 1]?.version;
   const currentV = versions.find((v) => v.version === current);
   const lockedV = currentV?.locked ? currentV : undefined;
-  const [tab, setTab] = useState<string>();
+  const [tab, setTab] = useState<string | undefined>(() => (version && versions.some((v) => v.version === version) ? version : undefined));
   const shown = tab && tab !== current ? tab : current;
 
   // ---- the edits of this sitting
@@ -105,7 +118,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
   const [baseFp, setBaseFp] = useState<{ version?: string; fingerprint: string }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [saved, setSaved] = useState<{ version: string; from: string; n: number; scenes: string[] }>();
+  const [saved, setSaved] = useState<{ version: string; from: string; n: number; scenes: string[]; cards: boolean }>();
   const [chainsOpen, setChainsOpen] = useState(false);
   // "Lock vN" goes to Alma at once (ASKS 65): the press is the user's yes; the page then waits for the lock to show in script.md
   const [lockAsk, setLockAsk] = useState<{ version: string; sent?: boolean; error?: string }>();
@@ -113,9 +126,11 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
     if (!current) return;
     setLockAsk({ version: current });
     try {
-      const r = await fetch(`/api/films/${film}/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lock: current }) });
+      const r = await almaFetch(film, `/api/films/${film}/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lock: current }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       setLockAsk(r.ok ? { version: current, sent: true } : { version: '', error: j.error ?? `the harness answered ${r.status}` });
+      // the script's item leaves "Waiting for you" (and the white dot goes) at once, until script.md shows the lock
+      if (r.ok) markSent(film, [storySent('script', current)]);
     } catch {
       setLockAsk({ version: '', error: 'the harness did not answer' });
     }
@@ -137,6 +152,11 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
   // an earlier version kept under "## Earlier drafts": read its scenes the same way
   const earlierMd = shown !== current ? earlierAsScript(md, shown ?? '') : undefined;
   const earlierScenes = earlierMd ? scriptScenes({ ...state, scenes: [], script: { versions: [], lines: [], markdown: earlierMd } }) : undefined;
+  // the cards of the version shown, and what changed in them from the version before it (when its text is kept)
+  const cards = scriptCards(earlierMd ?? md);
+  const before = versions[versions.findIndex((v) => v.version === shown) - 1]?.version;
+  const beforeMd = before ? earlierAsScript(md, before) : undefined;
+  const cardDiff = beforeMd ? cardChanges(cards, scriptCards(beforeMd)) : cards.map(() => undefined);
 
   // the timing is not yet redone for this version: only for scenes whose words the user changed in it, and only while
   // the words the page counts differ from the words the scene's own table was written for
@@ -181,14 +201,32 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
     });
     setEditing(undefined);
   };
+  const openCard = (ci: number, part: number, c: ScriptCard) => {
+    if (lockedV || shown !== current || c.lines[part] === undefined) return;
+    const k = cardKey(ci, part);
+    setEditing({ key: k, value: edits[k]?.new ?? c.lines[part] });
+    if (!baseFp) setBaseFp({ version: current, fingerprint: fp });
+    setError(undefined);
+  };
+  const keepCard = (ci: number, part: number, c: ScriptCard, value: string) => {
+    const k = cardKey(ci, part);
+    const was = edits[k]?.old ?? c.lines[part];
+    setEdits((e) => {
+      const n = { ...e };
+      if (value.replace(/\s+/g, ' ').trim() === was.replace(/\s+/g, ' ').trim() || !value.trim()) delete n[k];
+      else n[k] = { scene: cardScene(c), index: ci, kind: 'card', part, old: was, new: value.replace(/\s+/g, ' ').trim() };
+      return n;
+    });
+    setEditing(undefined);
+  };
   const putBack = () => setEditing(undefined);
   const discard = () => { setEdits({}); setEditing(undefined); setBaseFp(undefined); setError(undefined); };
   const choose = (c: EditCheck, mine: boolean) => {
     setEdits((e) => {
       const n = { ...e };
-      delete n[keyOf(c.scene, c.index)];
-      for (const [k, v] of Object.entries(n)) if (v.scene === c.scene && v.index === c.index) delete n[k];
-      if (mine) n[keyOf(c.scene, c.index)] = { scene: c.scene, index: c.index, kind: c.kind, old: c.theirs ?? c.old, new: c.new };
+      delete n[editKey(c)];
+      for (const [k, v] of Object.entries(n)) if (v.kind === c.kind && v.scene === c.scene && v.index === c.index && (v.part ?? 0) === (c.part ?? 0)) delete n[k];
+      if (mine) n[editKey(c)] = { scene: c.scene, index: c.index, kind: c.kind, ...(c.kind === 'card' ? { part: c.part } : {}), old: c.theirs ?? c.old, new: c.new };
       return n;
     });
   };
@@ -204,14 +242,15 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
   const save = async () => {
     if (!list.length || busy || toChoose.length || gone.length) return;
     // edits whose rows moved in the newer text go to their new places; the save starts from the text on the page now
-    const send = moved ? checks.filter((c) => c.status === 'applies').map(({ scene, index, kind, old, new: nw }) => ({ scene, index, kind, old, new: nw })) : list;
+    const send = moved ? checks.filter((c) => c.status === 'applies').map(({ scene, index, kind, part, old, new: nw }) => ({ scene, index, kind, ...(kind === 'card' ? { part } : {}), old, new: nw })) : list;
     setBusy(true);
     setError(undefined);
     try {
       const r = await fetch(`/api/films/${film}/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edits: send, base: { version: current, fingerprint: fp } }) });
-      const d = (await r.json().catch(() => ({}))) as { error?: string; version?: string; from?: string; changes?: { scene: string }[] };
+      const d = (await r.json().catch(() => ({}))) as { error?: string; version?: string; from?: string; changes?: { scene: string; kind?: string }[] };
       if (r.ok && d.version) {
-        setSaved({ version: d.version, from: d.from ?? current ?? '', n: send.length, scenes: [...new Set((d.changes ?? send).map((c) => c.scene))] });
+        const ch = d.changes ?? send;
+        setSaved({ version: d.version, from: d.from ?? current ?? '', n: send.length, scenes: [...new Set(ch.filter((c) => c.kind !== 'card').map((c) => c.scene))], cards: ch.some((c) => c.kind === 'card') });
         setEdits({}); setBaseFp(undefined); setEditing(undefined);
       } else {
         setError(r.status === 409 ? `${d.error ?? 'script.md changed'}. Your edits are still here; the note above shows where each one goes.` : d.error ?? `Not saved (${r.status})`);
@@ -241,8 +280,10 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
   const next = (() => { const p = (current ?? 'v0').slice(1).split('.').map(Number); p[p.length - 1] += 1; return `v${p.join('.')}`; })();
   const unsaved = list.length > 0 || !!editing;
   // the field open now counts once its words differ from what the row says (or said before this sitting)
-  const openRow = editing ? (() => { const [sc, i] = editing.key.split(':'); const r = scenes.find((x) => x.id === sc)?.rows[Number(i)]; return r ? { sc, i: Number(i), r } : undefined; })() : undefined;
-  const openChanged = !!openRow && !edits[editing!.key] && editing!.value.replace(/\s+/g, ' ').trim() !== rowWords(openRow.r).replace(/\s+/g, ' ').trim();
+  const openRow = editing && !editing.key.startsWith('card:') ? (() => { const [sc, i] = editing.key.split(':'); const r = scenes.find((x) => x.id === sc)?.rows[Number(i)]; return r ? { sc, i: Number(i), r } : undefined; })() : undefined;
+  const openCardLine = editing?.key.startsWith('card:') ? (() => { const [, ci, part] = editing.key.split(':').map(Number); const c = cards[ci]; return c?.lines[part] !== undefined ? { c, part, words: c.lines[part] } : undefined; })() : undefined;
+  const openWas = openRow ? rowWords(openRow.r) : openCardLine?.words;
+  const openChanged = openWas !== undefined && !edits[editing!.key] && editing!.value.replace(/\s+/g, ' ').trim() !== openWas.replace(/\s+/g, ' ').trim();
   const count = list.length + (openChanged ? 1 : 0);
   const viewScenes = earlierScenes ?? scenes;
   const readOnly = !!lockedV || shown !== current;
@@ -271,9 +312,11 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
         {shown !== current ? (
           <div className="flex items-start gap-2.5 px-4 pt-4 text-[12.5px] leading-normal text-ink-3 duration-200 animate-in fade-in-0">
             <IconClock className="mt-0.5 flex-none text-sub" />
-            <span>
-              {earlierScenes ? `${shown} is an earlier version, kept word for word under “Earlier drafts” in script.md. It is read here, not edited.` : `${shown} is an earlier draft, named in script.md's version note; its text is not kept in the file. The pages read ${current}; ask Alma what changed between them.`}
-              {' '}<button type="button" onClick={() => setTab(undefined)} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">Back to {current}</button>
+            <span className="flex min-w-0 flex-col items-start gap-2">
+              <span>{earlierScenes ? `${shown} is an earlier version, kept word for word under “Earlier drafts” in script.md. It is read here, not edited.` : `${shown} is an earlier draft, named in script.md's version note; its text is not kept in the file. The pages read ${current}; ask Alma what changed between them.`}</span>
+              {/* the way back from an earlier version, drawn as the flow's other ways back (BackLink.tsx), as the story's */}
+              <button type="button" onClick={() => setTab(undefined)} data-version-back
+                className="inline-flex h-[30px] flex-none cursor-pointer items-center gap-1 rounded-lg border border-edge px-2.5 text-[12.5px] font-medium text-ink transition-colors duration-150 hover:bg-raised max-[760px]:h-11"><IconChevronLeft size={13} />Back to {current}</button>
             </span>
           </div>
         ) : (
@@ -368,12 +411,12 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
 
             {lockedV ? (
               <p className="m-0 flex items-center gap-2 px-4 pt-3 text-[12.5px] text-sub"><IconLock className="flex-none" />Click a line to ask Alma about it.
-                <Btn className="ml-auto max-[760px]:h-11" onClick={() => ui.prefill('Unlock to change a line: ', { id: `unlock:${lockedV.version}`, label: `script ${lockedV.version} · unlock` })}>Unlock to change a line</Btn>
+                <Btn className="ml-auto max-[760px]:h-11" onClick={() => ui.about({ id: `unlock:${lockedV.version}`, label: `Unlock · script ${lockedV.version}` }, `Unlock script ${lockedV.version} to change a line. The user says which line and how`, 'Which line, and how should it change…')}>Unlock to change a line</Btn>
               </p>
             ) : saved ? (
               <div role="status" className="flex flex-col gap-1 px-4 pt-3 text-[12.5px] leading-normal duration-200 animate-in fade-in-0">
                 <span className="flex items-center gap-2 text-ink-3"><Dot state="done" />Saved as {saved.version}, your edit: {saved.n} {saved.n === 1 ? 'change' : 'changes'}. {saved.from} is kept word for word under “Earlier drafts” in script.md.</span>
-                <span className="pl-3.5 text-sub">Alma has your changes: she re-times {saved.scenes.join(' and ')} and checks the lines.</span>
+                <span className="pl-3.5 text-sub">Alma has your {saved.n === 1 ? 'change' : 'changes'}: {[saved.scenes.length ? `she re-times ${saved.scenes.join(' and ')} and checks the lines` : '', saved.cards ? `${saved.scenes.length ? 'and ' : 'she '}carries the card’s new words through the script` : ''].filter(Boolean).join(' ')}.</span>
               </div>
             ) : (
               <p className="m-0 flex items-start gap-2 px-4 pt-3 text-[12.5px] leading-normal text-sub"><IconPen className="mt-0.5 flex-none" />Click a line to change its words. New lines and cuts go through Alma.</p>
@@ -382,14 +425,37 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
         )}
 
         <div className="pt-1.5">
-          {viewScenes.map((sc) => {
+          {viewScenes.map((sc, si) => {
             const file = state.scenes.find((x) => x.id === sc.id);
             const drift = shown === current && file?.seconds !== undefined && sc.scriptSeconds !== undefined && file.seconds !== sc.scriptSeconds;
             const len = sc.seconds ?? sc.scriptSeconds;
-            const nChanged = list.filter((e) => e.scene === sc.id).length;
-            const choosing = toChoose.filter((c) => c.scene === sc.id);
+            const nChanged = list.filter((e) => e.kind !== 'card' && e.scene === sc.id).length;
+            const choosing = toChoose.filter((c) => c.kind !== 'card' && c.scene === sc.id);
+            const cardsAt = (pick: (c: ScriptCard) => boolean) => cards.map((c, ci) => ({ c, ci })).filter(({ c }) => pick(c))
+              .map(({ c, ci }) => {
+                const ask = () => ui.addChip({ id: `card:${c.kind}:${ci}`, label: `${c.label} · ${c.where}` });
+                const parts = c.lines.map((_, part) => {
+                  const k = cardKey(ci, part);
+                  const clash = toChoose.find((x) => x.kind === 'card' && x.index === ci && (x.part ?? 0) === part);
+                  return { key: k, edit: shown === current ? edits[k] : undefined, editing: editing?.key === k && shown === current ? editing.value : undefined, flash: flash === k, clash };
+                });
+                return (
+                  <CardBlock key={`card-${shown}-${ci}`} card={c} change={cardDiff[ci]} version={shown} inline={c.place.in !== undefined} onAsk={ask}
+                    editable={!readOnly} parts={parts} asked={ui.hasChip(`card:${c.kind}:${ci}`)} youVsWhom={current === baseFp?.version ? 'now' : 'alma'}
+                    onOpen={(part) => openCard(ci, part, c)} onChange={(part, v) => setEditing({ key: cardKey(ci, part), value: v })}
+                    onKeep={(part, v) => keepCard(ci, part, c, v)} onPutBack={putBack}
+                    onSave={(part, v) => { keepCard(ci, part, c, v); setTimeout(() => void saveRef.current(), 0); }}
+                    onChoose={(cl, mine) => choose(cl, mine)} />
+                );
+              });
+            // a card placed by a scene this version does not have goes after the last scene
+            const stray = si === viewScenes.length - 1 ? cardsAt((c) => ![c.place.before, c.place.after, c.place.in].some((id) => id && viewScenes.some((x) => x.id === id))) : [];
+            const after = cardsAt((c) => c.place.after === sc.id);
+            const lastBlock = si === viewScenes.length - 1 && !after.length && !stray.length;
             return (
-              <div key={sc.id} data-scene={sc.id} className="border-b border-line px-4 pb-3.5 last:border-b-0">
+              <div key={sc.id} className="contents">
+              {cardsAt((c) => c.place.before === sc.id)}
+              <div data-scene={sc.id} className={cn('border-line px-4 pb-3.5', !lastBlock && 'border-b')}>
                 <button type="button" onClick={() => ui.addChip({ id: `scene:${sc.id}`, label: `${sc.id} · ${sc.title}` })}
                   className="sticky top-14 z-[1] -mx-4 mb-1.5 flex min-h-11 max-[760px]:top-0 w-[calc(100%+2rem)] cursor-pointer items-baseline gap-2 bg-panel px-4 pb-1.5 pt-3.5 text-left">
                   <span className="font-mono text-[12px] text-sub">{sc.id}</span>
@@ -447,6 +513,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
                         </div>
                       );
                     }
+                    const inside = cardsAt((c) => c.place.in === sc.id && c.place.afterRow === i);
                     const body = (
                       <span className={cn('min-w-0', r.kind === 'line' ? 'text-ink max-[760px]:col-start-2' : 'col-start-3 italic text-sub max-[760px]:col-start-2')}>
                         {r.kind === 'line' && r.direction && <span className="italic text-sub">({r.direction}) </span>}
@@ -454,9 +521,10 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
                         {e && <span className="mt-0.5 block text-[12px] not-italic text-sub line-through decoration-faint">{r.kind === 'line' ? `“${e.old}”` : e.old}</span>}
                       </span>
                     );
-                    if (readOnly && shown !== current) return <div key={r.id} className={cn(grid, 'py-1.5 pr-2 text-[13.5px] leading-[1.6]')}>{num}{who}{body}</div>;
+                    if (readOnly && shown !== current) return <div key={r.id} className="contents"><div className={cn(grid, 'py-1.5 pr-2 text-[13.5px] leading-[1.6]')}>{num}{who}{body}</div>{inside}</div>;
                     return (
-                      <button key={r.id} type="button" data-row={k} data-line={r.kind === 'line' ? r.id : undefined}
+                      <div key={r.id} className="contents">
+                      <button type="button" data-row={k} data-line={r.kind === 'line' ? r.id : undefined}
                         aria-label={lockedV ? undefined : `${label(sc.id, r, sc.rows)}${r.kind === 'line' ? `, ${r.speaker}` : ''}: change its words`}
                         onClick={() => (lockedV ? ui.addChip({ id: `line:${r.id}`, label: `${sc.id} · ${r.kind === 'line' ? `line ${r.n}` : 'direction'}`, ref: r.id }) : open(sc.id, i, r))}
                         className={cn(grid, 'group relative cursor-pointer rounded-md py-1.5 pr-9 text-left max-[760px]:min-h-11 text-[13.5px] leading-[1.6] outline-none transition-[background-color,box-shadow] duration-150 hover:bg-raised focus-visible:bg-tile focus-visible:shadow-[0_0_0_2px_#A1A1AA]',
@@ -465,9 +533,14 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
                         {num}{who}{body}
                         {!lockedV && <span aria-hidden="true" className="absolute right-0 top-0 flex size-11 items-center justify-center text-sub opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 max-[760px]:opacity-60"><IconPen /></span>}
                       </button>
+                      {inside}
+                      </div>
                     );
                   })}
                 </div>
+              </div>
+              {after}
+              {stray}
               </div>
             );
           })}
@@ -477,14 +550,128 @@ export function ScriptPanel({ state, film, tasks, base, onEdits }: { state: Film
       <SaveBar name="script" open={count > 0 && shown === current} busy={busy} error={error}
         text={<>{count} {count === 1 ? 'change' : 'changes'}, not saved{toChoose.length ? ` · ${toChoose.length} to choose` : ''} · {list.map((e, i) => {
           const sc = scenes.find((s) => s.id === e.scene);
-          const r = sc?.rows[e.index];
-          return <span key={keyOf(e.scene, e.index)}>{i > 0 && ', '}<button type="button" data-jump onClick={() => jump(keyOf(e.scene, e.index))} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">{r ? label(e.scene, r, sc!.rows) : e.scene}</button></span>;
-        })}{openChanged && openRow && <span>{list.length > 0 && ', '}<button type="button" data-jump onClick={() => jump(editing!.key)} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">{label(openRow.sc, openRow.r, scenes.find((x) => x.id === openRow.sc)!.rows)}</button></span>}</>}
+          const r = e.kind === 'card' ? undefined : sc?.rows[e.index];
+          const c = e.kind === 'card' ? cards[e.index] : undefined;
+          return <span key={editKey(e)}>{i > 0 && ', '}<button type="button" data-jump onClick={() => jump(editKey(e))} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">{c ? cardLineLabel(c, e.part ?? 0) : r ? label(e.scene, r, sc!.rows) : e.scene}</button></span>;
+        })}{openChanged && (openRow || openCardLine) && <span>{list.length > 0 && ', '}<button type="button" data-jump onClick={() => jump(editing!.key)} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">{openRow ? label(openRow.sc, openRow.r, scenes.find((x) => x.id === openRow.sc)!.rows) : cardLineLabel(openCardLine!.c, openCardLine!.part)}</button></span>}</>}
         sub={toChoose.length ? `Choose for ${toChoose.map((c) => c.label).join(', ')} first, then save as ${next}.` : gone.length ? 'One of your changes has no line to go on; drop it to save the rest.' : `A save makes ${next}, marked as your edit; ${current} is kept. Alma is told the old and new words.`}
         saveLabel={`Save as ${next}`} saveDisabled={toChoose.length > 0 || gone.length > 0} saveTitle={toChoose.length ? 'Choose which words stay first' : undefined}
         onSave={() => void save()} onDiscard={discard} />
 
-      {viewScenes.length > 0 && shown === current && <TimingCard scenes={viewScenes} notRetimed={notRetimed} words={words} spoken={spoken} />}
+      {viewScenes.length > 0 && shown === current && <TimingCard scenes={viewScenes} cards={cards} notRetimed={notRetimed} words={words} spoken={spoken} />}
+    </div>
+  );
+}
+
+/** One of a card's lines as the page holds it: its edit of this sitting, its field while open, a choice to make. */
+interface CardPart { key: string; edit?: ScriptEdit; editing?: string; flash: boolean; clash?: EditCheck }
+
+/** A card of the script (title card, a card between scenes, end card), in its place: its words on its two lines, its
+ *  length and where it sits. Before the lock its words are edited as a line's are: each of its lines is a row of its own
+ *  with the lines' hover, focus ring and pen, a click opens the same field (Enter keeps, Esc puts back, ⌘S saves), and
+ *  a kept change shows the bar and the old words struck through. Locked or an earlier version: read only, a click hands
+ *  it to Alma. Changed from the version before: marked as a changed line is. Between scenes it is a quiet block of its
+ *  own; inside a scene, a row among the lines. */
+function CardBlock({ card, change, version, inline, onAsk, editable, parts, asked, youVsWhom, onOpen, onChange, onKeep, onPutBack, onSave, onChoose }: {
+  card: ScriptCard; change?: CardChange; version?: string; inline: boolean; onAsk: () => void;
+  editable: boolean; parts: CardPart[]; asked: boolean; youVsWhom: 'now' | 'alma';
+  onOpen: (part: number) => void; onChange: (part: number, v: string) => void; onKeep: (part: number, v: string) => void; onPutBack: () => void;
+  onSave: (part: number, v: string) => void; onChoose: (c: EditCheck, mine: boolean) => void;
+}) {
+  const was = change?.was;
+  const meta = (
+    <span className="flex flex-wrap items-baseline gap-x-1 text-[12px] text-sub">
+      {card.seconds !== undefined && <span>{card.seconds} s{change?.seconds && was?.seconds !== undefined && <span className="ml-1 line-through decoration-faint">{was.seconds} s</span>}</span>}
+      {card.where && <span>{card.seconds !== undefined && '· '}{card.where}{change?.place && was?.where && <span className="ml-1 line-through decoration-faint">{was.where}</span>}</span>}
+      {change && <span className="text-ink">· {change.isNew ? 'new' : 'changed'}{version ? ` in ${version}` : ''}</span>}
+    </span>
+  );
+  const look = (part: number) => (part === 0 ? 'text-[14px] font-medium leading-[1.5] text-ink' : 'text-[13px] italic leading-[1.5] text-ink-3');
+  const struck = change?.words && was && <span className="mt-0.5 text-[12px] text-sub line-through decoration-faint">{was.lines.filter((l, k) => l !== card.lines[k]).join(' / ')}</span>;
+  const tag = <span className={cn('text-[11.5px] font-medium uppercase tracking-[0.04em] text-sub', inline && 'hidden max-[760px]:block')}>{card.label}</span>;
+  const aria = `${card.label}, ${card.where}: ${card.lines.join(', then ')}. Cards change through Alma: ask her about it`;
+
+  if (!editable) {
+    const words = (
+      <span className="flex min-w-0 flex-col">
+        <span className={look(0)}>{card.lines[0]}</span>
+        {card.lines[1] && <span className={look(1)}>{card.lines[1]}</span>}
+        {struck}
+      </span>
+    );
+    const box = cn('group relative w-full cursor-pointer rounded-lg border border-edge bg-well text-left outline-none transition-[background-color,box-shadow] duration-150 hover:bg-raised focus-visible:shadow-[0_0_0_2px_#A1A1AA] max-[760px]:min-h-11',
+      change && 'before:absolute before:-left-2.5 before:bottom-1.5 before:top-1.5 before:w-0.5 before:rounded-sm before:bg-ink');
+    const ask = <span aria-hidden="true" className="absolute right-3 top-2.5 text-[11.5px] text-sub opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 max-[760px]:hidden">Ask Alma</span>;
+    const button = (
+      <button type="button" onClick={onAsk} aria-label={aria} title="Click to ask Alma about the card" className={cn(box, inline ? 'col-start-3 flex flex-col gap-1 px-3 py-2 max-[760px]:col-start-1 max-[760px]:col-span-2' : 'flex flex-col gap-1 px-3.5 py-2.5')}>
+        {tag}{words}{meta}{ask}
+      </button>
+    );
+    return inline ? (
+      <div data-card={card.kind} className="grid grid-cols-[32px_96px_minmax(0,1fr)] gap-x-2 py-1.5 pr-2 duration-200 animate-in fade-in-0 max-[760px]:grid-cols-[30px_minmax(0,1fr)]">
+        <span className="col-start-2 whitespace-nowrap pt-2.5 text-[11.5px] font-medium uppercase tracking-[0.04em] text-sub max-[760px]:hidden">{card.label}</span>
+        {button}
+      </div>
+    ) : <div data-card={card.kind} className="border-b border-line px-4 py-3 duration-200 animate-in fade-in-0">{button}</div>;
+  }
+
+  // editable: the card is a quiet box; each of its lines is a row the user clicks to change
+  const edited = parts.some((p) => p.edit);
+  const lineOf = (part: number) => {
+    const p = parts[part];
+    const words = p.edit?.new ?? card.lines[part];
+    const name = cardLineLabel(card, part);
+    if (p.editing !== undefined) {
+      const before = wc(p.edit?.old ?? card.lines[part]), now = wc(p.editing);
+      return (
+        <div key={p.key} data-row={p.key} data-editing className="flex flex-col py-0.5 duration-150 animate-in fade-in-0">
+          <LineField value={p.editing} italic={part === 1} label={name} onChange={(v) => onChange(part, v)} onKeep={(v) => onKeep(part, v)} onPutBack={onPutBack} onSave={(v) => onSave(part, v)} />
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-sub">
+            <span><kbd className="rounded border border-edge-strong px-1 font-mono text-[11px]">⏎</kbd> keep</span>
+            <span><kbd className="rounded border border-edge-strong px-1 font-mono text-[11px]">esc</kbd> put back</span>
+            <span>{now === before ? `${now} ${now === 1 ? 'word' : 'words'}, as before.` : `Was ${before} ${before === 1 ? 'word' : 'words'}, now ${now}.`} The card’s length and place stay; ask Alma to move it.</span>
+            <button type="button" onMouseDown={(ev) => ev.preventDefault()} onClick={onAsk} className="inline-flex min-h-6 cursor-pointer items-center text-ink underline underline-offset-2 max-[760px]:min-h-11">Ask Alma about it</button>
+          </span>
+        </div>
+      );
+    }
+    if (p.clash) {
+      return (
+        <div key={p.key} data-row={p.key} data-choose className="flex flex-col gap-1.5 rounded-lg border border-edge-strong bg-panel px-3 py-2 text-[13.5px]">
+          <span className="text-[12px] text-sub">{youVsWhom === 'now' ? 'This line of the card changed in script.md too.' : 'Alma changed this line of the card too.'} Which words stay?</span>
+          <span><span className="mr-1.5 text-[11.5px] text-sub">Yours</span>“{p.clash.new}”</span>
+          <span><span className="mr-1.5 text-[11.5px] text-sub">{youVsWhom === 'now' ? 'Now' : 'Alma’s'}</span>“{p.clash.theirs}”</span>
+          <span className="mt-0.5 flex gap-2"><Btn onClick={() => onChoose(p.clash!, true)}>Keep mine</Btn><Btn onClick={() => onChoose(p.clash!, false)}>Take {youVsWhom === 'now' ? 'the newer' : 'Alma’s'}</Btn></span>
+        </div>
+      );
+    }
+    return (
+      <button key={p.key} type="button" data-row={p.key} data-card-line={part} aria-label={`${name}: change its words`} onClick={() => onOpen(part)}
+        className={cn('group/line relative -mx-1.5 flex min-w-0 cursor-pointer flex-col rounded-md px-1.5 py-0.5 pr-9 text-left outline-none transition-[background-color,box-shadow] duration-150 hover:bg-raised focus-visible:bg-tile focus-visible:shadow-[0_0_0_2px_#A1A1AA] max-[760px]:min-h-11 max-[760px]:justify-center',
+          p.flash && 'shadow-[0_0_0_2px_#A1A1AA]')}>
+        <span key={words} className={cn(look(part), 'duration-200 animate-in fade-in-0')}>{words}</span>
+        {p.edit && <span className="mt-0.5 block text-[12px] not-italic font-normal text-sub line-through decoration-faint duration-200 animate-in fade-in-0">{p.edit.old}</span>}
+        <span aria-hidden="true" className="absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center text-sub opacity-0 transition-opacity duration-150 group-hover/line:opacity-100 group-focus-visible/line:opacity-100 max-[760px]:opacity-60"><IconPen /></span>
+      </button>
+    );
+  };
+  const box = cn('relative flex w-full flex-col gap-1 rounded-lg border border-edge bg-well text-left transition-[background-color] duration-150',
+    asked && 'bg-raised', (change || edited) && 'before:absolute before:-left-2.5 before:bottom-1.5 before:top-1.5 before:w-0.5 before:rounded-sm before:bg-ink');
+  const body = (
+    <>
+      {tag}
+      <span className="flex min-w-0 flex-col">{card.lines.map((_, part) => lineOf(part))}{struck}</span>
+      {meta}
+    </>
+  );
+  return inline ? (
+    <div data-card={card.kind} data-card-editable className="grid grid-cols-[32px_96px_minmax(0,1fr)] gap-x-2 py-1.5 pr-2 duration-200 animate-in fade-in-0 max-[760px]:grid-cols-[30px_minmax(0,1fr)]">
+      <span className="col-start-2 whitespace-nowrap pt-2.5 text-[11.5px] font-medium uppercase tracking-[0.04em] text-sub max-[760px]:hidden">{card.label}</span>
+      <div className={cn(box, 'col-start-3 px-3 py-2 max-[760px]:col-start-1 max-[760px]:col-span-2')}>{body}</div>
+    </div>
+  ) : (
+    <div data-card={card.kind} data-card-editable className="border-b border-line px-4 py-3 duration-200 animate-in fade-in-0">
+      <div className={cn(box, 'px-3.5 py-2.5')}>{body}</div>
     </div>
   );
 }
@@ -520,11 +707,19 @@ function LineField({ value, italic, label, onChange, onKeep, onPutBack, onSave }
   );
 }
 
-function TimingCard({ scenes, notRetimed, words, spoken }: { scenes: ScriptScene[]; notRetimed: (s: ScriptScene) => boolean; words: (s: ScriptScene) => number; spoken: (s: ScriptScene) => Row[] }) {
+function TimingCard({ scenes, cards, notRetimed, words, spoken }: { scenes: ScriptScene[]; cards: ScriptCard[]; notRetimed: (s: ScriptScene) => boolean; words: (s: ScriptScene) => number; spoken: (s: ScriptScene) => Row[] }) {
   const action = (sc: ScriptScene) => sc.rows.reduce((n, r) => n + (r.kind === 'action' && r.seconds ? parseFloat(r.seconds) : 0), 0);
   const len = (sc: ScriptScene) => sc.seconds ?? sc.scriptSeconds;
   const fromScript = scenes.filter((sc) => sc.seconds === undefined && sc.scriptSeconds !== undefined).length;
-  const ends = scenes.reduce<number[]>((a, sc) => [...a, (a[a.length - 1] ?? 0) + (len(sc) ?? 0)], []);
+  // the cards with a length count in the film's clock, in their place (one inside a scene comes after that scene's row)
+  type Entry = { sc: ScriptScene } | { card: ScriptCard };
+  const timed = cards.filter((c) => c.seconds !== undefined);
+  const entries: Entry[] = scenes.flatMap((sc): Entry[] => [
+    ...timed.filter((c) => c.place.before === sc.id).map((card) => ({ card })),
+    { sc },
+    ...timed.filter((c) => c.place.in === sc.id || c.place.after === sc.id).map((card) => ({ card })),
+  ]);
+  const ends = entries.reduce<number[]>((a, e) => [...a, (a[a.length - 1] ?? 0) + ('sc' in e ? len(e.sc) ?? 0 : e.card.seconds ?? 0)], []);
   const clock = ends[ends.length - 1] ?? 0;
   return (
     <Card>
@@ -538,7 +733,14 @@ function TimingCard({ scenes, notRetimed, words, spoken }: { scenes: ScriptScene
             </tr>
           </thead>
           <tbody>
-            {scenes.map((sc, i) => (
+            {entries.map((e, i) => 'card' in e ? (
+              <tr key={`card-${i}`} data-timing-card className="border-t border-line text-sub">
+                <td className="py-1.5">{e.card.label} <span className="text-[11.5px]">· {e.card.where}</span></td>
+                <td className="text-right">–</td><td className="text-right">–</td>
+                <td className="text-right">{e.card.seconds} s</td><td className="text-right">{e.card.seconds}</td>
+                <td className="text-right font-mono">{fmtClock(ends[i])}</td>
+              </tr>
+            ) : ((sc) => (
               <tr key={sc.id} className="border-t border-line">
                 <td className="py-1.5"><span className="font-mono text-sub">{sc.id}</span> {sc.title}</td>
                 <td className="text-right">{spoken(sc).length}</td><td className="text-right">{words(sc)}</td>
@@ -548,7 +750,7 @@ function TimingCard({ scenes, notRetimed, words, spoken }: { scenes: ScriptScene
                 </td>
                 <td className="text-right font-mono">{fmtClock(ends[i])}</td>
               </tr>
-            ))}
+            ))(e.sc))}
             <tr className="border-t border-edge font-medium">
               <td className="py-1.5">Total</td>
               <td className="text-right">{scenes.reduce((n, sc) => n + spoken(sc).length, 0)}</td>

@@ -42,15 +42,17 @@ The user presses "Story settled" on the page, which reaches you as `<harness-act
 2. Write the script from it: pass 1, the audit, the cut into generations, the timings, the flagged lines. All of that is the stage 1 note's, unchanged.
 3. Send the first numbered draft. The script lock is still the user's, and still the go for the first round of assets.
 
+A settle the user gives in words is recorded by the script itself: once the script is written from that version (its `## Story` heading names `story/v<n>.md`) and the user locks it, the harness shows that version as settled. You still do not write `story/settled.json`.
+
 If the user changes the story after the script exists, the story gets its next version and the script gets its next draft from it; say which lines of the script moved.
 
 ## When the user edits the script on the page
 
-Before the lock the user can change the words of a spoken line or of a direction in place on the Story page, and save. The rules for the script, its timing and its lock are the stage 1 note's (`Flow v3.2 - 1 Setup and story`, steps 20 to 29); this is only what the harness does and what reaches you.
+Before the lock the user can change the words of a spoken line, of a direction or of a card (its first line or the line under it) in place on the Story page, and save. The rules for the script, its timing and its lock are the stage 1 note's (`Flow v3.3 - 1 Setup and story`, steps 20 to 29); this is only what the harness does and what reaches you.
 
 What the harness writes, in `script.md`, as one save (all the changes of that sitting):
 
-- the words, in place: only inside a line's quotes or after a direction's `` `[N s]` ``. Never the count or the order of the rows, who speaks, a line's delivery note or a direction's seconds; a new line, a cut or a new speaker is asked of you in the thread.
+- the words, in place: only inside a line's quotes, after a direction's `` `[N s]` ``, or a card's words where they stand on its line (its label, length, place and any note after the words stay). Never the count or the order of the rows, who speaks, a line's delivery note or a direction's seconds; a new line, a cut or a new speaker is asked of you in the thread.
 - the next version: a new note in front of the old one, `*v<n>, draft. <date>: the user's edit on the Story page, word for word: <where>: "<new>" (was "<old>"); … <the old note, whole>*`. The words are the user's: never polish them.
 - the version it replaces, word for word, under `## Earlier drafts` as `### v<n-1> (<date>, as sent)`, newest first, as you keep yours.
 
@@ -62,6 +64,8 @@ Then it tells you, as `<harness-action kind="script-edited" version="v<n>" from=
 4. Say in the thread, short, what you re-timed, and whether the script now differs from the settled story. If it does, say which lines; the user decides. Do not write a story version for it.
 
 **The lock, pressed on the page.** "Lock v<n>" on the Story page reaches you at once as `<harness-action kind="script-lock" version="v<n>"/>`. That press is the user's yes naming the version, in the words "Lock script v<n>.": treat it exactly as those words typed in the thread. The harness writes nothing for it. Yours, as the stage 1 note says: check the version is ready (re-timed after any edit of the user's), record the lock in the version note with those words and the date, and start what the lock starts; if something stops the lock, say what in the thread. The harness refuses the press when that version is not the newest or is locked already.
+
+**Cards on the Script page.** Write each card that is not a scene (the title card, a card between scenes, an end card) on its own line in the version, where it plays: `**Title card** (N s, after Sx): **first line** · then: *second line*.` (`**Card** …` and `**End card** …` the same way; `before S1` for one that opens the film). The page shows each card in its place with its words, length and place, and marks one a new version changed the way it marks a changed line. Before the lock the user edits a card's words on the page as a line's (above); its length, its place, a new card or a cut one go through you. After an edit, carry the card's new words wherever the script names them (the timing table's card row, a note).
 
 The harness refuses a save on a locked script, and one that starts from a text you changed since: the user sees your version and chooses. A save never writes over your words. The lock stays the user's yes, through you, as before; re-time before you lock.
 

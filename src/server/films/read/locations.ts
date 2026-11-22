@@ -62,6 +62,7 @@ export async function readLocations(
     // "<L>-<slug>-pick.png", no round folder; a candidate is an image with no version that is not a pick, master,
     // plan, top or staging ("L01-lamp-room-cand-A.png")
     const flowPick = entries.filter((e) => !e.dir && /-pick(-v\d+)?\.(png|jpe?g|webp)$/i.test(e.name)).map((e) => e.name).sort(natCmp).pop();
+    let flowRound = false;
     if (flowPick) {
       const loose = entries.filter((e) => !e.dir && IMAGE_RE.test(e.name) && !/-v\d+(?![\d])/.test(e.name) && !/pick|master|plan|top|staging/i.test(e.name));
       if (loose.length) {
@@ -72,7 +73,31 @@ export async function readLocations(
         if (pickSize !== undefined)
           for (const c of candidates) if (!round.pick && c.path && (await sameFile(abs(ctx, `${folder}/${flowPick}`), abs(ctx, c.path), pickSize))) round.pick = c.id;
         if (!styleImages.some((r) => r.id === round.id)) styleImages.push(round);
+        flowRound = true;
       }
+    }
+    // candidates at the root while a round is asked, before any pick: "<L>-<slug>-cand-a.png", each written beside its
+    // "<L>-<slug>-cand-a.prompt.txt" as it is asked. One round; a prompt whose picture has not landed yet is a candidate
+    // still being painted (no path), so the page shows the round filling instead of "not started".
+    const CAND = new RegExp(`^${lid}(?:-${slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?-(cand-[^.]+)\\.(png|jpe?g|webp|prompt\\.txt)$`, 'i');
+    const rootCands = new Map<string, string | undefined>();
+    for (const e of entries.filter((x) => !x.dir)) {
+      const m = CAND.exec(e.name);
+      if (!m) continue;
+      const isImg = !/prompt\.txt$/i.test(m[2]);
+      if (isImg) rootCands.set(m[1], `${folder}/${e.name}`);
+      else if (!rootCands.has(m[1])) rootCands.set(m[1], undefined);
+    }
+    // the round above (beside a pick) already holds them once a pick is made
+    if (rootCands.size && !flowRound) {
+      const first = [...rootCands.values()].find(Boolean) ?? `${folder}/${entries.find((e) => CAND.test(e.name))!.name}`;
+      const st = await statOf(abs(ctx, first));
+      const ids = [...rootCands.keys()].sort(natCmp);
+      styleImages.push({
+        id: styleImages.some((r) => r.id === 'r1') ? 'cand' : 'r1',
+        date: st ? isoDay(st.mtime) : undefined,
+        candidates: ids.map((id) => ({ id, ...(rootCands.get(id) ? { path: rootCands.get(id) } : {}) })),
+      });
     }
     // picks at the root: "<L>-<slug>-pick-<candidate>.png"
     const picks = entries

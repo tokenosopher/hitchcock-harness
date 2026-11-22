@@ -9,6 +9,7 @@ import type { FilmState, GoMediaItem, GoReview, GoScene, GoShot } from '@/server
 import { useUI } from '@/components/data/ui';
 import { fmtDate, fmtSecs, repoPath, takeLabel } from '@/components/lib/format';
 import { qcEntry, qcSpec } from '@/components/lib/qc';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import { QCChip } from '@/components/shell/QCChip';
 import { Badge, Btn } from '@/components/shell/atoms';
 import { IconChevronDown, IconFile } from '@/components/shell/icons';
@@ -207,10 +208,11 @@ export function CheckLine({ scene }: { scene: GoScene }) {
   );
 }
 
-/** The scene's prompt QC (qc/prompt-<S>-r<n>.json), the shared chip and popover. */
+/** The scene's prompt QC (qc/prompt-<S>-r<n>.json), the shared chip and popover; a pick-up's own prompt check
+ *  (qc/prompt-FIX-<name>-r<n>.json) when it has one, the scene's kept as the earlier one. */
 export function PromptQC({ scene, s }: { scene: GoScene; s: FilmState }) {
   const v = scene.prompt?.version;
-  return <QCChip spec={qcSpec('prompt')} targets={{ target: scene.id, label: `${scene.id} prompt${v ? ` ${v}` : ''}`, entry: qcEntry(s, 'prompt', scene.id), ready: !!v, waitsFor: v ? `${scene.id} prompt ${v}` : `${scene.id}'s first prompt` }} />;
+  return <QCChip spec={qcSpec('prompt')} targets={withPickupCheck(s, 'prompt', { target: scene.id, label: `${scene.id} prompt${v ? ` ${v}` : ''}`, entry: qcEntry(s, 'prompt', scene.id), ready: !!v, waitsFor: v ? `${scene.id} prompt ${v}` : `${scene.id}'s first prompt` })} />;
 }
 
 /** "≈ 75 cr", the basis on hover. */
@@ -276,7 +278,7 @@ export function GoSceneCard({ scene, s, review, selected, onSelect, base }: {
         <span className="min-w-0 truncate font-mono text-[11px] text-mute">{p ? repoPath(s.film.folder, s.film.repo, p.path) : repoPath(s.film.folder, s.film.repo, scene.folder)}</span>
         <span className="flex flex-none gap-2">
           <Link href={`${base}/scenes/${scene.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-sub no-underline hover:text-ink"><IconFile size={13} />Open {scene.id}</Link>
-          <Btn onClick={() => { onSelect(); ui.prefill(`About ${scene.id}${p ? ` (prompt ${p.version})` : ''}: `, chip); }}>Ask Alma about {scene.id}</Btn>
+          <Btn onClick={() => { onSelect(); ui.about(chip, `${scene.id} ${scene.title}${p ? ` (prompt ${p.version})` : ''}`, `Ask Alma about ${scene.id}…`); }}>Ask Alma about {scene.id}</Btn>
         </span>
       </div>
     </article>

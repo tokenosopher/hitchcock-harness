@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
-import { idsFor, readShotIds } from '@/components/edit/shots';
+import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
 import { FFMPEG, probe } from './probe';
 
 export interface TakeShots {
@@ -18,12 +18,20 @@ export interface TakeShots {
   cuts?: number[];              // the seconds where a new shot starts (never 0); absent until read
   /** The scene's number of each shot, in order (ASKS 60): from the shots file of the take's own generation folder
    *  (`<generation>/<generation>-shots.json`, beside its `takes/`), only when the file lists as many shots as the take
-   *  was cut into and they are not simply 1, 2, 3 … (a pick-up that redoes shot 5 is `[5]`). Absent: 1, 2, 3 …. */
+   *  was cut into and they are not simply 1, 2, 3 … (a pick-up that redoes shot 5 is `[5]`). Absent: 1, 2, 3 ….
+   *  When that file has none that fit, the previz take the take's `<G>-take<N>-sent.json` names (`layout.previz_take`,
+   *  written by the kit's record_sent.py) gives them, if its shots fit. */
   ids?: number[];
+  /** Each shot's own id ("1", "7a", "7b": a letter after the number is a shot added to that one), when one of them has a
+   *  letter; two shots can then share a number (components/edit/shotCols.ts). Read every time, never kept. */
+  tags?: string[];
   /** 'making': a variation Alma started (its folder has `variation.json` and no video yet; `src` is the folder). */
   state: 'ready' | 'waiting' | 'failed' | 'making';
   /** The take is a variation of another (ASKS 51): its folder's `variation.json`, as Alma wrote it. */
   variation?: TakeVariation;
+  /** The file's modification time (ms): when the take landed, so the Edit page can tell a take newer than the cut's
+   *  (components/edit/openAt.ts newTakes). */
+  made?: number;
 }
 
 /** `<take folder>/variation.json`, written by Alma when she starts a variation of a take (recipes/edit.md). `from`:
@@ -76,11 +84,32 @@ const takeWords = (folder: string) => {
   return { lead: words(m[1]), n: Number(m[2]) };
 };
 
-interface Found { abs: string; rel: string; scene: string; name: string; group?: string; variation?: TakeVariation; making?: boolean; ids?: number[] }
+interface Found { abs: string; rel: string; scene: string; name: string; group?: string; variation?: TakeVariation; making?: boolean; tags?: string[] }
 
-/** `<generation>/<generation>-shots.json`'s shot numbers (components/edit/shots.ts readShotIds); undefined without one. */
-const shotIdsIn = (dir: string): Promise<number[] | undefined> =>
-  fs.readFile(path.join(dir, `${path.basename(dir)}-shots.json`), 'utf8').then((x) => readShotIds(JSON.parse(x) as unknown)).catch(() => undefined);
+const readTags = (file: string): Promise<string[] | undefined> =>
+  fs.readFile(file, 'utf8').then((x) => readShotTags(JSON.parse(x) as unknown)).catch(() => undefined);
+/** `<generation>/<generation>-shots.json`'s shot ids (components/edit/shotCols.ts readShotTags); undefined without one. */
+const shotTagsIn = (dir: string): Promise<string[] | undefined> => readTags(path.join(dir, `${path.basename(dir)}-shots.json`));
+
+/** The shot ids of the previz take a take was made from: its folder's `*-sent.json` (record_sent.py) names it as
+ *  `layout.previz_take`, a path in the film; that file lists the shots with their ids. Undefined when any is missing. */
+async function sentTagsIn(film: FilmTarget, takeDir: string): Promise<string[] | undefined> {
+  const names = await fs.readdir(takeDir).catch(() => [] as string[]);
+  const sent = names.find((n) => /-sent\.json$/i.test(n) && !n.startsWith('.'));
+  if (!sent) return undefined;
+  const rec = await fs.readFile(path.join(takeDir, sent), 'utf8').then((x) => JSON.parse(x) as { layout?: { previz_take?: unknown } }).catch(() => undefined);
+  const rel = rec?.layout?.previz_take;
+  if (typeof rel !== 'string' || !rel.trim() || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) return undefined;
+  return readTags(path.join(film.dir, rel));
+}
+
+/** A take's shot numbers and ids for its cuts: the generation's shots file (`tags`), else the previz take its sent
+ *  record names, read only then. Nothing when neither fits the take's shots (left to right, as before). */
+async function tagsOf(film: FilmTarget, abs: string, fileTags: string[] | undefined, cuts: number[]): Promise<{ ids: number[]; tags?: string[] } | undefined> {
+  const own = shotTagsFor([fileTags], cuts);
+  if (own || (fileTags && fileTags.length === cuts.length + 1)) return own;
+  return shotTagsFor([await sentTagsIn(film, path.dirname(abs))], cuts);
+}
 
 /** The takes with a video file: <root>/…/<scene or pick-up>/takes/<take>/<file>.mp4; and a take folder with a
  *  `variation.json` and no video yet, a variation being made (`making`, `abs` is then the folder). */
@@ -97,7 +126,7 @@ async function findTakes(film: FilmTarget): Promise<Found[]> {
       const rel = path.relative(film.dir, dir).split(path.sep);
       const scene = SCENE.exec(rel[rel.length - 1])?.[1] ?? SCENE.exec(rel.join('/'))?.[1];
       if (!scene) continue;
-      const ids = await shotIdsIn(dir);
+      const tags = await shotTagsIn(dir);
       const group = rel[0] === 'tests' ? rel[1] : undefined;
       for (const t of await fs.readdir(p, { withFileTypes: true }).catch(() => [])) {
         if (!t.isDirectory()) continue;
@@ -112,7 +141,7 @@ async function findTakes(film: FilmTarget): Promise<Found[]> {
         const lead = [group ? words(group) : rel[rel.length - 1] !== scene ? words(rel[rel.length - 1]) : '', typeof tw === 'string' ? '' : tw.lead].filter(Boolean).join(' ');
         const name = typeof tw === 'string' ? [lead, tw].filter(Boolean).join(' · ') : [lead, `take ${tw.n}`].filter(Boolean).join(' · ');
         const abs = file ? path.join(p, t.name, file) : path.join(p, t.name);
-        out.push({ abs, rel: path.relative(film.dir, abs), scene, name, group, ...(variation ? { variation } : {}), ...(file ? {} : { making: true }), ...(ids ? { ids } : {}) });
+        out.push({ abs, rel: path.relative(film.dir, abs), scene, name, group, ...(variation ? { variation } : {}), ...(file ? {} : { making: true }), ...(tags ? { tags } : {}) });
       }
     }
   };
@@ -160,10 +189,10 @@ export async function filmShots(film: FilmTarget, onDone: () => void = () => und
     if (!st) continue;
     const mtime = Math.floor(st.mtimeMs);
     const kept = store[t.rel];
-    const base = { src: film.show(t.abs), scene: t.scene, name: t.name, group: t.group, ...v };
+    const base = { src: film.show(t.abs), scene: t.scene, name: t.name, group: t.group, ...v, made: mtime };
     if (kept && kept.size === st.size && kept.mtime === mtime) {
-      const ids = idsFor(t.ids, kept.cuts);
-      takes.push({ ...base, seconds: kept.seconds, cuts: kept.cuts, ...(ids ? { ids } : {}), state: 'ready' });
+      const tg = await tagsOf(film, t.abs, t.tags, kept.cuts);
+      takes.push({ ...base, seconds: kept.seconds, cuts: kept.cuts, ...(tg ?? {}), state: 'ready' });
       continue;
     }
     if (mem.failed.has(`${film.slug}:${t.rel}:${mtime}`)) { takes.push({ ...base, state: 'failed' }); continue; }
@@ -187,8 +216,8 @@ export async function storedShots(film: FilmTarget): Promise<Map<string, TakeSho
     const src = film.show(abs);
     // <generation>/takes/<take>/<file>: the generation's shots file numbers the shots, as filmShots does
     const parts = rel.split(/[\\/]/);
-    const ids = parts.length >= 4 && parts[parts.length - 3] === 'takes' ? idsFor(await shotIdsIn(path.join(film.dir, ...parts.slice(0, -3))), kept.cuts) : undefined;
-    out.set(src, { src, scene: '', name: '', seconds: kept.seconds, cuts: kept.cuts, ...(ids ? { ids } : {}), state: 'ready' });
+    const tg = parts.length >= 4 && parts[parts.length - 3] === 'takes' ? await tagsOf(film, abs, await shotTagsIn(path.join(film.dir, ...parts.slice(0, -3))), kept.cuts) : undefined;
+    out.set(src, { src, scene: '', name: '', seconds: kept.seconds, cuts: kept.cuts, ...(tg ?? {}), state: 'ready' });
   }
   return out;
 }

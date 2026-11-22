@@ -11,6 +11,7 @@ import { bringUp, boardsBack, hasPlanned, READING_PACE, takeForBoards, type Plan
 import { CutError, resolveSrc } from './timeline';
 import { ensureNow, historyNow, inFilmQueue, saveNow, stateNow, stepNow, WorkingError, type CutStore, type WorkingAnswer } from './working';
 import { probe } from './probe';
+import { chooseLayout, layoutInCut, type BoardsIn, type Layout, type LayoutShotIn } from '@/components/edit/layouts';
 
 // ---- reading the files
 
@@ -238,9 +239,39 @@ export async function storyboardOf(film: FilmTarget, scene: string, now = Date.n
   return { version: `v${pick.v}`, panels: got.panels, why: pick.why, touched: got.touched, ...(newer ? { newer } : {}), ...(take ? { take } : {}) };
 }
 
+/** Every storyboard version of a scene that is whole, newest first: the previz take it was made
+ *  from (recorded by a check or a card, else the take whose shots hold its panels, nearest in time), the first panel of
+ *  each shot, and `shown` on the version the timeline's boards come from (`storyboardOf`). */
+export async function boardsVersions(film: FilmTarget, scene: string, takes: PrevizTake[], now = Date.now()): Promise<BoardsIn[]> {
+  const dir = path.join(film.dir, 'previz', scene, 'storyboard');
+  const vs = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^v\d+$/.test(n)).map((n) => Number(n.slice(1))).sort((a, b) => b - a);
+  if (!vs.length) return [];
+  const { checkTake, cardTake } = await vouched(film, scene);
+  const shown = await storyboardOf(film, scene, now);
+  const out: BoardsIn[] = [];
+  for (const v of vs) {
+    const r = await readVersion(film, path.join(dir, `v${v}`));
+    if (!r) continue;
+    const rec = checkTake.get(v) ?? cardTake.get(v);
+    const pick: StoryboardPick = { version: `v${v}`, panels: r.panels, why: '', touched: r.touched, ...(rec !== undefined ? { take: { n: rec, how: checkTake.has(v) ? 'check' as const : 'card' as const } } : {}) };
+    const of = takeOfBoards(pick, takes);
+    const first = new Map<string, string>();
+    for (const p of [...r.panels].sort((a, b) => a.t - b.t)) if (!first.has(p.shot)) first.set(p.shot, p.src);
+    out.push({ version: `v${v}`, ...(of ? { take: of.take.n } : {}), shots: [...first].map(([shot, src]) => ({ shot, src })), ...(shown?.version === `v${v}` ? { shown: true } : {}) });
+  }
+  return out;
+}
+
+/** One storyboard version of a scene read whole, as `storyboardOf` gives one ("v6"); undefined while it is not whole. */
+async function versionAsPick(film: FilmTarget, scene: string, version: string): Promise<StoryboardPick | undefined> {
+  if (!/^v\d+$/.test(version)) return undefined;
+  const r = await readVersion(film, path.join(film.dir, 'previz', scene, 'storyboard', version));
+  return r ? { version, panels: r.panels, why: 'the layout you chose', touched: r.touched } : undefined;
+}
+
 /** One previz take of a scene as its json says it: its number, its spoken parts (`lines: [{who, text, t: [start, end]}]`,
  *  seconds from the scene's start), its shots' own start and end (`shots: [{label, t0, t1}]`) and when it was written. */
-export interface PrevizTake { n: number; lines: PrevizLine[]; shots: { id: string; t0: number; t1: number }[]; written: number }
+export interface PrevizTake { n: number; lines: PrevizLine[]; shots: LayoutShotIn[]; written: number }
 
 /** Every previz take of a scene that reads (`previz/<S>/<S>-previz-take-<n>.json`), newest first. */
 export async function previzTakes(film: FilmTarget, scene: string): Promise<PrevizTake[]> {
@@ -254,8 +285,14 @@ export async function previzTakes(film: FilmTarget, scene: string): Promise<Prev
     if (!j) continue;
     const lines = (Array.isArray(j.lines) ? j.lines : []).filter((l): l is PrevizLine => !!l && typeof l.who === 'string' && typeof l.text === 'string' && Array.isArray(l.t)
       && typeof l.t[0] === 'number' && typeof l.t[1] === 'number' && l.t[1] > l.t[0]);
-    const shots = (Array.isArray(j.shots) ? j.shots as { label?: unknown; id?: unknown; t0?: unknown; t1?: unknown }[] : []).flatMap((x, i) =>
-      x && typeof x.t0 === 'number' && typeof x.t1 === 'number' && x.t1 > x.t0 ? [{ id: String(x.label ?? x.id ?? i + 1), t0: x.t0, t1: x.t1 }] : []);
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+    const shots = (Array.isArray(j.shots) ? j.shots as { label?: unknown; id?: unknown; t0?: unknown; t1?: unknown; name?: unknown; board?: unknown; cam?: unknown; yaw?: unknown; pitch?: unknown; lens_mm?: unknown }[] : []).flatMap((x, i): LayoutShotIn[] => {
+      if (!x || typeof x.t0 !== 'number' || typeof x.t1 !== 'number' || x.t1 <= x.t0) return [];
+      // its framing, for a scene's layouts: where the camera is and faces, its lens, else its name and board line
+      const cam = Array.isArray(x.cam) && x.cam.length === 3 && x.cam.every((k) => typeof k === 'number') ? x.cam as [number, number, number] : undefined;
+      return [{ id: String(x.label ?? x.id ?? i + 1), t0: x.t0, t1: x.t1, ...(typeof x.name === 'string' ? { name: x.name } : {}), ...(typeof x.board === 'string' ? { board: x.board } : {}),
+        ...(cam ? { cam } : {}), ...(num(x.yaw) !== undefined ? { yaw: num(x.yaw) } : {}), ...(num(x.pitch) !== undefined ? { pitch: num(x.pitch) } : {}), ...(num(x.lens_mm) !== undefined ? { lens: num(x.lens_mm) } : {}) }];
+    });
     const written = await fs.stat(f).then((x) => x.mtimeMs, () => 0);
     out.push({ n, lines: lines.map((l) => ({ who: l.who, text: l.text, t: [l.t[0], l.t[1]] })), shots, written });
   }
@@ -296,7 +333,7 @@ export function linesTakeWords(take: number, newest: number, version: string, ho
 }
 
 /** What the planned parts are built from, read from the film's files; undefined when the film has no script. */
-export async function readPlanSource(film: FilmTarget): Promise<PlanSource | undefined> {
+export async function readPlanSource(film: FilmTarget, layouts?: Map<string, { take: number; version?: string }>): Promise<PlanSource | undefined> {
   const md = await read(path.join(film.dir, 'script.md'));
   if (md === undefined) return undefined;
   const sc = parseScript(md);
@@ -309,11 +346,14 @@ export async function readPlanSource(film: FilmTarget): Promise<PlanSource | und
     const j = await readJson<{ duration?: number; shots?: { id?: string | number; t0?: number; t1?: number; in_frame?: string[] }[] }>(path.join(folder, `${s.id}-shots.json`));
     if (!j || !Array.isArray(j.shots) || !j.shots.length) continue;
     const file = sceneFileShots((await read(path.join(folder, `${s.id}-scene.md`))) ?? '');
-    const sb = await storyboardOf(film, s.id);
-    // the lines and the shots' own times follow the previz take the shown boards were made from, never a newer one:
-    // a line sits under the picture it was timed with
-    const takes = sb ? await previzTakes(film, s.id) : [];
-    const of = sb ? takeOfBoards(sb, takes) : undefined;
+    // a layout asked for by name (the user chose it under Takes): its storyboard version and its previz take
+    const ov = layouts?.get(s.id);
+    const sb = ov ? (ov.version ? await versionAsPick(film, s.id, ov.version) : undefined) : await storyboardOf(film, s.id);
+    // the lines and the shots' own times follow the previz take the shown boards were made from, never a newer one
+    //: a line sits under the picture it was timed with
+    const takes = sb || ov ? await previzTakes(film, s.id) : [];
+    const asked = ov ? takes.find((t) => t.n === ov.take) : undefined;
+    const of = asked ? { take: asked, how: 'check' as const } : sb ? takeOfBoards(sb, takes) : undefined;
     if (of) {
       s.previz = { take: of.take.n, lines: of.take.lines };
       took.add(s.id);
@@ -469,3 +509,17 @@ export async function takeInfo(film: FilmTarget, t: { src: string; name: string;
 }
 
 export { hasPlanned };
+
+/** A scene's layout in its place (`chooseLayout`), as one step: its newest take, else its boards
+ *  and lines. `put` is what the caller read for it. Nothing changes when the cut uses that layout already. */
+export function planLayout(s: CutStore, scene: string, l: Layout, layouts: Layout[], put: { take: TakeIn } | { scene: PlanScene; pace: PlanSource['pace'] }, o: { by: 'user' | 'alma'; rev?: number }): Promise<PlanAnswer> {
+  return inFilmQueue(s, async () => {
+    const now = await here(s, o.rev);
+    if (!now.tl) throw new WorkingError('no-cut', 'this film has no cut yet', 404);
+    const was = layoutInCut(now.tl, scene, layouts);
+    if (was?.key === l.key) return { same: true, words: `${scene} uses Layout ${l.n} already.`, ...(await peekNow(s)) };
+    const r = chooseLayout(now.tl, scene, l, put, was);
+    if (typeof r === 'string') throw new CutError(r, 409);
+    return stepAndSave(s, now.rev!, r.tl, r.words, o.by);
+  });
+}

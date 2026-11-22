@@ -14,7 +14,7 @@ The gate: every pick made, every prompt ready → "Go for the video?"
 Elements → Scenes → Edit → Finish → Sound → Release
 ```
 
-Both chains start together at the lock. Inside a chain a step waits only for the pick before it; across chains nothing waits. Shots are the scene files the previz stage note starts with (one per scene: shots, acting tasks, fight beats, start and end states); the Blender previz is built from them, and the scene prompts are assembled from them later. Previz starts on grey stand-ins and takes the faces and clothing as they are picked. A character's voices start once that character's face is picked, not at the lock: dispatch that voice round when the face pick comes in (the standing rules, "Chain B, the people", and Flow v3.2 - 3 Voices and video elements).
+Both chains start together at the lock. Inside a chain a step waits only for the pick before it; across chains nothing waits. Shots are the scene files the previz stage note starts with (one per scene: shots, acting tasks, fight beats, start and end states); the Blender previz is built from them, and the scene prompts are assembled from them later. Previz starts on grey stand-ins and takes the faces and clothing as they are picked. A character's voices start once that character's face is picked, not at the lock: dispatch that voice round when the face pick comes in (the standing rules, "Chain B, the people", and Flow v3.3 - 3 Voices and video elements).
 
 **The previz kit shares a location's people (since 15 Nov 2026).** On the first film that used it, each scene's agent built the room and its own crowd on every Blender run: one harbour had five different crowds, and the stage took over five hours, most of it building. The kit (`tools/previz/README.md` in the film repo, the section "What a scene agent does now") now builds what a location's scenes share once, into one file every scene opens: the room, the principals at their heights on their marks, each crowd and standing group, the props that live there. The mechanics for a dispatch:
 - Before any scene agent of a location is briefed, that location's people file exists and is built (`previz/rooms/<LID>-people.json`, `build_location.py`). One job writes it; a scene agent never does.
@@ -28,7 +28,7 @@ A unit is something that can be finished without anyone else's result: one chara
 
 - Do not chain inside one sub-agent what the user has to pick between (faces, then clothing for the picked face): end the sub-agent at the pick.
 - Do not split what shares one result (the two characters of one two-shot board).
-- **Video generations are not units.** You submit each take yourself; sub-agents write the prompts before and run the checks after, side by side. Takes for different scenes are submitted together, in one message; takes for the same scene go one at a time, the next only after the one before has landed (the standing rules and Flow v3.2 - 7 Takes say when and on which go). Stills, voices, music and upscales follow their own stage notes.
+- **Video generations are not units.** You submit each take yourself; sub-agents write the prompts before and run the checks after, side by side. Takes for different scenes are submitted together, in one message; takes for the same scene go one at a time, the next only after the one before has landed (the standing rules and Flow v3.3 - 7 Takes say when and on which go). Stills, voices, music and upscales follow their own stage notes.
 - Keep the thread yours: you read reports, show results (the show recipe) and talk to the user. A sub-agent never asks the user anything; it reports to you.
 
 ## The name is how the board finds the job
@@ -91,7 +91,7 @@ Write it as the standing rules ask (the intent and the hard constraints; creativ
 3. If it starts the next step and nothing waits on the user, dispatch that step now. If it waits on a pick, write the card that asks and carry on with the other chain.
 4. Commit.
 
-- **The timeline follows the work.** After the script lock, after the shot lists and after each scene's boards, bring the timeline up to date with one call (`recipes/edit.md`, "The timeline from day one"); once a scene's take has passed its check, put it in its boards' place there. Never write a planned clip yourself.
+- **The timeline follows the work.** After the script lock, after the shot lists and after each scene's boards, bring the timeline up to date with one call (`recipes/edit.md`, "The timeline from day one"); the moment a scene's take lands, put it in its boards' place there, before its check. Never write a planned clip yourself.
 
 ## What you may start without asking
 

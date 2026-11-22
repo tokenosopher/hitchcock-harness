@@ -10,6 +10,7 @@ import { registerRefSource, type RefItem } from '@/components/lib/refPick';
 import { mediaUrl } from '@/components/media/Media';
 import { clipName, findClip, lenF, pictureAt, speedOf, startF, type ClipRef } from './model';
 import { sceneOf, shotNo, shotOf, type BySrc } from './shots';
+import { parseShotId } from './shotCols';
 
 export interface EditRefInput {
   tl?: Timeline;
@@ -65,17 +66,19 @@ function moment(o: EditRefInput): InlineRef | undefined {
   };
 }
 
-/** A shot of a take in the Takes view ("<src>#<n>"). */
+/** A shot of a take in the Takes view ("<src>#<n>", or "<src>#7b" for a shot with a letter). */
 function takeShotRef(o: EditRefInput, key: string): InlineRef | undefined {
   const i = key.lastIndexOf('#');
   if (i < 0) return undefined;
-  const src = key.slice(0, i), n = Number(key.slice(i + 1));
+  const src = key.slice(0, i), id = parseShotId(key.slice(i + 1));
+  if (!id) return undefined;
+  const n = id.n, tag = id.tag !== String(n) ? id.tag : undefined;
   const t = o.by.get(src);
-  const s = shotOf(t, n);
+  const s = shotOf(t, n, tag);
   if (!t || !s) return undefined;
   const name = (o.names.get(src) ?? t.name).replace(/\bTake\b/g, 'take');
   return {
-    kind: 'shot', label: `${name.includes(t.scene) ? name : `${t.scene} · ${name}`} · shot ${n}`,
+    kind: 'shot', label: `${name.includes(t.scene) ? name : `${t.scene} · ${name}`} · shot ${tag ?? n}`,
     scene: t.scene, shot: n, take: name, length: r1(s.out - s.in), file: src, from: r1(s.in), to: r1(s.out),
   };
 }

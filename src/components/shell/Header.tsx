@@ -3,15 +3,22 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { useNav } from './Shell';
-import { IconChevronLeft, IconMenu, IconMore } from './icons';
+import { IconMenu } from './icons';
+import { MoreMenu } from './MoreMenu';
+import { BackLink, useRememberedBack, type Back } from './BackLink';
 
 /** `node`: a crumb drawn by the page itself (a deeper page's step, with its menu). */
 export interface Crumb { label: string; href?: string; node?: React.ReactNode }
 
 /** `crumbExtra` sits after the last crumb on the desktop (the Edit page's version menu). `back`: a deeper page's way
- *  back before the trail ("Back to Characters", as drawn); on the phone the page's own row carries it. */
-export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { crumbs: Crumb[]; meta?: React.ReactNode; actions?: React.ReactNode; phoneSub?: string; crumbExtra?: React.ReactNode; back?: { label: string; href: string } }) {
+ *  back before the trail ("Back to Characters", as drawn); on the phone the page's own row carries it. A `soft` way
+ *  back is the page's usual parent ("Back to Scenes"): a way back remembered by the link that opened the page wins
+ *  over it (BackLink.tsx), and the phone shows it in a row under the top bar, as it does a remembered one. */
+export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { crumbs: Crumb[]; meta?: React.ReactNode; actions?: React.ReactNode; phoneSub?: string; crumbExtra?: React.ReactNode; back?: Back & { soft?: boolean } }) {
   const { openNav } = useNav();
+  const remembered = useRememberedBack();
+  const way: Back | undefined = back && !back.soft ? back : remembered ?? back;
+  const phoneRow = !!way && (way === remembered || !!back?.soft);
   const last = crumbs[crumbs.length - 1];
   // the phone bar already shows the page's name as its title: a sub-line that starts with it would say it twice
   const sub = phoneSub && last && phoneSub.startsWith(`${last.label} · `) ? phoneSub.slice(last.label.length + 3) : phoneSub;
@@ -23,14 +30,14 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
           <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{last?.label}</span>
           {sub && <span className="truncate text-[12px] text-sub">{sub}</span>}
         </div>
-        <button type="button" aria-label="More: open folder, spend" className="flex size-11 flex-none items-center justify-center rounded-[10px] text-ink"><IconMore size={16} /></button>
+        <MoreMenu phone />
       </div>
+      {/* a deeper page without a row of its own: its way back under the top bar, on the phone */}
+      {phoneRow && way && (
+        <div className="flex flex-none px-4 pt-3 duration-200 animate-in fade-in-0 min-[761px]:hidden"><BackLink key={way.href} back={way} phone /></div>
+      )}
       <header className="sticky top-0 z-20 flex h-14 flex-none items-center justify-between gap-3 border-b border-line bg-hdr px-6 max-[760px]:hidden">
-        {back && (
-          <Link href={back.href} data-header-back className="inline-flex h-[30px] flex-none items-center gap-1 rounded-lg border border-edge px-2.5 text-[13px] font-medium text-ink no-underline transition-colors duration-150 hover:bg-raised">
-            <IconChevronLeft size={13} />{back.label}
-          </Link>
-        )}
+        {way && <BackLink key={way.href} back={way} className={way === remembered ? 'duration-200 animate-in fade-in-0' : undefined} />}
         {/* the column takes the room the actions leave, so a crumb's 40 % is of that room: "The Lighthouse" was cut to
             "The Ligh…" with half the header empty (QC round two) */}
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
@@ -54,7 +61,7 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
         </div>
         <div className="flex flex-none gap-2">
           {actions}
-          <button type="button" aria-label="More: open folder, spend" className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconMore /></button>
+          <MoreMenu />
         </div>
       </header>
     </>

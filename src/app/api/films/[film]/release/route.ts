@@ -8,7 +8,7 @@
 // Outside production both take ?now= (the tests' clock). In sample-data mode the file lives in memory.
 import path from 'node:path';
 import { connection } from 'next/server';
-import { isMock, mockCut, mockState } from '@/fixtures/mock';
+import { isMock, mockCut, mockState, resetMockThread } from '@/fixtures/mock';
 import { RELEASE_SAMPLES, SAMPLE_MASTERS, releaseSeed, sampleCompanions, sampleFinal, sampleKitRelease } from '@/fixtures/release';
 import { resetMockCards } from '@/server/release/mockAlma';
 import { leftReleaseSeed } from '@/fixtures/left';
@@ -76,7 +76,7 @@ export async function GET(req: Request, ctx: Ctx): Promise<Response> {
   const now = clockOf(req);
   if (isMock()) {
     // a test starts from the sample as it was seeded
-    if (q.get('reset') === '1') { mockReleases.delete(slug); resetMockCards(slug); }
+    if (q.get('reset') === '1') { mockReleases.delete(slug); resetMockCards(slug); resetMockThread(slug); }
     return Response.json(await mockGet(slug, now, q.get('masters') === '1', q.get('light') === '1'), { headers: NO_STORE });
   }
   try {

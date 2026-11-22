@@ -86,6 +86,8 @@ async function main(): Promise<void> {
     !('ANTHROPIC_API_KEY' in plan) && !('ANTHROPIC_AUTH_TOKEN' in plan) && !('HARNESS_RESERVE_API_KEY' in plan) && !('CLAUDECODE' in plan) && !('CLAUDE_CODE_ENTRYPOINT' in plan) && plan.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS === '5' && plan.PATH === '/bin');
   const keyed = r.almaEnv(base, FAKE);
   check('on: ANTHROPIC_API_KEY is the reserve key, the reserve name still not passed', keyed.ANTHROPIC_API_KEY === FAKE && !('HARNESS_RESERVE_API_KEY' in keyed) && !('ANTHROPIC_AUTH_TOKEN' in keyed));
+  const kept = r.almaEnv({ ...base, HARNESS_TUNNEL_TOKEN: 'tok', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } as unknown as NodeJS.ProcessEnv, FAKE);
+  check('no remote-access token; the person\'s own opt-outs kept', !('HARNESS_TUNNEL_TOKEN' in kept) && kept.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB === '1' && kept.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC === '1' && !('CLAUDE_CODE_ENTRYPOINT' in kept));
   check('a start reads the setting: off gives no key', r.reserveKeyForStart() === undefined);
 
   // spend by month

@@ -25,7 +25,7 @@ export async function readCheck(ctx: FilmCtx, rel: string): Promise<GoCheck | un
 }
 
 /** What a reference is, from where its file lives. */
-function whatOf(file: string, kind: string, page?: number): string {
+export function whatOf(file: string, kind: string, page?: number): string {
   const el = /^elements\/(C\d+[a-z]?)/.exec(file);
   if (el) return `${el[1]} element`;
   const cast = /^cast\/((?:C\d+[a-z]?-?)+)/.exec(file);

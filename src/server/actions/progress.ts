@@ -10,16 +10,35 @@ type Store = Record<string, Record<string, StoredProgress>>;
 
 export const progressFile = (): string => path.join(claudeConfig().harnessDir, 'progress.json');
 
+/** Keys that would reach Object.prototype: never a film or a card key here. */
+const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+export const safeKey = (k: string): boolean => !!k && !BAD_KEYS.has(k);
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** The store with null-prototype objects throughout, and without any key that is not safe. */
+export function cleanStore(j: unknown): Store {
+  const store = Object.create(null) as Store;
+  if (!isObj(j)) return store;
+  for (const [film, cards] of Object.entries(j)) {
+    if (!safeKey(film) || !isObj(cards)) continue;
+    const mine = Object.create(null) as Record<string, StoredProgress>;
+    for (const [k, v] of Object.entries(cards)) if (safeKey(k) && isObj(v) && typeof v.at === 'string') mine[k] = { at: v.at };
+    store[film] = mine;
+  }
+  return store;
+}
+
 async function readStore(): Promise<Store> {
   try {
-    const j: unknown = JSON.parse(await fs.readFile(progressFile(), 'utf8'));
-    return j && typeof j === 'object' && !Array.isArray(j) ? (j as Store) : {};
+    return cleanStore(JSON.parse(await fs.readFile(progressFile(), 'utf8')));
   } catch {
-    return {};
+    return cleanStore(undefined);
   }
 }
 
 export async function readProgress(film: string): Promise<Record<string, StoredProgress>> {
+  if (!safeKey(film)) return {};
   return (await readStore())[film] ?? {};
 }
 
@@ -36,12 +55,10 @@ let chain: Promise<unknown> = Promise.resolve();
 /** Marks cards as in progress (on: true) or takes the mark off; one write at a time, the file replaced whole. */
 export function setProgress(film: string, keys: string[], on: boolean): Promise<void> {
   const run = chain.then(async () => {
-    if (!keys.length) return;
-    // names that would reach every object's shared template are never keys here
-    if (['__proto__', 'constructor', 'prototype'].includes(film)) return;
-    keys = keys.filter((k) => !['__proto__', 'constructor', 'prototype'].includes(k));
+    keys = keys.filter(safeKey);
+    if (!keys.length || !safeKey(film)) return;
     const store = await readStore();
-    const mine = (store[film] ??= {});
+    const mine = (store[film] ??= Object.create(null) as Record<string, StoredProgress>);
     const at = new Date().toISOString();
     for (const k of keys) {
       if (on) mine[k] = { at };

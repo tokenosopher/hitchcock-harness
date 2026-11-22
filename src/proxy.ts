@@ -41,6 +41,26 @@ function viaElsewhere(request: NextRequest): boolean {
 }
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+/** Tailscale's own addresses: 100.64.0.0/10 and fd7a:115c:a1e0::/48. */
+function tailnetAddress(a: string): boolean {
+  const v4 = /^(?:::ffff:)?100\.(\d+)\.\d+\.\d+$/.exec(a);
+  if (v4) return Number(v4[1]) >= 64 && Number(v4[1]) <= 127;
+  return /^fd7a:115c:a1e0:/i.test(a);
+}
+
+/** Opt-in, off unless HARNESS_TAILNET_USERS names logins: a request that `tailscale serve` (your tailnet only) passed
+ *  on from one of those logins needs no key. Tailscale writes who is asking (Tailscale-User-Login) and the tailnet
+ *  address it came from (X-Forwarded-For); Funnel (the public internet) and any other tunnel or proxy still need the
+ *  key, and so does a request whose forwarded address is not a tailnet one. */
+function tailnetOwner(request: NextRequest): boolean {
+  const allowed = (process.env.HARNESS_TAILNET_USERS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const user = request.headers.get('tailscale-user-login') ?? '';
+  if (!allowed.length || !user || !allowed.includes(user)) return false;
+  if (['forwarded', 'cf-connecting-ip', 'cf-ray', 'tailscale-funnel-request'].some((h) => request.headers.has(h))) return false;
+  const xff = (request.headers.get('x-forwarded-for') ?? '').split(',').map((a) => a.trim()).filter(Boolean);
+  return xff.length > 0 && xff.every(tailnetAddress);
+}
+
 /** A change asked for by another site: a page the user opens may POST to localhost (a text/plain body needs no
  *  preflight), so a request that changes anything is refused when the browser says it came from elsewhere. Scripts
  *  and Alma's own curl calls send neither header and pass. */
@@ -67,6 +87,7 @@ export async function proxy(request: NextRequest) {
   if (crossSite(request)) return new NextResponse('Hitchcock Harness: a change from another site is refused.', { status: 403 });
   const host = request.headers.get('host') ?? '';
   if (LOCAL.test(host) && !viaElsewhere(request)) return NextResponse.next();
+  if (tailnetOwner(request)) return NextResponse.next();
 
   const token = process.env.HARNESS_TUNNEL_TOKEN ?? '';
   if (token.length < 16) {

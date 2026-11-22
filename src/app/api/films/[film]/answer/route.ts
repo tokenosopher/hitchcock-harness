@@ -7,7 +7,9 @@ import { answerCard, answerCards } from '@/server/actions/answer';
 import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { PickError } from '@/server/actions/pick';
 import { isMock } from '@/fixtures/mock';
+import { notifyHub } from '@/server/claude/notify';
 import { mockAnswer } from '@/server/release/mockAlma';
+import { soundMockAnswer } from '@/fixtures/soundpick';
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
@@ -21,15 +23,19 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
     return Response.json({ error: 'body must be JSON' }, { status: 400 });
   }
   // MOCK=boards: a release sample's card is answered in memory (the harness's line goes to the mock thread)
-  const mocked = isMock() && !Array.isArray(body.answers) ? mockAnswer(film, { card: s(body.card), option: s(body.option), from: s(body.from) }) : undefined;
-  if (mocked) return mocked;
+  // an answer leaves the film's count of "Waiting for you" (the sidebar's white dot) within a moment
+  const acted = (cards: string[]) => notifyHub().userAnswered(film, cards.map((card) => ({ card })), []);
+  const mocked = isMock() && !Array.isArray(body.answers) ? (soundMockAnswer(film, { card: s(body.card), option: s(body.option), note: s(body.note) }) ?? mockAnswer(film, { card: s(body.card), option: s(body.option), from: s(body.from) })) : undefined;
+  if (mocked) { if (mocked.ok && s(body.card)) acted([s(body.card)!]); return mocked; }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   if (Array.isArray(body.answers)) {
     // several cards with one button: [{card, option}], one message to Alma
     const inputs = (body.answers as unknown[]).map((x) => (x ?? {}) as Record<string, unknown>).map((x) => ({ card: s(x.card) ?? '', option: s(x.option), from: s(body.from) }));
     if (inputs.some((i) => !i.card)) return Response.json({ error: 'every answer needs its card' }, { status: 400 });
     try {
-      return Response.json(await answerCards(inputs, film, { dryRun: body.dryRun === true }), { headers: { 'cache-control': 'no-store' } });
+      const r = await answerCards(inputs, film, { dryRun: body.dryRun === true });
+      if (body.dryRun !== true) acted(inputs.map((i) => i.card));
+      return Response.json(r, { headers: { 'cache-control': 'no-store' } });
     } catch (e) {
       if (e instanceof PickError) return Response.json({ error: e.message }, { status: e.status });
       return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
@@ -39,6 +45,7 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
   if (!card) return Response.json({ error: 'card (the card\'s id) is required' }, { status: 400 });
   try {
     const r = await answerCard({ card, option: s(body.option), note: s(body.note), from: s(body.from) }, film, { dryRun: body.dryRun === true });
+    if (body.dryRun !== true) acted([card]);
     return Response.json(r, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {
     if (e instanceof PickError) return Response.json({ error: e.message }, { status: e.status });

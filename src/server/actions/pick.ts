@@ -8,24 +8,29 @@
 //   location  locations/<LID>-<name>/<LID>-<name>-pick-<candidate>.png (for example L01, pick-w1 and pick-u5b-2)
 //   prop      props/<PID>-<name>/pick.png (for example P01, P02)
 //   take      nothing in the film folder: the taste row and the message only
+//   sfx       tools/sound/sfx.py "$FILM" <sound> --pick N --note '…' [--predicted M], when the studio has it: the sound's
+//             pick.json and prompts.json "picked", and the taste.md row with the tries not picked (Flow v3.3 - 11 step
+//             34); without it the message asks Alma to record them. "none" runs nothing: Alma makes more tries.
+//             The target is the sound's folder name under audio/sfx/; `card` is the pick card it was made on.
 // A file that is already there is never overwritten: the new pick takes the next version (pick-face-v2.png).
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { defuse, defuseFields } from '../../lib/defuse';
+import { childEnv } from '../childEnv';
 import { claudeConfig } from '../claude/config';
 import { pythonBin } from '../config';
-import { helperEnv } from '../env';
 import { natCmp, titleCase } from '../films/util';
-import { invalidateFilmState } from '../films/state';
+import { pokeFilm } from '../films/watcher';
 import { getEntry, saveEntry, type LibraryKind, type SaveResult } from '../library/store';
 import { candidateIdOf, characterDraft, faceDraft, findCandidate, idFolder, locationDraft, roundFolders, voiceDraft, type FilmInfo } from '../library/sources';
 import { filmTarget, type FilmTarget } from './film';
 import { appendTasteRow, candidatesCell, pickedWhere, type TasteRow } from './taste';
 import { isFile, nextVersion, Writer, type WriteRecord } from './writes';
-import { asTyped } from '../claude/typed';
+import { sfxPickArgs, soundAnswerKey } from '../films/read/sfx';
 
-export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take';
-export const PICK_KINDS: PickKind[] = ['face', 'wardrobe', 'sheet', 'voice', 'location', 'prop', 'take'];
+export type PickKind = 'face' | 'wardrobe' | 'sheet' | 'voice' | 'location' | 'prop' | 'take' | 'sfx';
+export const PICK_KINDS: PickKind[] = ['face', 'wardrobe', 'sheet', 'voice', 'location', 'prop', 'take', 'sfx'];
 
 export interface PickInput {
   kind: PickKind;
@@ -38,6 +43,7 @@ export interface PickInput {
   libraryId?: string;
   libraryKind?: LibraryKind;
   from?: string;               // where the pick was made: "the gate page", "the Character page"
+  card?: string;               // sfx: the key of the pick card it was made on
 }
 
 export interface PickOptions {
@@ -131,7 +137,7 @@ async function runVoicePick(film: FilmTarget, w: Writer, args: string[]): Promis
   await backupVoiceFiles(film, w);
   await w.ran(shown, film.show(path.join(film.dir, 'voices', 'cast.json')), 'pick.py writes cast.json and options.json "chosen"');
   if (w.dryRun) return { cmd: shown, out: '(dry run: not run)' };
-  const env = helperEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
+  const env = childEnv({ FILM: film.dir, PYTHONDONTWRITEBYTECODE: '1' });
   const r = await run(py, [script, ...args], env, film.repo);
   if (r.code !== 0) throw new PickError(`pick.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
   return { cmd: shown, out: r.out };
@@ -158,10 +164,12 @@ async function libraryRoundCopy(dir: string, id: string, files: { abs: string; r
 }
 
 /** Does the pick. Throws PickError with an HTTP status for anything the request got wrong. */
-export async function makePick(input: PickInput, film: string, opts: PickOptions = {}): Promise<PickResult> {
+export async function makePick(raw: PickInput, film: string, opts: PickOptions = {}): Promise<PickResult> {
+  const input = defuseFields(raw); // the user's words, the page name and the candidate reach Alma: a typed <harness-action> is defused
   const kind = input.kind;
   if (!PICK_KINDS.includes(kind)) throw new PickError(`kind must be one of ${PICK_KINDS.join(', ')}`);
   const target = (input.target ?? '').trim();
+  if (kind === 'sfx') return pickSound(input, film, opts);
   if (!/^[A-Z]\d+[a-z]?(?:-[A-Z]\d+[a-z]?)*$/.test(target)) throw new PickError('target must be an ID such as C01, L01, P01 or S2');
   const ft = await filmTarget(film, opts.repo);
   if (!ft) throw new PickError(`no film folder assets/films/${film}`, 404);
@@ -170,7 +178,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   const w = new Writer(`pick ${kind} ${target} ${fromLibrary ? `library:${input.libraryId}` : input.candidate}`, ft.show, !!opts.dryRun);
   const info: FilmInfo = { slug: ft.slug, title: ft.title, dir: ft.dir };
   const date = today();
-  const where = asTyped(input.from ?? 'the gate page');
+  const where = defuse(input.from ?? 'the gate page');
   let candidate = input.candidate ?? '';
   let choice = target;
   let candidatesText = '–';
@@ -263,7 +271,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
         throw new PickError('voices/options.json not found or not valid', 404);
       }
       script = await runVoicePick(ft, w, [target, String(n), '--note', words]);
-      next.push(`pick.py recorded the pick in voices/cast.json and called no service. Speak no sample lines; make the voice reusable if it is not a preset and cut the element line from the picked preview, as the voices note says (step 5 on)`);
+      next.push(`pick.py recorded the pick in voices/cast.json and called no service. Speak no sample lines; make the voice reusable if it is not a preset and cut the element line from the picked preview, as the voices note says (step 5 on); the line asks for no yes of its own: it goes to the user inside the character's one element go card, with the sheet and the face (the show recipe)`);
     }
     wrote.push(ft.show(path.join(ft.dir, 'voices', 'cast.json')), ft.show(path.join(ft.dir, 'voices', 'options.json')));
     if (!libEntry) {
@@ -337,7 +345,7 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
   ].map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`).join(' ');
   const whose = kind === 'take' ? `${target}` : `${target}'s ${kind === 'location' ? 'master' : kind}`;
   const message = [
-    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : asTyped(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
+    `<harness-action ${attrs}/> The user picked ${fromLibrary ? `${libEntry!.meta.name} from the library (${libEntry!.meta.film.title})` : defuse(candidate)} for ${whose} on ${where}. Continue the flow from there.`,
     '',
     `The harness already wrote: ${[...wrote, 'the taste.md row', ...(lib ? [`the library entry ${lib.kind}s/${lib.id}`] : [])].join('; ')}.`,
     `Yours: the review card for this pick, the row's "What it says" cell and the score in taste.md${next.length ? `; ${next.join('; ')}` : ''}.`,
@@ -349,11 +357,86 @@ export async function makePick(input: PickInput, film: string, opts: PickOptions
     await sendToAlma(ft.slug, message);
     notified = true;
   }
-  if (!opts.dryRun) invalidateFilmState(ft.slug);
+  // the pages hear of it now, not when the folder watcher sees the files (a pick card stayed on the phone)
+  if (!opts.dryRun) pokeFilm(ft.slug);
   return {
     ok: true, dryRun: !!opts.dryRun, film: ft.slug, kind, target, candidate,
     writes: w.records, tasteRow: taste.line,
     ...(lib ? { library: { id: lib.id, kind: lib.kind, created: lib.created } } : {}),
     message, notified, ...(script ? { script } : {}),
   };
+}
+
+/** A sound of the sound designer picked on its card (Flow v3.3 - 11 Sound and music, steps 33 and 34): sfx.py
+ *  records the pick (pick.json, prompts.json "picked", the taste.md row with the tries not picked); the harness keeps
+ *  the answer by the card, so the card stops asking once every sound on it has one. "none": none of these. */
+async function pickSound(input: PickInput, film: string, opts: PickOptions): Promise<PickResult> {
+  const name = (input.target ?? '').trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) throw new PickError('target must be the sound\'s folder name under audio/sfx/ ("cheer-toast")');
+  const ft = await filmTarget(film, opts.repo);
+  if (!ft) throw new PickError(`no film folder assets/films/${film}`, 404);
+  const none = input.candidate === 'none';
+  const n = Number(/^(?:try\s*)?(\d+)$/i.exec(input.candidate ?? '')?.[1]);
+  if (!none && !(Number.isInteger(n) && n > 0)) throw new PickError('candidate must be a try number ("2") or "none"');
+  const dir = path.join(ft.dir, 'audio', 'sfx', name);
+  let tries: number[] = [];
+  try {
+    const pj = JSON.parse(await fs.readFile(path.join(dir, 'prompts.json'), 'utf8')) as { tries?: { try?: number }[]; prompts?: unknown[] };
+    tries = [...new Set([...(pj.tries ?? []).map((t) => Number(t.try)), ...(pj.prompts ?? []).map((_, i) => i + 1)])].filter((x) => x > 0).sort((a, b) => a - b);
+  } catch {
+    throw new PickError(`no audio/sfx/${name}/prompts.json`, 404);
+  }
+  if (!none && !tries.includes(n)) throw new PickError(`${name} has no try ${n} (tries: ${tries.join(', ')})`, 404);
+  const predicted = Number(/(\d+)$/.exec(input.prediction ?? '')?.[1]) || undefined;
+  const w = new Writer(`pick sfx ${name} ${none ? 'none' : `try ${n}`}`, ft.show, !!opts.dryRun);
+  const where = input.from ?? 'the sound pick card';
+  let script: { cmd: string; out: string } | undefined;
+  let tasteRow = '';
+  // the studio's tools/sound/sfx.py records the pick when the studio has it; without it the harness writes nothing in
+  // the film folder and Alma records the pick herself
+  const tool = path.join(ft.repo, 'tools', 'sound', 'sfx.py');
+  const hasTool = !none && (await isFile(tool));
+  if (hasTool) {
+    const py = pythonBin();
+    const args = sfxPickArgs(ft.dir, name, n, input.note, predicted);
+    const shown = `${py === path.join(/*turbopackIgnore: true*/ ft.repo, '.venv', 'bin', 'python') ? '.venv/bin/python' : py} tools/sound/sfx.py ${['"$FILM"', ...args.slice(1)].map((a) => (/[\s'"]/.test(a) && a !== '"$FILM"' ? `'${a.replace(/'/g, "'\\''")}'` : a)).join(' ')}`;
+    await w.ran(shown, ft.show(path.join(dir, 'pick.json')), 'sfx.py writes pick.json, prompts.json "picked" and the taste.md row');
+    if (!w.dryRun) {
+      const r = await run(py, [tool, ...args], childEnv({ FILM: ft.dir, PYTHONDONTWRITEBYTECODE: '1' }), ft.repo);
+      if (r.code !== 0) throw new PickError(`sfx.py failed (exit ${r.code}): ${r.out.split('\n').slice(-3).join(' · ')}`, 502);
+      script = { cmd: shown, out: r.out };
+      tasteRow = /taste\.md row added/.test(r.out) ? 'written by sfx.py' : '';
+    } else script = { cmd: shown, out: '(dry run: not run)' };
+  }
+  const at = new Date().toISOString();
+  if (input.card && !opts.dryRun) {
+    const { saveAnswer } = await import('./answers');
+    await saveAnswer(ft.slug, soundAnswerKey(input.card, name), { option: none ? 'none' : String(n), at, note: input.note, kind: 'sfx' });
+    await w.wrote('harness/answers.json', `${ft.slug} · ${soundAnswerKey(input.card, name)}`);
+  }
+  const attrs = [['kind', 'pick'], ['what', 'sfx'], ['target', name], ['candidate', none ? 'none' : String(n)], ...(predicted ? [['prediction', String(predicted)]] : []), ...(input.card ? [['card', input.card]] : [])]
+    .map(([k, v]) => `${k}="${String(v).replace(/"/g, '&quot;')}"`).join(' ');
+  const words = input.note ? ` Their words: "${input.note}".` : '';
+  const message = none ? [
+    `<harness-action ${attrs}/> The user heard every try of ${name} and took none of them, on ${where}.${words} Continue the flow from there.`,
+    '',
+    'The harness wrote nothing in the film folder.',
+    `Yours: ${input.note ? 'make the next tries from their words' : 'make 3 more tries of it'}, numbered after the last one, then a new pick card for it.`,
+  ].join('\n') : [
+    `<harness-action ${attrs}/> The user picked try ${n} of ${name}, on ${where}.${words} Continue the flow from there.`,
+    '',
+    hasTool
+      ? `The harness already wrote: ${ft.show(path.join(dir, 'pick.json'))}; prompts.json "picked"; the taste.md row (by sfx.py).`
+      : `The harness wrote nothing in the film folder: record the pick yourself (${ft.show(path.join(dir, 'pick.json'))}, "picked" in its prompts.json, the taste.md row with the tries not picked).`,
+    'Yours: lay the picked try as its own clip on the effects track at its planned place, level and fades (one drop per scene, once every sound of the scene is answered); the row\'s "What it says" cell and the score in taste.md.',
+  ].join('\n');
+  let notified = false;
+  if (!opts.dryRun && opts.notify !== false) {
+    const { sendToAlma } = await import('../claude/thread');
+    await sendToAlma(ft.slug, message);
+    notified = true;
+  }
+  // the pages hear of it now, not when the folder watcher sees the files (a pick card stayed on the phone)
+  if (!opts.dryRun) pokeFilm(ft.slug);
+  return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, kind: 'sfx', target: name, candidate: none ? 'none' : String(n), writes: w.records, tasteRow, message, notified, ...(script ? { script } : {}) };
 }

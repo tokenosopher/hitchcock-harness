@@ -160,6 +160,15 @@
   .line-in {
     animation: hh-line-in 0.35s ease-out;
   }
+  /* "Alma is working" on the phone's folded bar: a light passes over the words while her turn runs */
+  .text-live {
+    background: linear-gradient(90deg, #d4d4d8 0%, #d4d4d8 35%, #ffffff 50%, #d4d4d8 65%, #d4d4d8 100%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: hh-text-live 2.4s linear infinite;
+  }
   .hatch {
     background-image: repeating-linear-gradient(135deg, #3f3f46 0 1px, transparent 1px 7px);
   }
@@ -180,6 +189,14 @@
     transform: translateX(100%);
   }
 }
+@keyframes hh-text-live {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
 @keyframes hh-line-in {
   from {
     opacity: 0;
@@ -189,8 +206,84 @@
 @media (prefers-reduced-motion: reduce) {
   .node-live::after,
   .line-in,
-  .dot-run {
+  .dot-run,
+  .text-live {
     animation: none;
+  }
+}
+
+/* The sidebar's row mark (RowMark.tsx): the glowing orb while Alma is at work, the white dot when something waits for
+   the user. Only opacity and transform ever change, so the compositor runs it with no layout or paint per frame: the
+   orb's glow is a static radial gradient on a pseudo-element whose opacity alone breathes (one keyframes rule, 2.4 s),
+   paused while the orb fades out; the dot never moves. A new mark fades in (@starting-style), an old one out.
+   Opacity alone, not a scale too: measured in Chrome, a breathing scale on the pseudo-element now and
+   then had the main thread restyle it on every frame; opacity alone stayed on the compositor in every run. */
+.row-mark {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+.row-orb,
+.row-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 280ms ease-out, transform 280ms ease-out;
+}
+.row-orb[data-on],
+.row-dot[data-on] {
+  opacity: 1;
+  transform: none;
+}
+@starting-style {
+  .row-orb[data-on],
+  .row-dot[data-on] {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.row-dot {
+  background: var(--color-ink);
+}
+.row-orb {
+  /* dim grey, near the page's black, so it never reads as the white dot */
+  background: #52525b;
+  box-shadow: 0 0 4px rgb(113 113 122 / 0.3);
+}
+.row-orb::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgb(113 113 122 / 0.45), rgb(113 113 122 / 0.12) 60%, rgb(113 113 122 / 0));
+  opacity: 0.25;
+  animation: row-orb-breathe 2.4s ease-in-out infinite paused;
+}
+.row-orb[data-on]::before {
+  animation-play-state: running;
+}
+@keyframes row-orb-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-orb,
+  .row-dot {
+    transform: none;
+    transition: opacity 200ms ease-out;
+  }
+  .row-orb::before {
+    animation: none;
+    opacity: 0.75;
   }
 }
 

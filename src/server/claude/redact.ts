@@ -9,6 +9,8 @@ const PATTERNS: [RegExp, string][] = [
   [/\b((?:api|access|refresh|auth|secret|client)[_-]?(?:key|token|secret))(["']?\s*[:=]\s*["']?)([^\s"'&,;]{6,})/gi, '$1$2[redacted]'],
   // presigned and signed URLs: drop the whole query string
   [/(https?:\/\/[^\s"'<>]+?)\?[^\s"'<>]*(?:X-Amz-|Signature=|Sig=|sig=|token=|Token=|Expires=|Key-Pair-Id=|se=|sp=)[^\s"'<>]*/g, '$1?[signed-query-redacted]'],
+  // the harness's own unlock link carries the remote-access token
+  [/\/unlock\?t=[^\s"'<>&)\]]+/g, '/unlock?t=[redacted]'],
   [/\bfal_[A-Za-z0-9]{16,}/g, 'fal_[redacted]'],
   // the remote-access key in the unlock link (/unlock?t=<key>) and the device cookie it sets (hh_auth=<value>)
   [/(\/unlock\?(?:[^\s"'<>#]*&)?t=)[^\s"'<>&#]+/g, '$1[redacted]'],

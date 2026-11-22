@@ -401,7 +401,8 @@ export function bringUp(tl: Timeline | undefined, src: PlanSource, o: { fps?: Ti
   const { v, a } = mains(base);
   if (!v || !a) return undefined;
   const ext = extentsOf(base);
-  const withTake = new Set([...v.clips, ...a.clips].filter((c) => !c.plan && c.takeRef).map((c) => c.takeRef!.scene));
+  // a scene whose take is in, or whose layout the user chose (its clips carry `layout`), stays as it is
+  const withTake = new Set([...v.clips, ...a.clips].filter((c) => (!c.plan && c.takeRef) || c.layout !== undefined).map((c) => sceneOfClip(c)!).filter(Boolean));
   const order = orderOf(src, ext, withTake);
   const byId = new Map(src.scenes.map((s) => [s.id, s]));
   const scenes: string[] = [], kept: string[] = [];
@@ -560,8 +561,10 @@ export function boardsBack(tl0: Timeline, scene: string, src: PlanSource): PlanE
   if (!takes.length) return `${scene} has no take in the film.`;
   const fresh = buildScene(s, src.pace, tl.fps);
   if (!fresh.picture.length && !fresh.lines.length) return `${scene} has nothing planned to put back.`;
-  const from = Math.min(...takes.map((c) => c.at)), to = Math.max(...takes.map(endOf));
-  const gone = new Set(takes);
+  // a scene with shots of takes among its boards: its boards and lines go too, the whole scene comes back
+  const rest = [...v.clips, ...a.clips].filter((c) => c.plan && c.scene === scene);
+  const from = Math.min(...[...takes, ...rest].map((c) => c.at)), to = Math.max(...[...takes, ...rest].map(endOf));
+  const gone = new Set([...takes, ...rest]);
   v.clips = v.clips.filter((c) => !gone.has(c));
   a.clips = a.clips.filter((c) => !gone.has(c));
   ripple(tl, to, fresh.length - (to - from), new Set());
@@ -590,14 +593,14 @@ export function shotSpan(tl: Pick<Timeline, 'tracks'>, c: TimelineClip): { scene
 
 const s1 = (s: number) => `${(Math.round(s * 10) / 10).toFixed(1)} s`;
 const s2 = (s: number) => `${Math.round(s * 100) / 100} s`;
-/** "Retake this shot" on a planned clip: the words for Alma's box, of the whole shot whichever of its panels is selected
+/** "Retake this shot" on a planned clip: the words Alma reads with the shot's chip, of the whole shot whichever of its panels is selected
  *  (its scene, its number, its boards, its real length and start on the cut and in the scene). Undefined for a clip
  *  that is not a planned shot. `tc` writes a time on the cut as a timecode. */
 export function retakeWords(tl: Pick<Timeline, 'tracks'>, c: TimelineClip, cut: string, tc: (s: number) => string): string | undefined {
   const sp = shotSpan(tl, c);
   if (!sp) return undefined;
   const what = sp.boards > 1 ? `no take yet, its ${sp.boards} boards` : sp.boards ? 'no take yet, its board' : 'no take yet, planned';
-  return `Retake ${sp.scene} shot ${sp.shot} (${what}, the whole shot ${s1(sp.length)}, from ${s2(sp.inScene[0])} to ${s2(sp.inScene[1])} in the scene, at ${tc(sp.at)} in cut ${cut}). What should change: `;
+  return `Retake ${sp.scene} shot ${sp.shot} (${what}, the whole shot ${s1(sp.length)}, from ${s2(sp.inScene[0])} to ${s2(sp.inScene[1])} in the scene, at ${tc(sp.at)} in cut ${cut}).`;
 }
 
 // ---- what a cut holds, for the page

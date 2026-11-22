@@ -30,7 +30,7 @@ export function ScenePromptPanel({ sc, state, base }: { sc: SceneRef; state: Fil
   };
   const goOnly = () => {
     if (!g) return;
-    ui.prefill(goMessage([g]).replace(`Go for the video: ${g.id} `, `Go for the video: ${g.id} only `), { id: `go:${g.id}`, label: `Go · ${g.id} only · ≈ ${fmtCr(g.credits ?? 0)}` });
+    ui.command({ id: `go:${g.id}`, label: `Go · ${g.id} only · ≈ ${fmtCr(g.credits ?? 0)}` }, goMessage([g]).replace(`Go for the video: ${g.id} `, `Go for the video: ${g.id} only `));
     ui.setThreadOpen(true);
   };
 

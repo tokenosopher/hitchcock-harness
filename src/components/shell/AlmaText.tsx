@@ -12,7 +12,7 @@ const PAGES: Record<string, string> = {
   shots: '?open=shots', previz: '?open=previz', storyboards: '?open=previz', picks: '?open=gate', gate: '?open=gate',
   character: 'character', characters: 'character', cast: 'character', faces: 'character', clothing: 'character', sheet: 'character',
   voices: 'character/voices', elements: 'character/elements', scenes: 'scenes', scene: 'scenes', takes: 'scenes',
-  go: 'go', edit: 'edit', finish: 'finish', sound: 'sound', release: 'release',
+  go: 'go', edit: 'edit', finish: 'finish', sound: 'sound', release: 'release', debrief: 'debrief',
 };
 const NAMED = /\b((?:the |The )?(Story|Locations?|Views|Shots|Previz|Storyboards|Characters?|Cast|Voices|Elements|Scenes|Go|Edit|Finish|Sound|Release|Main|Board) page)\b|\b((?:the |The )?"?Your picks"?(?: page)?)/g;
 const TOKEN = /\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|(https?:\/\/[^\s<>"'`]+)/g;
@@ -23,14 +23,17 @@ export function pageHref(film: string, target: string): { href: string; outside?
   if (/^https?:\/\//.test(target)) return { href: target, outside: true };
   if (target.startsWith('/films/') || target === '/library' || target === '/settings') return { href: target };
   // page:scenes/S2#tests keeps its #part: the place on that page to jump to
-  const [t, hash] = target.replace(/^page:/, '').replace(/^\/+/, '').split('#');
+  const [tq, hash] = target.replace(/^page:/, '').replace(/^\/+/, '').split('#');
   const frag = hash ? `#${hash}` : '';
+  // page:edit?clip=s-laugh2 keeps its ?part: the place on that page to open at (components/edit/openAt.ts)
+  const [t, query] = tq.split('?');
   const [head, ...rest] = t.split('/');
   const base = PAGES[head.toLowerCase()];
   if (base === undefined) return undefined;
   const root = `/films/${film}`;
-  if (rest.length && (base === 'scenes' || base === 'character' || base === 'release')) return { href: `${root}/${base}/${rest.join('/')}${frag}` };
-  return { href: (base.startsWith('?') ? `${root}${base}` : base ? `${root}/${base}` : root) + frag };
+  const q = (path: string) => (query ? `${path}${path.includes('?') ? '&' : '?'}${query}` : path);
+  if (rest.length && (base === 'scenes' || base === 'character' || base === 'release')) return { href: q(`${root}/${base}/${rest.join('/')}`) + frag };
+  return { href: q(base.startsWith('?') ? `${root}${base}` : base ? `${root}/${base}` : root) + frag };
 }
 
 function named(film: string, text: string, key: string): ReactNode[] {
@@ -48,7 +51,7 @@ function named(film: string, text: string, key: string): ReactNode[] {
 }
 
 /** One run of text with its links, bold and code drawn. */
-function inline(text: string, film: string, key: string): ReactNode[] {
+export function inline(text: string, film: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
   let at = 0;
   for (const m of text.matchAll(TOKEN)) {

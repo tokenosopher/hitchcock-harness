@@ -198,7 +198,12 @@ function Frame({ film, thread, children }: { film?: string; thread?: React.React
             </div>
           </div>
         )}
-        <main ref={mainRef} className={cn('scroll flex h-dvh min-w-0 flex-1 flex-col overflow-y-auto', (film || thread) && 'max-[760px]:pb-[var(--hh-phone-bar,150px)] max-[760px]:transition-[padding] max-[760px]:duration-200')}>{children}{film && <ChoicesTray film={film} />}</main>
+        {/* Main's children never shrink ([&>*]:shrink-0). A page whose root has a min-height of its own (the Edit
+            page's min-h-full) loses flex's "never below my content" floor, so when its content was taller than the
+            window the root shrank to the window's height and its content spilled out below it. The choices bar comes
+            after the root and a sticky box can only rise from its own place, never sink, so once scrolled it stayed
+            where the root ended: mid-page (only on a page taller than the window). */}
+        <main ref={mainRef} className={cn('scroll flex h-dvh min-w-0 flex-1 flex-col overflow-y-auto [&>*]:shrink-0', (film || thread) && 'max-[760px]:pb-[var(--hh-phone-bar,150px)] max-[760px]:transition-[padding] max-[760px]:duration-200')}>{children}{film && <ChoicesTray film={film} />}</main>
         {film ? (
           // Alma's column folds to a rail and back like the films list: the width slides, the column fades out as
           // the rail fades in. On a phone the column is a sheet of its own, so the frame steps aside (contents).

@@ -12,14 +12,15 @@
 //     simply do not load.
 //   - S2 also has a take whose file could not be read (state 'failed'), and a pick-up: one take of one 13.5 s
 //     shot that redoes the scene's shot 2, in its own generation folder whose shots file (`PICKUP_FILE`) lists one shot
-//     with id "2"; read as the server reads a real one (readShotIds, idsFor), it carries `ids: [2]`.
+//     with id "2"; read as the server reads a real one (readShotTags, shotTagsFor), it carries `ids: [2]`.
 //   - S3 has three variations: one of "sample take A" landed, a second of it being made (no video yet), and
 //     one of "sample take B" that could not be made. `landSample` lands the one being made, in this server's memory
 //     only (the browser tests ask for it through POST …/shots in sample mode); nothing is written to disk.
 // Later test work reuses this: keep it pure and free of randomness.
 import type { TakeShots } from '@/server/edit/shots';
-import { idsFor, readShotIds } from '@/components/edit/shots';
+import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
 import cutFilm from './boards/cut-the-lighthouse.json';
+import { trimSampleShots } from './trim';
 
 interface FixtureClip { id: string; src: string; in: number; out: number; at: number; takeRef?: { scene: string; take: string } }
 interface FixtureCut { current: { tracks: { id: string; kind: string; clips: FixtureClip[] }[] }; sourceSeconds?: Record<string, number> }
@@ -73,8 +74,8 @@ function derive(film: string, cut: FixtureCut): TakeShots[] {
     });
     if (scene === 'S2') {
       out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-takeC-480p.mp4`, scene, name: 'sample take C', state: 'failed' });
-      const ids = idsFor(readShotIds(PICKUP_FILE), []);
-      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(ids ? { ids } : {}), state: 'ready' });
+      const tg = shotTagsFor([readShotTags(PICKUP_FILE)], []);
+      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(tg ?? {}), state: 'ready' });
     }
   }
   out.sort((a, b) => a.scene.localeCompare(b.scene, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -107,7 +108,11 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
   return [one, two, three];
 }
 
-const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut };
+// sample-sound-picks (soundpick.ts) has the-lighthouse's picture, and its takes say when they landed: all on one day,
+// S1's "sample take A" ten days later, so its shots show as new takes on the cut
+const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut };
+const LANDED = Date.UTC(2026, 10, 10, 12);
+const madeOf = (film: string, t: TakeShots): TakeShots => (film !== 'sample-sound-picks' || t.state === 'making' ? t : { ...t, made: LANDED + (t.scene === 'S1' && t.name === 'sample take A' ? 10 * 86400000 : 0) });
 const memo = new Map<string, TakeShots[]>();
 // which sample films have their variation being made landed (this server's memory; survives a dev reload)
 const g = globalThis as unknown as { __sampleLanded?: Set<string> };
@@ -115,11 +120,14 @@ const landedSet = (g.__sampleLanded ??= new Set());
 
 /** The sample film's takes with their shots ({takes, waiting: 0}); no takes for a film without a fixture cut. */
 export function mockShots(film: string): { takes: TakeShots[]; waiting: number } {
+  // the sample film of a take cut into its shots (trim.ts): its takes as written there
+  const trim = trimSampleShots(film);
+  if (trim) return trim;
   const cut = CUTS[film];
   if (!cut) return { takes: [], waiting: 0 };
   if (!memo.has(film)) memo.set(film, derive(film, cut));
   const base = memo.get(film)!;
-  const takes = [...base, ...variations(film, base, landedSet.has(film))];
+  const takes = [...base, ...variations(film, base, landedSet.has(film))].map((t) => madeOf(film, t));
   takes.sort((x, y) => x.scene.localeCompare(y.scene, undefined, { numeric: true }) || x.name.localeCompare(y.name, undefined, { numeric: true }));
   return { takes, waiting: 0 };
 }

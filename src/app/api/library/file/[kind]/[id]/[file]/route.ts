@@ -4,6 +4,8 @@ import { createReadStream, promises as fs } from 'node:fs';
 import { Readable } from 'node:stream';
 import { connection } from 'next/server';
 import { entryFile, LIBRARY_KINDS, type LibraryKind } from '@/server/library/store';
+import { isMock } from '@/fixtures/mock';
+import { mockLibraryFile } from '@/fixtures/library';
 
 type Ctx = { params: Promise<{ kind: string; id: string; file: string }> };
 
@@ -13,7 +15,7 @@ export async function GET(req: Request, ctx: Ctx): Promise<Response> {
   await connection();
   const { kind, id, file } = await ctx.params;
   if (!LIBRARY_KINDS.includes(kind as LibraryKind)) return new Response('not found', { status: 404 });
-  const p = await entryFile(kind as LibraryKind, id, decodeURIComponent(file));
+  const p = isMock() ? mockLibraryFile(kind, id, decodeURIComponent(file)) : await entryFile(kind as LibraryKind, id, decodeURIComponent(file));
   if (!p) return new Response('not found', { status: 404 });
   const st = await fs.stat(p).catch(() => undefined);
   if (!st) return new Response('not found', { status: 404 });

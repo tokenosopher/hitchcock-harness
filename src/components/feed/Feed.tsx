@@ -1,10 +1,11 @@
 'use client';
 // The feed: everything Alma has shown the user, read from the film's review/cards.json and put on the page of
 // the work it belongs to (GET /api/films/[film]/feed). A card that asks (a round of readings, music takes, a
-// yes, the go for a quoted job) sits on top and is answered here in two steps (POST /api/films/[film]/answer);
+// yes, the go for a quoted job) sits on top: a tap sets the answer aside and "Done picking" sends them all;
 // the rest is history, one row per card, newest first, folded until opened. This is the place for every kind
 // of work the pages have no panel of their own for.
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { FeedAsk, FeedCard, FeedMedia, FeedOption, FeedPlace } from '@/server/types';
 import { useFilm } from '@/components/data/film';
@@ -21,6 +22,13 @@ import { Reveal } from '@/components/shell/Reveal';
 import { IconFile } from '@/components/shell/icons';
 import { refData } from '@/components/lib/refPick';
 import { cardRefOf } from '@/components/shell/refItems';
+import { SoundPicks } from './SoundPicks';
+import { CutButton, sceneInCut } from './CutButton';
+import { takeCutOf } from '@/components/edit/cutLink';
+import { CardText } from './CardText';
+import { WhyPanel } from './WhyPanel';
+import { almaFetch } from '@/components/data/almaOutbox';
+import { askLayout, bodyMedia, optionMediaOf, readHref, readOf, wideBox } from './askMedia';
 
 interface FeedData { cards: FeedCard[]; total: number; warnings: string[] }
 type ToRepo = (rel: string) => string;
@@ -28,7 +36,32 @@ type ToRepo = (rel: string) => string;
 const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;
 const visual = (m: { kind?: string; path?: string }): boolean => m.kind === 'video' || m.kind === 'image';
 const short = (s: string, n = 44): string => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
-const ASK_WORD: Record<FeedAsk['kind'], string> = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go' };
+/** What a message opened from a card is about, as Alma reads it beside the card's chip: its whole title and its id. */
+const cardAbout = (card: FeedCard): string => `the card "${card.title}"${card.id ? ` (${card.id})` : ''}`;
+const ASK_WORD: Record<FeedAsk['kind'], string> = { pick: 'Pick one', yes: 'Yes or no', go: 'Your go', why: 'Why?', debrief: 'Your answers' };
+const askWord = (c: FeedCard): string => (c.sounds?.length ? 'Pick each' : ASK_WORD[c.ask!.kind]);
+
+/** The debrief's card: how far the answers are, and the way to the page where they are given. */
+function DebriefLink({ film, card }: { film: string; card: FeedCard }) {
+  const d = card.debrief;
+  const left = d ? d.questions - d.answered - d.skipped : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <Link href={`/films/${film}/debrief`} className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-3 text-[13px] font-medium text-bg no-underline transition-colors duration-200 hover:bg-ink-3">
+        {d && (d.answered || d.skipped) ? 'Go on with the debrief' : 'Open the debrief'}
+      </Link>
+      {d && <span className="text-[12.5px] tabular-nums text-sub">{d.answered} answered · {d.skipped} skipped · {left} to go</span>}
+    </div>
+  );
+}
+
+/** What a card that asks answers with: its sounds, a why, the debrief's page, or the options and buttons. */
+function Answer({ film, card, toRepo, from, onAnswered }: { film: string; card: FeedCard; toRepo: ToRepo; from: string; onAnswered?: (option?: string) => void }) {
+  if (card.sounds?.length) return <SoundPicks film={film} card={card} toRepo={toRepo} from={from} open={!card.ask?.answer} />;
+  if (card.ask?.kind === 'why') return <WhyPanel film={film} card={card} from={from} />;
+  if (card.ask?.kind === 'debrief') return <DebriefLink film={film} card={card} />;
+  return <AskPanel film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />;
+}
 
 /** "6 clips · 2 sounds": what a folded card holds. */
 function mediaLine(media: FeedMedia[]): string {
@@ -56,14 +89,14 @@ function VisualTile({ m, toRepo, selected, onSelect }: { m: FeedMedia; toRepo: T
   const path = toRepo(m.path);
   const box = cn('aspect-[3/4] w-full rounded-[6px] border bg-black', selected ? 'border-ink outline outline-1 outline-offset-1 outline-ink' : 'border-edge');
   return (
-    <figure className="m-0 flex min-w-0 flex-col gap-1.5">
+    <figure data-zoom-item className="m-0 flex min-w-0 flex-col gap-1.5">
       {m.kind === 'video'
         ? <Media path={path} w={320} fit="contain" play className={box} />
         : <a href={mediaUrl(path)} target="_blank" rel="noreferrer" aria-label={`Open ${m.label ?? m.path.split('/').pop()}`} className="block no-underline"><Media path={path} w={320} fit="contain" className={box} /></a>}
       {(m.label || onSelect) && (
         <figcaption className="flex min-w-0 items-start gap-1.5 text-[11.5px] leading-snug text-sub">
           {onSelect && (
-            <button type="button" role="radio" aria-checked={!!selected} aria-label={`Choose ${m.label ?? m.option}`} onClick={onSelect}
+            <button type="button" role="radio" aria-checked={!!selected} aria-label={`Choose ${m.label ?? m.option}`} onClick={onSelect} data-zoom-choose
               className={cn('mt-px flex size-3.5 flex-none cursor-pointer items-center justify-center rounded-full border bg-transparent p-0', selected ? 'border-ink' : 'border-mute')}>
               {selected && <span className="size-1.5 rounded-full bg-ink" />}
             </button>
@@ -84,7 +117,7 @@ function MediaBlock({ media, toRepo, onChip }: { media: FeedMedia[]; toRepo: ToR
   return (
     <div className="flex flex-col gap-3">
       {seen.length > 0 && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-2.5 gap-y-3">
+        <div data-zoom-set className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-2.5 gap-y-3">
           {seen.map((m) => <VisualTile key={m.path + (m.label ?? '')} m={m} toRepo={toRepo} />)}
         </div>
       )}
@@ -100,63 +133,111 @@ function MediaBlock({ media, toRepo, onChip }: { media: FeedMedia[]; toRepo: ToR
   );
 }
 
-type Phase = { k: 'idle' } | { k: 'confirm' } | { k: 'busy' } | { k: 'done'; text: string } | { k: 'error'; text: string };
+/** One picture or clip of an asking card, its label under it. At full width the box takes the picture's own shape
+ *  once it has loaded (askMedia.ts wideBox); in a grid, a 4:3 box. */
+function AskTile({ m, toRepo, w, wide }: { m: FeedMedia; toRepo: ToRepo; w: number; wide: boolean }) {
+  const [size, setSize] = useState<[number, number]>();
+  const box = wideBox(size?.[0], size?.[1]);
+  const onLoad = (e: React.SyntheticEvent<HTMLElement>) => {
+    const t = e.target as HTMLImageElement;
+    if (t.tagName === 'IMG' && t.naturalWidth && t.naturalHeight) setSize([t.naturalWidth, t.naturalHeight]);
+  };
+  return (
+    <figure data-zoom-item onLoadCapture={wide ? onLoad : undefined} style={wide ? { maxWidth: box.maxW } : undefined} className="m-0 flex w-full min-w-0 flex-col gap-1.5">
+      <div style={wide ? { aspectRatio: box.ratio } : undefined} className={cn('w-full transition-[aspect-ratio] duration-200 ease-out motion-reduce:transition-none', !wide && 'aspect-[4/3]')}>
+        <Media path={toRepo(m.path)} w={w} fit="contain" play={m.kind === 'video'} alt={m.label ?? m.path.split('/').pop()}
+          className="size-full rounded-[6px] border border-edge bg-black" />
+      </div>
+      {m.label && <figcaption className="min-w-0 text-[12px] leading-snug text-sub" title={m.path}>{m.label}{m.sub && <span className="block text-mute">{m.sub}</span>}</figcaption>}
+    </figure>
+  );
+}
 
-/** The answer, in two steps inside the card: choose, then confirm. The confirm writes and tells Alma. */
+/** An asking card's files, large enough to judge on a phone: one or two pictures or clips at the card's full width,
+ *  more in a grid, each with its label under it; a tap on a picture opens the full-screen view, a clip plays in place.
+ *  Sounds and other files as in any card. */
+function AskMediaBlock({ media, toRepo, onChip }: { media: FeedMedia[]; toRepo: ToRepo; onChip: (m: FeedMedia) => void }) {
+  const seen = media.filter(visual);
+  const rest = media.filter((m) => !visual(m));
+  // pictures with a sound beside them (a character's element go: the sheet, the face and the line) sit as a
+  // row of tiles above the sound, however few
+  const { wide, w } = askLayout(seen.length, rest.some((m) => m.kind === 'audio'));
+  return (
+    <>
+      {seen.length > 0 && (
+        <div data-ask-media={wide ? 'wide' : 'grid'} data-zoom-set
+          className={cn('grid gap-x-2.5 gap-y-3', wide ? 'max-w-[760px] grid-cols-1' : 'grid-cols-2 min-[761px]:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]')}>
+          {seen.map((m) => <AskTile key={m.path + (m.label ?? '')} m={m} toRepo={toRepo} w={w} wide={wide} />)}
+        </div>
+      )}
+      <MediaBlock media={rest} toRepo={toRepo} onChip={onChip} />
+    </>
+  );
+}
+
+type Phase = { k: 'idle' } | { k: 'busy' } | { k: 'done'; text: string } | { k: 'error'; text: string };
+
+/** The answer: a tap sets it aside (data/choices.ts) and "Done picking" at the foot of the page sends everything set
+ *  aside in one press, the only confirm. No per-card confirm. */
 function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card: FeedCard; toRepo: ToRepo; from: string; onAnswered?: (option?: string) => void }) {
   const ask = card.ask!;
   const ui = useUI();
-  // a press here only sets the choice aside (data/choices.ts); "Done picking" at the foot of the page sends them all.
-  // Nothing is preselected: Alma's prediction is shown, and only what the user clicks is a choice.
+  // Nothing is preselected: Alma's prediction is shown, and only what the user taps is a choice. Another option of
+  // the same card takes the old one's place; the chosen Yes or Go tapped again is taken back.
   const cid = `card:${card.key}`;
   const mine = useChoice(film, cid);
   const sel = mine?.answer?.option;
   const about = `${card.ids[0] ? `${card.ids[0]} · ` : ''}${short(card.title, 44)}`;
   const setSel = (id: string) => choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
-  const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind, cost: ask.cost } }));
-  const [note, setNote] = useState('');
+  const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind === 'go' ? 'go' : 'yes', cost: ask.cost } }));
   const [p, setP] = useState<Phase>({ k: 'idle' });
-  const opt = ask.options.find((o) => o.id === sel);
-  const mediaOf = (o: FeedOption): FeedMedia | undefined => card.media.find((m) => m.option === o.id) ?? (o.path ? card.media.find((m) => m.path === o.path) : undefined);
+  const mediaOf = (o: FeedOption): FeedMedia | undefined => optionMediaOf(card, o);
   const withFile = ask.options.map((o) => ({ o, m: mediaOf(o) }));
   const tiles = withFile.filter((x) => x.m && visual(x.m));
+  const { state } = useFilm();
+  const inCut = sceneInCut(state, card.ids.find((x) => /^S\d+$/.test(x)));
   const rows = withFile.filter((x) => !x.m || !visual(x.m));
-  const what = ask.kind === 'pick' ? (opt ? opt.label || opt.id : '') : ask.kind === 'go' ? (ask.cost ? `go · ${ask.cost}` : 'go') : 'yes';
-  // `no`: the card's own no button (Release, stage 3: "Cancel the ask")
+  // a card with its own yes and no words (Release, stage 3) answers at once: the card itself is the second look
   const send = async (no?: boolean) => {
     setP({ k: 'busy' });
     try {
-      const r = await fetch(`/api/films/${film}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ card: card.key, option: no ? 'no' : ask.kind === 'pick' ? sel : undefined, note: note.trim() || undefined, from }) });
+      const r = await almaFetch(film, `/api/films/${film}/answer`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ card: card.key, option: no ? 'no' : undefined, from }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       if (r.ok) unchoose(film, cid);
-      if (r.ok) setP({ k: 'done', text: no ? `${ask.noLabel}: sent to Alma.` : ask.yesLabel ? `${ask.yesLabel}: your go is given. Alma does exactly what the card shows, nothing more.` : ask.kind === 'pick' ? `Picked ${what}. Noted in taste.md; Alma applies it and carries on.` : ask.kind === 'go' ? 'Go given. Alma runs exactly what the card quotes.' : 'Yes given. Alma carries on.' });
+      if (r.ok) setP({ k: 'done', text: no ? `${ask.noLabel}: sent to Alma.` : `${ask.yesLabel}: your go is given. Alma does exactly what the card shows, nothing more.` });
       else setP({ k: 'error', text: j.error ?? `The answer failed (${r.status})` });
-      if (r.ok) onAnswered?.(no ? 'no' : ask.kind === 'pick' ? sel : 'yes');
+      if (r.ok) onAnswered?.(no ? 'no' : 'yes');
     } catch {
       setP({ k: 'error', text: 'The harness server is not answering' });
     }
   };
-  const elsewhere = () => ui.prefill(`About "${short(card.title, 60)}"${card.id ? ` (${card.id})` : ''}: `, { id: `card:${card.key}`, label: `card · ${short(card.title, 32)}` });
+  const elsewhere = () => ui.about({ id: `card:${card.key}`, label: `card · ${short(card.title, 32)}` }, cardAbout(card), 'Say something about this card…');
   if (p.k === 'done') return <p role="status" className="m-0 text-[12.5px] leading-normal text-ink-3">{p.text}</p>;
+  const chosenMark = <span data-chosen className="inline-flex items-center gap-1.5 text-[12.5px] text-ink duration-200 animate-in fade-in-0"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen · goes with Done picking</span>;
   return (
     <div className="flex flex-col gap-3">
       {ask.kind === 'pick' && (
         <div role="radiogroup" aria-label={`Options for ${card.title}`} className="flex flex-col gap-3">
           {tiles.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-2.5 gap-y-3">
-              {tiles.map(({ o, m }) => <VisualTile key={o.id} m={{ ...m!, label: o.label || m!.label || o.id, option: o.id }} toRepo={toRepo} selected={sel === o.id} onSelect={() => { setSel(o.id); setP({ k: 'idle' }); }} />)}
+            <div data-zoom-set className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-2.5 gap-y-3">
+              {tiles.map(({ o, m }) => {
+                const tile = <VisualTile key={o.id} m={{ ...m!, label: o.label || m!.label || o.id, option: o.id }} toRepo={toRepo} selected={sel === o.id} onSelect={() => setSel(o.id)} />;
+                // a take of a scene that is in the cut: tried in its shot's place on the Edit page
+                const tc = inCut ? takeCutOf(m!.path) : undefined;
+                return tc ? <div key={o.id} className="flex min-w-0 flex-col gap-1.5">{tile}<CutButton film={film} cut={tc} className="h-6 px-2 text-[11.5px]" /></div> : tile;
+              })}
             </div>
           )}
           {rows.map(({ o, m }) => {
             const on = sel === o.id;
             return (
-              <div key={o.id} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2', on ? 'border-sub bg-raised' : 'border-edge')}>
+              <div key={o.id} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
                 {m?.kind === 'audio' && <PlayButton path={toRepo(m.path)} label={o.label || o.id} />}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <button type="button" role="radio" aria-checked={on} onClick={() => { setSel(o.id); setP({ k: 'idle' }); }} className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
-                    <span aria-hidden="true" className={cn('flex size-3.5 flex-none items-center justify-center rounded-full border', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink" />}</span>
-                    <span className="min-w-0 truncate text-[13px]">{o.label || o.id}</span>
-                    {o.id === ask.prediction && <span className="flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
+                  <button type="button" role="radio" aria-checked={on} onClick={() => setSel(o.id)} className="flex min-w-0 cursor-pointer items-start gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
+                    <span aria-hidden="true" className={cn('mt-[3px] flex size-3.5 flex-none items-center justify-center rounded-full border', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink" />}</span>
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] leading-[1.45]">{o.label || o.id}</span>
+                    {o.id === ask.prediction && <span className="mt-px flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
                   </button>
                   {m?.kind === 'audio' && <PlayLine path={toRepo(m.path)} className="max-w-[420px] pl-6" />}
                 </div>
@@ -169,45 +250,29 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
       {ask.prediction && ask.kind === 'pick' && (
         <p className="m-0 text-[12.5px] leading-normal text-ink-3">Alma predicts <span className="font-mono text-[12px] text-ink">{ask.options.find((o) => o.id === ask.prediction)?.label || ask.prediction}</span><span className="text-sub"> · said before your pick, from your earlier picks</span></p>
       )}
-      {p.k === 'confirm' && (
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="A word for Alma with it (optional)" aria-label="A note for Alma with the answer"
-          className="h-8 w-full max-w-[460px] rounded-lg border border-line bg-panel px-2.5 text-[13px] text-ink placeholder:text-mute" />
-      )}
       <div className="flex flex-wrap items-center gap-2">
-        {p.k === 'confirm' ? (
-          <>
-            <Btn primary onClick={() => void send()} aria-label={`Confirm: ${what}`}>Confirm · {short(what, 40)}</Btn>
-            <Btn ghost onClick={() => setP({ k: 'idle' })}>Cancel</Btn>
-            <span className="text-[12px] text-sub">{ask.kind === 'pick' ? 'Writes the pick to taste.md, then tells Alma.' : ask.kind === 'go' ? 'Tells Alma to run what the card quotes, nothing more.' : 'Tells Alma.'}</span>
-          </>
-        ) : p.k === 'busy' ? (
+        {p.k === 'busy' ? (
           <Btn disabled>Sending…</Btn>
         ) : ask.yesLabel ? (
-          // a yes in its own words answers at once: the card itself is the second look (Release, stage 3)
           <>
             <Btn primary data-card-yes onClick={() => void send()}>{ask.yesLabel}</Btn>
             {ask.noLabel && <Btn data-card-no onClick={() => void send(true)}>{ask.noLabel}</Btn>}
           </>
         ) : ask.kind === 'pick' ? (
           <>
-            {mine
-              ? <span className="inline-flex items-center gap-1.5 text-[12.5px] text-ink"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen: {short(what, 40)}</span>
-              : <span className="text-[12.5px] text-sub">Click one to choose it.</span>}
-            {mine && <Btn ghost onClick={() => unchoose(film, cid)}>Take it back</Btn>}
-            {mine && <Btn ghost onClick={() => setP({ k: 'confirm' })} title="Sends this one answer to Alma now, by itself">Send only this now</Btn>}
+            {mine ? chosenMark : <span className="text-[12.5px] text-sub">Tap one to choose it.</span>}
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
           </>
         ) : (
           <>
+            {/* the go names its quote on the button; tapped again, the chosen yes or go is taken back */}
             <Btn primary={!mine} onClick={setYes} aria-pressed={!!mine}>
               {mine ? <>{ask.kind === 'go' ? 'Go' : 'Yes'} · chosen</> : ask.kind === 'go' ? <>Go{ask.cost ? ` · ${short(ask.cost, 36)}` : ''}</> : 'Yes'}
             </Btn>
-            {mine && <Btn ghost onClick={() => unchoose(film, cid)}>Take it back</Btn>}
-            <Btn ghost onClick={() => setP({ k: 'confirm' })} title="Sends this one answer to Alma now, by itself">Send only this now</Btn>
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
+            {mine && <span className="text-[12px] text-mute duration-200 animate-in fade-in-0">Goes with Done picking</span>}
           </>
         )}
-        {(mine || ask.kind !== 'pick') && p.k === 'idle' && !ask.yesLabel && <span className="basis-full text-[12px] text-mute">{mine ? 'It goes to Alma with your other choices when you press Done picking, at the foot of the page.' : ''}</span>}
         {p.k === 'error' && <span role="alert" className="text-[12px] text-bad">{p.text}</span>}
       </div>
     </div>
@@ -216,9 +281,10 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
 
 function CardBody({ card, toRepo, hideOptions }: { card: FeedCard; toRepo: ToRepo; hideOptions?: boolean }) {
   const ui = useUI();
-  // the files that are the options show inside the answer, not twice
-  const optionPaths = new Set(hideOptions ? (card.ask?.options ?? []).map((o) => o.path).filter(Boolean) : []);
-  const media = hideOptions ? card.media.filter((m) => !m.option && !optionPaths.has(m.path)) : card.media;
+  const film = useFilm().state?.film.slug ?? '';
+  // the files that are a pick's options show inside the answer, not twice; every other file shows here (askMedia.ts)
+  const media = bodyMedia(card, hideOptions);
+  const onChip = (m: FeedMedia) => ui.addChip({ id: `file:${m.path}`, label: short(m.label ?? m.path.split('/').pop() ?? m.path, 32), ref: toRepo(m.path) });
   return (
     <>
       {card.sub && <p className="m-0 max-w-[760px] text-[12.5px] leading-normal text-sub">{card.sub}</p>}
@@ -229,9 +295,11 @@ function CardBody({ card, toRepo, hideOptions }: { card: FeedCard; toRepo: ToRep
           <span className="min-w-0 break-words">{card.fileLine.name}{card.fileLine.sub && <span className="block text-sub">{card.fileLine.sub}</span>}</span>
         </p>
       )}
-      {(card.text ?? []).map((t, i) => <p key={i} className="m-0 max-w-[760px] text-[13px] leading-[1.55] text-ink-2">{t}</p>)}
+      {card.text?.length ? <CardText text={card.text} film={film} /> : null}
       {card.note && <p data-card-note className="m-0 max-w-[760px] rounded-lg bg-raised px-3 py-2 text-[12.5px] leading-[1.45] text-ink-2">{card.note}</p>}
-      <MediaBlock media={media} toRepo={toRepo} onChip={(m) => ui.addChip({ id: `file:${m.path}`, label: short(m.label ?? m.path.split('/').pop() ?? m.path, 32), ref: toRepo(m.path) })} />
+      {/* the place on the cut the card is about: the Edit page opens there */}
+      {card.cut && film && <CutButton film={film} cut={card.cut} />}
+      {hideOptions ? <AskMediaBlock media={media} toRepo={toRepo} onChip={onChip} /> : <MediaBlock media={media} toRepo={toRepo} onChip={onChip} />}
     </>
   );
 }
@@ -241,6 +309,10 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
   const { state } = useFilm();
   const [busy, setBusy] = useState(false);
   const locked = !!card.ask?.progress;
+  // a card about the story or the script: the way to read it on its page, not pasted into the card (askMedia.ts readOf);
+  // left out on the Story page itself, where the story and the script are already
+  const read = readOf(card);
+  const onReadPage = usePathname() === `/films/${film}/story`;
   const unlock = () => {
     setBusy(true);
     void fetch(`/api/films/${film}/progress`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ card: card.key, on: false }) }).finally(() => setBusy(false));
@@ -261,7 +333,7 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         </p>
         <fieldset disabled aria-label="The options, locked while this is in progress" className="pointer-events-none m-0 flex min-w-0 select-none flex-col gap-3 border-0 p-0 opacity-45 grayscale">
           <CardBody card={card} toRepo={toRepo} hideOptions />
-          <AskPanel film={film} card={card} toRepo={toRepo} from={from} />
+          <Answer film={film} card={card} toRepo={toRepo} from={from} />
         </fieldset>
         {p.by === 'harness' && (
           <div><Btn ghost className="-ml-2.5 h-7 text-[12.5px]" disabled={busy} onClick={unlock}>Unlock the options</Btn></div>
@@ -275,10 +347,10 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         <span aria-hidden="true" className="box-border size-[7px] flex-none rounded-full border-[1.5px] border-ink bg-bg" />
         {card.id && <span className="font-mono text-[12px] text-sub">{card.id}</span>}
         <h3 className="m-0 min-w-0 text-[14px] font-medium leading-snug">{card.title}</h3>
-        <Badge>{ASK_WORD[card.ask!.kind]}</Badge>
+        <Badge>{askWord(card)}</Badge>
         <span className="ml-auto flex flex-none items-center gap-2 text-[12px] text-mute">{where}{card.date && <span>{fmtDate(card.date)}</span>}</span>
       </div>
-      {state && <Who state={state} ids={card.ids} text={card.who} face={card.place !== 'faces'} />}
+      {state && <Who state={state} ids={card.ids} text={card.who} face={card.place !== 'faces'} shown={card.media.map((m) => m.path)} />}
       {/* the yes on the 1080p master shows the master it is about (ASKS 37: "I can't see where the video is") */}
       {state?.master && state.master.ask?.key === card.key && !card.media.length && (
         <div className="flex items-end gap-3">
@@ -289,7 +361,13 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
         </div>
       )}
       <CardBody card={card} toRepo={toRepo} hideOptions />
-      <AskPanel film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />
+      {read && !onReadPage && (
+        <Link href={readHref(film, read)} data-card-read={read.what}
+          className="self-start text-[12.5px] text-sub no-underline transition-colors duration-200 animate-in fade-in-0 hover:text-ink">
+          Read the {read.what} ›
+        </Link>
+      )}
+      <Answer film={film} card={card} toRepo={toRepo} from={from} onAnswered={onAnswered} />
     </article>
   );
 }
@@ -297,9 +375,16 @@ export function AskCard({ film, card, toRepo, from, where, onAnswered }: { film:
 function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
   const [open, setOpen] = useState(false);
   const ui = useUI();
+  const { state } = useFilm();
   const a = card.ask?.answer;
   const picked = a ? (card.ask!.options.find((o) => o.id === a.option)?.label || a.option) : undefined;
-  const line = [mediaLine(card.media), a ? (a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : card.ask!.kind === 'go' ? 'go given' : 'yes given') : ''].filter(Boolean).join(' · ');
+  const k = card.ask?.kind;
+  const said = !a ? ''
+    : card.sounds?.length ? `${card.sounds.length} sounds answered`
+      : k === 'debrief' ? `answers sent${card.debrief ? ` · ${card.debrief.answered} answered` : ''}`
+        : k === 'why' ? (a.option === 'skip' ? 'skipped' : 'you said why')
+          : a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : k === 'go' ? 'go given' : 'yes given';
+  const line = [mediaLine(card.media), said].filter(Boolean).join(' · ');
   return (
     <li className="border-t border-line first:border-t-0">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
@@ -314,9 +399,11 @@ function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
       <Reveal open={open}>
         <div className="flex flex-col gap-3 px-4 pb-4 pt-0.5 min-[761px]:pl-[80px]">
           <CardBody card={card} toRepo={toRepo} />
-          {a?.note && <p className="m-0 text-[12.5px] text-sub">Your note: {a.note}</p>}
+          {state && card.sounds?.length ? <SoundPicks film={state.film.slug} card={card} toRepo={toRepo} from="" open={false} /> : null}
+          {k === 'debrief' && state && <DebriefLink film={state.film.slug} card={card} />}
+          {a?.note && <p className="m-0 text-[12.5px] text-sub">{k === 'why' ? 'Your reason' : 'Your note'}: {a.note}</p>}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Btn ghost className="-ml-2.5 h-7 text-[12.5px]" onClick={() => ui.prefill(`About "${short(card.title, 60)}"${card.id ? ` (${card.id})` : ''}: `, { id: `card:${card.key}`, label: `card · ${short(card.title, 32)}` })}>Ask Alma about this</Btn>
+            <Btn ghost className="-ml-2.5 h-7 text-[12.5px]" onClick={() => ui.about({ id: `card:${card.key}`, label: `card · ${short(card.title, 32)}` }, cardAbout(card), 'Ask Alma about this card…')}>Ask Alma about this</Btn>
             <span className="truncate text-[11.5px] text-mute">{[card.section, card.group].filter(Boolean).join(' › ')}</span>
           </div>
         </div>
@@ -374,7 +461,7 @@ export function ShownLink({ places }: { places: FeedPlace[] }) {
 }
 
 /** One page's part of the feed. `query` is the feed route's own: "place=sound", "id=S3", "place=scenes&shared=1". */
-export function Feed({ query, title = 'Shown to you', note, startOpen, from, empty }: {
+export function Feed({ query, title = 'Shown to you', note, startOpen, from, empty, except }: {
   query: string;
   title?: string;
   /** What these cards are, in a few words: "rounds, tests and notes on this scene". */
@@ -384,6 +471,8 @@ export function Feed({ query, title = 'Shown to you', note, startOpen, from, emp
   from: string;
   /** Shown when there is nothing (else the section is left out). */
   empty?: string;
+  /** Asking cards the page already shows in place (the Character elements rows), not shown twice. */
+  except?: string[];
 }) {
   const { state } = useFilm();
   const film = state?.film;
@@ -399,7 +488,7 @@ export function Feed({ query, title = 'Shown to you', note, startOpen, from, emp
   }, []);
   if (!film || !data) return null;
   const toRepo: ToRepo = (rel) => repoPath(film.folder, film.repo, rel);
-  const asks = data.cards.filter((c) => isOpen(c) && !c.ask!.progress);
+  const asks = data.cards.filter((c) => isOpen(c) && !c.ask!.progress && !except?.includes(c.key));
   const working = data.cards.filter((c) => isOpen(c) && !!c.ask!.progress);
   const rest = data.cards.filter((c) => !isOpen(c));
   if (!asks.length && !working.length && !rest.length) return empty ? <p className="m-0 text-[12.5px] leading-normal text-mute">{empty}</p> : null;

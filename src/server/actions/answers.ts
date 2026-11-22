@@ -5,7 +5,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { claudeConfig } from '../claude/config';
 
-export interface StoredAnswer { option?: string; at: string; note?: string; kind: 'pick' | 'yes' | 'go' }
+export interface StoredAnswer { option?: string; at: string; note?: string; kind: 'pick' | 'yes' | 'go' | 'why' | 'sfx' }
 type Store = Record<string, Record<string, StoredAnswer>>;
 
 export const answersFile = (): string => path.join(claudeConfig().harnessDir, 'answers.json');

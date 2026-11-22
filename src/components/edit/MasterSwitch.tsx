@@ -8,10 +8,10 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { Timeline } from '@/server/types';
 import { resKey } from '@/components/media/MasterPlayer';
 import { cn } from '@/lib/utils';
-import { baseFor, type FullBase, type FullInfo } from './fullsize';
+import { baseFor, hasFull, type FullBase, type FullInfo } from './fullsize';
 
 export function useFullView(film: string, info: FullInfo | undefined, version: string | undefined, view: (v: string) => Promise<Timeline | undefined>) {
-  const has = !!info && (info.bases.length > 0 || Object.keys(info.takes).length > 0);
+  const has = hasFull(info);
   const [choice, setChoice] = useState<'480' | '1080'>();
   const [fellBack, setFellBack] = useState<string>();
   useEffect(() => {
@@ -68,8 +68,12 @@ function flag() {
 export function MasterSwitch({ sw, className }: { sw: FullView; className?: string }) {
   const loading = useSyncExternalStore(sw.loading.subscribe, sw.loading.get, () => false);
   if (!sw.has) return null;
-  const takes = Object.keys(sw.full?.info.takes ?? {}).length;
-  const title1080 = [sw.base ? `The full-size picture of cut ${sw.base.version} (${sw.base.label})` : '', takes ? `${takes} take${takes === 1 ? '' : 's'} with their own full-size file` : '']
+  const count = (m?: Record<string, string>) => Object.keys(m ?? {}).length;
+  const takes = count(sw.full?.info.takes);
+  const upscaled = count(sw.full?.info.upscaled);
+  const originals = count(sw.full?.info.originals);
+  const title1080 = [sw.base ? `The full-size picture of cut ${sw.base.version} (${sw.base.label})` : '', takes ? `${takes} take${takes === 1 ? '' : 's'} with their own full-size file` : '',
+    upscaled ? `${upscaled} take${upscaled === 1 ? '' : 's'} upscaled whole` : '', originals ? `${originals} full-size original${originals === 1 ? '' : 's'}` : '']
     .filter(Boolean).join(', ') + '. Shots nothing full-size covers play at 480p, marked in amber.';
   const seg = (on: boolean) => cn('inline-flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-1.5 font-mono text-[10.5px] transition-colors duration-200',
     on ? 'bg-white/90 text-black' : 'text-white/75 hover:text-white');

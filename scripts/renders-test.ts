@@ -13,7 +13,7 @@ import { renderFiles } from '../src/server/edit/render-files';
 import { byNewest, clockLen, fileWords, playTag, renderLists, tookWords, type RenderFile } from '../src/components/edit/renderList';
 import { mockNewestMaster, mockQueueRender, mockRenderFiles, mockRenderStates } from '../src/fixtures/renders';
 import { earlierWords, masterAge, masterLogRel, masterNo, masterRel, mastersOf, newestMaster } from '../src/components/edit/masters';
-import { picturePieces, pictureMade, type FullInfo } from '../src/components/edit/fullsize';
+import { hasFull, picturePieces, pictureMade, type FullInfo } from '../src/components/edit/fullsize';
 
 let n = 0;
 const check = (what: string, ok: boolean, detail?: unknown) => { n++; assert.ok(ok, `${what}${detail !== undefined ? `: ${JSON.stringify(detail)}` : ''}`); };
@@ -24,6 +24,11 @@ async function main() {
   // ---- 1. the words of each file
   {
     const w = (p: string, extra: Partial<RenderFile> = {}) => fileWords({ path: p, version: 'v12', kind: 'proxy', ...extra }, 1080, 1920, trackName);
+    // any full-size picture brings the 1080p view, upscaled takes or originals alone too
+    check('no full-size picture: no 1080p view', !hasFull(undefined) && !hasFull({ bases: [], takes: {}, label: 'Higgsfield' }) && !hasFull({ bases: [], takes: {}, upscaled: {}, originals: {}, label: 'Higgsfield' }));
+    check('upscaled takes alone bring the 1080p view', hasFull({ bases: [], takes: {}, upscaled: { 'a-480p.mp4': 'a-1080p-up.mp4' }, label: 'Higgsfield' }));
+    check('full-size originals alone bring the 1080p view', hasFull({ bases: [], takes: {}, originals: { 'card-480.mp4': 'card-1080.mp4' }, label: 'Higgsfield' }));
+    check('a take\'s own 1080p file brings the 1080p view', hasFull({ bases: [], takes: { 'a-480p.mp4': 'a-1080p.mp4' }, label: 'Higgsfield' }));
     check('the plain master', JSON.stringify(w('cut/renders/v12-master.mp4', { kind: 'master' })) === JSON.stringify({ title: 'Master of cut v12', size: '1080 × 1920', sound: false }), w('cut/renders/v12-master.mp4', { kind: 'master' }));
     check('the plain 480p', w('cut/renders/v12-proxy.mp4').title === '480p of cut v12' && w('cut/renders/v12-proxy.mp4').size === '480 × 854');
     const loud = w('cut/renders/v12-proxy-lufs14-tp1.mp4', { tag: 'lufs14-tp1', options: { loudness: { lufs: -14, truePeak: -1 } } });

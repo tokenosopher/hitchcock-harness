@@ -4,7 +4,7 @@ import { promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { natCmp, titleCase } from '../films/util';
 import { isDir, isFile } from '../actions/writes';
-import { libraryId, type LibraryDraft } from './store';
+import { libraryId, type LibraryDraft, type VoiceIdKind } from './store';
 
 export interface FilmInfo { slug: string; title: string; dir: string }
 
@@ -180,24 +180,36 @@ export async function voiceDraft(film: FilmInfo, cid: string, option: number | u
   const lines = await fs.readFile(path.join(film.dir, 'voices', 'element-lines-5s.json'), 'utf8').then((t) => JSON.parse(t) as unknown, () => undefined);
   const el = Array.isArray(lines) ? rec(lines.find((l) => rec(l)?.character === cid)) : rec(rec(lines)?.[cid]);
   const optNo = (o: unknown): number | undefined => num(rec(o)?.option) ?? num(rec(o)?.n);
-  const fromSource = Number(/option (\d+)/.exec(str(C?.source) ?? '')?.[1]);
+  const optionsList = Array.isArray(O?.options) ? O!.options : [];
+  // "option N" in cast.json's source names this character's own option, unless its preview is not one of them
+  const ownPreview = !str(C?.preview) || optionsList.some((o) => str(rec(o)?.file) === str(C?.preview));
+  const fromSource = ownPreview ? Number(/option (\d+)/.exec(str(C?.source) ?? '')?.[1]) : NaN;
   const chosen = num(rec(O?.chosen)?.option) ?? num(el?.option) ?? (Number.isFinite(fromSource) ? fromSource : undefined);
+  // A voice id only for a voice Higgsfield can reuse; a pick is recorded without one until it is saved, and its
+  // picked preview file is the voice (Flow v3.3 - 3 step 5): a later film reuses it by that preview or its design.
   const pickedId = str(C?.voice_id) ?? str(el?.voice_id) ?? str(rec(O?.chosen)?.voice_id);
+  const castPreview = str(C?.preview);
+  const picked = !!pickedId || chosen !== undefined || !!castPreview || !!str(rec(O?.chosen)?.file);
   const want = option ?? chosen;
-  const opt = rec((Array.isArray(O?.options) ? O!.options : []).find((o) => optNo(o) === want));
-  const isPick = !!pickedId && (option === undefined || option === chosen);
+  const opt = rec(optionsList.find((o) => optNo(o) === want));
+  const isPick = picked && (option === undefined || option === chosen);
   if (!opt && !isPick) return undefined;
   const name = str(C?.name) ?? str(el?.name) ?? str(O?.name) ?? (folder ? titleCase(folder.slug) : cid);
   const files: LibraryDraft['files'] = [];
-  const previewRel = str(opt?.file);
+  // the option's file; for a pick that is not one of this character's options (another character's preview, a library
+  // voice), the preview cast.json records
+  const previewRel = str(opt?.file) ?? (isPick ? castPreview : undefined);
   const preview = previewRel ? inFilm(film, previewRel) : undefined;
-  if (preview) files.push({ abs: preview, role: 'preview', label: `option ${want}` });
+  if (preview) files.push({ abs: preview, role: 'preview', ...(opt ? { label: `option ${want}` } : {}) });
   const elRel = isPick ? str(el?.file) : undefined;
   const elFile = elRel ? inFilm(film, elRel) : undefined;
   if (elFile) files.push({ abs: elFile, role: 'element line' });
   if (!files.length) return undefined;
   const voiceId = isPick ? pickedId : str(opt?.voice_id) ?? str(opt?.gid);
-  const prompt = str(rec(rec(O?.rounds)?.[str(opt?.round) ?? ''])?.design_prompt) ?? str(O?.design_prompt) ?? str(opt?.desc) ?? str(opt?.brief);
+  const kind: VoiceIdKind = isPick ? (pickedId ? 'saved voice' : 'picked preview') : 'design preview';
+  // a pick made from another character's preview or a library voice was not designed from this character's prompt
+  const foreign = !opt && !!castPreview;
+  const prompt = foreign ? undefined : str(rec(rec(O?.rounds)?.[str(opt?.round) ?? ''])?.design_prompt) ?? str(O?.design_prompt) ?? str(opt?.desc) ?? str(opt?.brief);
   return {
     meta: {
       id: libraryId(film.slug, cid, folder?.slug ?? name, 'voice', want !== undefined ? `option-${want}` : 'pick'),
@@ -206,8 +218,8 @@ export async function voiceDraft(film: FilmInfo, cid: string, option: number | u
       status, round: str(opt?.round), candidate: want !== undefined ? `option ${want}` : undefined,
       ...(prompt ? { prompt, promptFrom: path.join(film.dir, 'voices', 'options.json') } : {}),
       voice: {
-        voiceId, voiceIdKind: isPick ? 'saved voice' : 'design preview',
-        model: str(C?.model), hz: num(el?.f0) ?? num(opt?.f0_element_line) ?? num(opt?.f0), seconds: isPick ? num(el?.seconds) : num(opt?.seconds),
+        voiceId, voiceIdKind: kind,
+        model: str(C?.model) ?? (kind === 'picked preview' ? undefined : 'elevenlabs_v4'), hz: num(el?.f0) ?? num(opt?.f0_element_line) ?? num(opt?.f0), seconds: isPick ? num(el?.seconds) : num(opt?.seconds),
         source: isPick ? str(C?.source) ?? (want !== undefined ? `design option ${want}` : undefined) : `design option ${want}${opt?.round ? ` (${str(opt.round)} round)` : ''}`,
         note: isPick ? str(C?.note) ?? str(rec(O?.chosen)?.note) ?? str(el?.note) : undefined,
       },

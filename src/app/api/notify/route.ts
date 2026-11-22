@@ -2,7 +2,13 @@
 // On connect: `event: hello` with {seq}; then, with ?after=<seq> (the last notice the page saw, kept in
 // localStorage) or Last-Event-ID, the notices that came after it; then each new one, `id:` = its seq.
 // Through a Cloudflare tunnel the stream is short, like the thread stream (src/server/sse.ts).
+// `event: running` with the films whose Alma is at work, sorted (the sidebar's glowing orb): once on connect, then
+// each time that set changes. No `id:`, so it never moves the notices' Last-Event-ID. Sample films (MOCK=boards):
+// a sample's turn is open from a message until its result or Stop (src/fixtures/mock.ts).
+// `event: waiting` with how many items each film's "Waiting for you" lists, {slug: n} for the films that have any (the
+// sidebar's white dot): once on connect, then each time a film's count changes. No `id:` either.
 import { connection } from 'next/server';
+import { isMock, mockRunning, mockSubscribeRunning } from '@/fixtures/mock';
 import { notifyHub } from '@/server/claude/notify';
 import type { HarnessNotice } from '@/server/types';
 import { lastEventId, shortStream, TUNNEL_RETRY_MS, viaTunnel } from '@/server/sse';
@@ -32,6 +38,18 @@ export async function GET(req: Request): Promise<Response> {
       if (missed?.length) { for (const n of missed) send(n); ender.news(); }
       else write(`id: ${hub.currentSeq()}\n\n`);
       const unsubscribe = hub.subscribe((n) => { send(n); ender.news(); });
+      const sendRunning = (films: string[]): void => write(`event: running\ndata: ${JSON.stringify(films)}\n\n`);
+      const now = isMock() ? mockRunning() : hub.runningNow();
+      sendRunning(now);
+      // through a tunnel a page's first stream delivers it at once when something runs (a reconnect already has it)
+      if (now.length && !req.headers.has('last-event-id')) ender.news();
+      const offRunning = (isMock() ? mockSubscribeRunning : hub.subscribeRunning.bind(hub))((films) => { sendRunning(films); ender.news(); });
+      const sendWaiting = (counts: Record<string, number>): void => write(`event: waiting\ndata: ${JSON.stringify(counts)}\n\n`);
+      const waiting = hub.waitingNow();
+      sendWaiting(waiting);
+      // and when something waits for the user, as for the orb
+      if (Object.keys(waiting).length && !req.headers.has('last-event-id')) ender.news();
+      const offWaiting = hub.subscribeWaiting((counts) => { sendWaiting(counts); ender.news(); });
       const ping = setInterval(() => write(': ping\n\n'), 15000);
       cleanup = () => {
         if (done) return;
@@ -40,6 +58,8 @@ export async function GET(req: Request): Promise<Response> {
         clearInterval(ping);
         ender.stop();
         unsubscribe();
+        offRunning();
+        offWaiting();
         try { controller.close(); } catch { /* already closed */ }
       };
       req.signal.addEventListener('abort', () => cleanup());

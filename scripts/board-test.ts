@@ -19,12 +19,12 @@ const clone = (s: FilmState): FilmState => JSON.parse(JSON.stringify(s)) as Film
 
 // the rows
 ok('places: Locations, Views, Shots, Previz', PLACES.join() === 'loc,views,shots,previz', PLACES);
-ok('people: Faces, Clothing, Sheet, Voices, Video elements', PEOPLE.join() === 'faces,clothing,sheet,voices,elements', PEOPLE);
+ok('people: Faces, Clothing, Sheet, Voices, Character elements', PEOPLE.join() === 'faces,clothing,sheet,voices,elements', PEOPLE);
 ok('then: the gate, Edit, Release (nothing else after the gate)', THEN.join() === 'gate,edit,release', THEN);
 ok('every step still has an address', ['elements', 'scenes', 'finish', 'sound'].every((k) => ORDER.includes(k as never)));
 ok('Scenes, Finish and Sound open under Edit', BOX_OF.scenes === 'edit' && BOX_OF.finish === 'edit' && BOX_OF.sound === 'edit');
 const f0 = flowOf(base, []);
-ok('the video elements box is named as drawn', f0.nodes.elements.name === 'Video elements', f0.nodes.elements.name);
+ok('the character elements box is named in the user\'s words', f0.nodes.elements.name === 'Character elements', f0.nodes.elements.name);
 
 // Previz from each scene's previz
 const pv = clone(base);

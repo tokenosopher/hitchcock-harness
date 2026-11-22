@@ -16,6 +16,7 @@ import { goTakesAsk } from '@/components/edit/early';
 import { useSendAsUser } from '@/components/release/AskAlma';
 import { NO_CUT, useLeftReads } from './useWhatsNext';
 import { LeftTab } from '@/components/edit/LeftTab';
+import { rememberBack } from '@/components/shell/BackLink';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const secs = (n: number) => `${Math.round(n)} s`;
@@ -65,7 +66,7 @@ export function ShotsStep({ s, base, fallback }: { s: FilmState; base: string; f
       <p className="m-0 text-[12.5px] text-sub">Pressing a scene opens it on the timeline.</p>
       <div className="overflow-hidden rounded-[10px] border border-edge">
         {strips.map((st, i) => (
-          <Link key={st.id} href={`${base}/edit?at=${Math.round(st.at * fps)}`} data-shot-scene={st.id}
+          <Link key={st.id} href={`${base}/edit?at=${Math.round(st.at * fps)}`} data-shot-scene={st.id} onClick={() => rememberBack(`${base}/edit`, 'Back to Shots')}
             className={`group/sc flex min-h-[58px] items-center gap-4 bg-transparent px-3 py-1.5 text-ink no-underline transition-colors duration-150 hover:bg-raised/60 ${i > 0 ? 'border-t border-line' : ''}`}>
             <span className="flex w-[180px] flex-none flex-col gap-0.5 max-[760px]:w-[120px]">
               <span className="line-clamp-2 text-[13px] font-medium leading-snug">{st.id} · {st.title}</span>
@@ -99,10 +100,11 @@ export function EditNext({ s, base }: { s: FilmState; base: string }) {
   const onDo = useCallback((d: LeftDo) => {
     const h = cut?.history;
     if (d.kind === 'tick' && currentVersion) { void left.tick({ tick: d.tick, cut: currentVersion, ...(h?.steps[h.at] ? { state: h.steps[h.at].state, ...(typeof h.steps[h.at].rev === 'number' ? { step: h.steps[h.at].rev } : {}) } : {}), ...(edited ? { edited: true } : {}) }); return; }
-    if (d.kind === 'release') { router.push(`${base}/release`); return; }
-    if (d.kind === 'page') { router.push(`${base}/${d.page}`); return; }
     if (d.kind === 'go-takes') { void sendAs(goTakesAsk(d.n, d.scenes)); return; }
-    router.push(`${base}/edit`);
+    // the page a row opens shows "Back to Edit" (BackLink.tsx), back to this list where it was scrolled
+    const to = d.kind === 'release' ? `${base}/release` : d.kind === 'page' ? `${base}/${d.page}` : `${base}/edit`;
+    rememberBack(to, 'Back to Edit');
+    router.push(to);
   }, [left, currentVersion, router, base, cut?.history, edited, sendAs]);
   if (!cut && !cutError) return <p className="m-0 text-[13px] text-sub duration-200 animate-in fade-in-0">Reading the cut…</p>;
   if (!input) return <p className="m-0 text-[13px] text-sub">No cut yet: the list starts with the first version of the timeline.</p>;

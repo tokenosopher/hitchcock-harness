@@ -1,7 +1,14 @@
 'use client';
 // The films registry and the library counts: live on every page (the sidebar is never a snapshot).
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+// `recent`: when each film last moved up the sidebar, newest first: the user wrote in it (a message, a card's answer,
+// Done picking), or something new needs them (a new item in its "Waiting for you"). Never Alma working in the
+// background, her reply alone, the app's writes, or opening the film. The server keeps the record (GET
+// /api/films/recent, so the phone and the Mac agree) and the page reads it again on focus and every 15 s while it is
+// shown; its own sends (almaOutbox's onPosted) and the notices it hears (useNotify's `moved`) move a film at once.
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { FilmRef } from '@/server/types';
+import { onPosted } from './almaOutbox';
+import { useNotify } from '@/components/notify/NotifyProvider';
 
 export interface LibraryCounts { faces: number; voices: number; characters: number; locations: number; note?: string }
 /** drive: the x-harness-drive header of GET /api/films ("connected" | "not connected"). */
@@ -12,9 +19,11 @@ interface FilmsValue extends FilmsState {
   /** A film just made on the Idea page: listed at once, then the registry is read again. */
   add: (film: FilmRef) => void;
   reload: () => Promise<void>;
+  /** When each film last moved up (ISO): the user wrote in it, or something new needs them. */
+  recent: Record<string, string>;
 }
 
-const Ctx = createContext<FilmsValue>({ films: [], loaded: false, started: [], add: () => {}, reload: async () => {} });
+const Ctx = createContext<FilmsValue>({ films: [], loaded: false, started: [], add: () => {}, reload: async () => {}, recent: {} });
 
 async function load(): Promise<FilmsState> {
   const [f, l] = await Promise.all([fetch('/api/films', { cache: 'no-store' }).catch(() => undefined), fetch('/api/library').catch(() => undefined)]);
@@ -39,11 +48,50 @@ export function FilmsProvider({ children }: { children: React.ReactNode }) {
     // a just-made film the registry has not caught up with stays listed
     setV((cur) => ({ ...s, films: [...cur.films.filter((f) => started.includes(f.slug) && !s.films.some((x) => x.slug === f.slug)), ...s.films] }));
   }, [started]);
+  const [recent, setRecent] = useState<Record<string, string>>({});
+  /** Moves a film up here at once; the server notes the same itself. */
+  const bump = useCallback((slug: string) => {
+    const now = new Date().toISOString();
+    setRecent((r) => ({ ...r, [slug]: now }));
+  }, []);
+  // the server's record, merged so a move made here a moment ago is not undone by an older reading
+  const readRecent = useCallback(async () => {
+    const r = await fetch('/api/films/recent', { cache: 'no-store' }).catch(() => undefined);
+    if (!r?.ok) return;
+    const got = (await r.json().catch(() => ({}))) as Record<string, string>;
+    setRecent((cur) => {
+      const next = { ...cur };
+      let changed = false;
+      for (const [k, v] of Object.entries(got)) if (typeof v === 'string' && (!next[k] || v > next[k])) { next[k] = v; changed = true; }
+      return changed ? next : cur;
+    });
+  }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the server's record once it answers
+    void readRecent();
+    const again = () => { if (document.visibilityState === 'visible') void readRecent(); };
+    const t = setInterval(again, 15000);
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    return () => { clearInterval(t); window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); };
+  }, [readRecent]);
+  // a message, an answer or Done picking sent from this page moves its film at once (sendToAlma notes it on the server)
+  useEffect(() => onPosted((film, ok) => { if (ok) bump(film); }), [bump]);
+  // a new item waiting for the user, heard on the notices' stream
+  const { moved } = useNotify();
+  const order = useMemo(() => {
+    let out = recent;
+    for (const [k, at] of Object.entries(moved)) if (!out[k] || at > out[k]) out = { ...out, [k]: at };
+    return out;
+  }, [recent, moved]);
+
   const add = useCallback((film: FilmRef) => {
+    // a film just made goes first (its first message to Alma follows at once)
+    bump(film.slug);
     setStarted((l) => [film.slug, ...l.filter((s) => s !== film.slug)]);
     setV((cur) => ({ ...cur, films: [film, ...cur.films.filter((f) => f.slug !== film.slug)] }));
-  }, []);
-  return <Ctx.Provider value={{ ...v, started, add, reload }}>{children}</Ctx.Provider>;
+  }, [bump]);
+  return <Ctx.Provider value={{ ...v, started, add, reload, recent: order }}>{children}</Ctx.Provider>;
 }
 
 export const useFilms = () => useContext(Ctx);

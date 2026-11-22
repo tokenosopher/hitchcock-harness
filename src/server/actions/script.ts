@@ -1,6 +1,6 @@
 // The script edited in place on the Story page (ASKS 64). One save is the whole sitting: the server re-reads
 // script.md, checks it is the text the page started from (else 409 with the newer text and where each edit lands in
-// it), applies the words (src/lib/script-edit.ts: the version it replaces kept word for word under "## Earlier drafts",
+// it), applies the words of its lines, directions and cards (src/lib/script-edit.ts: the version it replaces kept word for word under "## Earlier drafts",
 // the new note in front of the old one, the rows' count, order and speakers checked unchanged), writes the file in one
 // step (a temporary file, then a rename), and tells Alma what changed so she re-times and checks it. A locked script is
 // refused. Under MOCK=boards the sample films' script lives in memory (src/fixtures/story.ts) and nothing reaches Alma.
@@ -30,8 +30,9 @@ function parseEdits(raw: unknown): ScriptEdit[] {
   return raw.map((e, i) => {
     const x = e as Partial<ScriptEdit>;
     if (typeof x?.scene !== 'string' || !/^S\d+$/.test(x.scene) || typeof x.index !== 'number' || !Number.isInteger(x.index) || x.index < 0
-      || (x.kind !== 'line' && x.kind !== 'action') || typeof x.old !== 'string' || typeof x.new !== 'string') throw new PickError(`edit ${i + 1} is not a scene, a place, a kind and old and new words`);
-    return { scene: x.scene, index: x.index, kind: x.kind, old: x.old, new: x.new };
+      || (x.kind !== 'line' && x.kind !== 'action' && x.kind !== 'card') || typeof x.old !== 'string' || typeof x.new !== 'string'
+      || (x.kind === 'card' && x.part !== 0 && x.part !== 1)) throw new PickError(`edit ${i + 1} is not a scene, a place, a kind and old and new words`);
+    return { scene: x.scene, index: x.index, kind: x.kind, ...(x.kind === 'card' ? { part: x.part } : {}), old: x.old, new: x.new };
   });
 }
 

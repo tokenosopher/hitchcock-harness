@@ -1,9 +1,11 @@
 // The QC targets of one stage, from the film's state: one per character (sheet), location (views),
 // scene (previz, prompt, take) or one for the film (script, voices, elements, cut, frames, captions, kit).
-// The flow board's node pages use this; each stage page builds the same target for what it shows.
+// The flow board's node pages use this; each stage page builds the same target for what it shows. A scene whose
+// pick-up has its own boards or prompt check shows that check, its own kept as the earlier one.
 import type { FilmState, QCStage } from '@/server/types';
 import { FILM_TARGET, qcEntry } from '@/components/lib/qc';
 import { cutTakeIds } from '@/components/lib/derive';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import type { QCTarget } from './QCPanel';
 
 export function qcTargets(s: FilmState, stage: QCStage): QCTarget[] {
@@ -27,12 +29,12 @@ export function qcTargets(s: FilmState, stage: QCStage): QCTarget[] {
     case 'previz':
       return s.scenes.map((sc) => {
         const entry = qcEntry(s, stage, sc.id);
-        return { target: sc.id, label: entry?.latest.label ?? `${sc.id} previz & boards`, entry, ready: !!sc.previzPath, waitsFor: sc.previzPath ? `${sc.id}'s previz and boards` : `${sc.id}'s previz` };
+        return withPickupCheck(s, stage, { target: sc.id, label: entry?.latest.label ?? `${sc.id} previz & boards`, entry, ready: !!sc.previzPath, waitsFor: sc.previzPath ? `${sc.id}'s previz and boards` : `${sc.id}'s previz` });
       });
     case 'prompt':
       return s.scenes.map((sc) => {
         const p = sc.promptVersions[sc.promptVersions.length - 1];
-        return { target: sc.id, label: `${sc.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(s, stage, sc.id), ready: !!p, waitsFor: p ? `${sc.id} prompt ${p.version}` : `${sc.id}'s first prompt` };
+        return withPickupCheck(s, stage, { target: sc.id, label: `${sc.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(s, stage, sc.id), ready: !!p, waitsFor: p ? `${sc.id} prompt ${p.version}` : `${sc.id}'s first prompt` });
       });
     case 'take':
       return s.scenes.map((sc) => {

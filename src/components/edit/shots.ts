@@ -2,23 +2,30 @@
 // finds them (src/server/edit/shots.ts). Here: the timeline with its picture and dialogue clips split at
 // those cuts, the scenes it runs through, and the edit that puts one take's shot in another's place.
 import type { Timeline, TimelineClip, TimelineTrack } from '@/server/types';
-import { deleteClips, endF, lenF, refuse, speedOf, startF, toF, type Edit } from './model';
-import { followFilm, rippleChange } from './subs';
+import { deleteClips, endF, lenF, refuse, speedOf, startF, toF, type ClipFrames, type Edit } from './model';
+import { followFilm, isLine, rippleChange } from './subs';
+import { parseShotId } from './shotCols';
 
 export interface TakeShots {
   src: string; scene: string; name: string; group?: string;
   seconds?: number; cuts?: number[];
-  /** The scene's number of each shot (server/edit/shots.ts, ASKS 60: a pick-up that redoes shot 5 is `[5]`); absent: 1, 2, 3 …. */
+  /** The scene's number of each shot (server/edit/shots.ts, ASKS 60: a pick-up that redoes shot 5 is `[5]`); absent: 1, 2, 3 ….
+   *  Two shots can share one when `tags` names them apart ("7a", "7b"). */
   ids?: number[];
+  /** Each shot's own id as its shots file writes it ("1", "7a", "7b"), when one of them has a letter (shotCols.ts). */
+  tags?: string[];
   /** 'making': a variation being made (ASKS 51); `src` is then its folder and it has no shots yet. */
   state: 'ready' | 'waiting' | 'failed' | 'making';
   /** The take is a variation of another (its folder's `variation.json`, server/edit/shots.ts). */
   variation?: { from: string; note: string; startedAt: string; failed?: string };
+  /** When the take's file landed (its modification time, ms): what tells a take newer than the one in the cut. */
+  made?: number;
 }
 /** A shot of a take. `n`: the scene's shot it is, the number the page shows and its column in the Takes view (a pick-up
- *  that redoes shot 5 has one shot, `n` 5); `i`: its place in the take, 1, 2, 3 …. Nothing stored in a cut keeps
- *  either: a clip is its take's file and its in and out points, and its shot is found from them each time. */
-export interface Shot { n: number; i: number; in: number; out: number }
+ *  that redoes shot 5 has one shot, `n` 5); `i`: its place in the take, 1, 2, 3 …; `tag`: its own id when its take's
+ *  shots file gives one with a letter ("7a" and "7b" are both `n` 7). Nothing stored in a cut keeps any of
+ *  them: a clip is its take's file and its in and out points, and its shot is found from them each time. */
+export interface Shot { n: number; i: number; in: number; out: number; tag?: string }
 export type BySrc = Map<string, TakeShots>;
 
 const toS = (f: number, fps: number) => Math.round((f / fps) * 1e6) / 1e6;
@@ -28,12 +35,22 @@ const clone = (tl: Timeline): Timeline => JSON.parse(JSON.stringify(tl)) as Time
 export function shotsOf(t?: TakeShots): Shot[] {
   if (!t || !t.cuts || !t.seconds) return [];
   const b = [0, ...t.cuts, t.seconds];
-  const ids = t.ids && t.ids.length === b.length - 1 ? t.ids : undefined;
-  return b.slice(0, -1).map((s, i) => ({ n: ids?.[i] ?? i + 1, i: i + 1, in: s, out: b[i + 1] }));
+  let ids = t.ids && t.ids.length === b.length - 1 && t.ids.every((n) => Number.isInteger(n) && n >= 1) ? t.ids : undefined;
+  // a tag a shot: as many as the shots, each its own and of the shot's number; else none
+  const tags = ids && t.tags && t.tags.length === ids.length && new Set(t.tags).size === ids.length && t.tags.every((x, i) => parseShotId(x)?.n === ids![i]) ? t.tags : undefined;
+  // two shots of one number with nothing to tell them apart: the take as before, left to right
+  if (ids && !tags && new Set(ids).size !== ids.length) ids = undefined;
+  return b.slice(0, -1).map((s, i) => ({ n: ids?.[i] ?? i + 1, i: i + 1, in: s, out: b[i + 1], ...(ids && tags ? { tag: tags[i] } : {}) }));
 }
 
+/** A shot's id when it has a letter ("7a"), else undefined: what tells two shots of one column apart. */
+export const subTag = (s: Shot): string | undefined => (s.tag && s.tag !== String(s.n) ? s.tag : undefined);
+/** A shot of a take as the Takes view and the cut's marks name it: "<src>#<n>", or "<src>#7a" for a shot with a letter. */
+export const shotKey = (src: string, s: Shot): string => `${src}#${subTag(s) ?? s.n}`;
+
 /** The shot numbers a generation's shots file gives, in its order: `{shots: [{id: "5"}, …]}` (or the list alone), each a
- *  whole number above the one before. Undefined when there is no file or an id is not such a number ("2a", a repeat). */
+ *  whole number above the one before. Undefined when there is no file or an id is not such a number ("2a", a repeat).
+ *  (The server reads ids with letters too: shotCols.ts readShotTags, shotTagsFor.) */
 export function readShotIds(v: unknown): number[] | undefined {
   const list = Array.isArray(v) ? v : v && typeof v === 'object' ? (v as { shots?: unknown }).shots : undefined;
   if (!Array.isArray(list) || !list.length) return undefined;
@@ -53,19 +70,30 @@ export function idsFor(file: number[] | undefined, cuts: number[] | undefined): 
   return file.every((n, i) => n === i + 1) ? undefined : file;
 }
 
-/** The take's shot that is the scene's shot `n`. */
-export const shotOf = (t: TakeShots | undefined, n: number): Shot | undefined => shotsOf(t).find((s) => s.n === n);
+/** The take's shot that is the scene's shot `n`; with `tag` ("7b"), the one of that id among the shots of `n`. */
+export const shotOf = (t: TakeShots | undefined, n: number, tag?: string): Shot | undefined =>
+  shotsOf(t).find((s) => s.n === n && (tag === undefined || subTag(s) === tag || (!subTag(s) && tag === String(n))));
 
-/** The shot of its take a clip shows: the one its middle falls in. */
+/** The shot of the scene a clip fills: a planned shot's or a board's own number; a take's shot swapped into another
+ *  place of its scene's layout (`layout` and `shot` set), that place; else the shot of its take its middle
+ *  falls in (`ownShot`). */
 export function shotNo(c: TimelineClip, by: BySrc): number | undefined {
   // a planned shot or a board (the timeline from day one) knows its own number
   if (c.plan === 'shot' || c.plan === 'board') return c.shot;
   if (c.plan) return undefined;
+  if (c.layout !== undefined && c.shot !== undefined) return c.shot;
+  return ownShot(c, by);
+}
+/** The shot of its take a clip shows: the one its middle falls in, wherever the clip was put. */
+export function ownShotOf(c: TimelineClip, by: BySrc): Shot | undefined {
+  if (c.plan) return undefined;
   const shots = shotsOf(by.get((c.src ?? '')));
   if (!shots.length) return undefined;
   const mid = (c.in + c.out) / 2;
-  return (shots.find((s) => mid >= s.in && mid < s.out) ?? shots[shots.length - 1]).n;
+  return shots.find((s) => mid >= s.in && mid < s.out) ?? shots[shots.length - 1];
 }
+/** The scene's number of the shot of its take a clip shows (ownShotOf). */
+export const ownShot = (c: TimelineClip, by: BySrc): number | undefined => ownShotOf(c, by)?.n;
 export const sceneOf = (c: TimelineClip, by: BySrc): string | undefined => c.takeRef?.scene ?? c.scene ?? by.get((c.src ?? ''))?.scene;
 
 export function mainTracks(tl: Timeline): { v?: TimelineTrack; a?: TimelineTrack } {
@@ -73,6 +101,47 @@ export function mainTracks(tl: Timeline): { v?: TimelineTrack; a?: TimelineTrack
     v: tl.tracks.find((t) => t.id === 'V1') ?? tl.tracks.find((t) => t.kind === 'video'),
     a: tl.tracks.find((t) => t.id === 'A1') ?? tl.tracks.find((t) => t.kind === 'audio'),
   };
+}
+
+/** The shot a clip's label names, as putShot and the split below name one ("S4 · take 1 · shot 3", "… · shot 3 (to
+ *  confirm)", "… · shot 7b"): "3", "7b". Undefined for a whole take ("S4 · take 1") or a run of shots. */
+export function labelShot(c: TimelineClip): string | undefined {
+  const m = /·\s*shot\s+(\d+[a-z]?)\s*(?:\(|$)/i.exec(c.label ?? '');
+  return m ? parseShotId(m[1])?.tag : undefined;
+}
+
+/** The shots of its take a clip shows any frame of. The two frames of slack the split allows (a rounded in or out), and
+ *  never more than half the clip: a clip of a frame or two still shows the shot it sits in. */
+function touched(c: TimelineClip, shots: Shot[], fps: number): Shot[] {
+  const m = Math.min(2 / fps, Math.max(0, (c.out - c.in) / 2 - 1e-6));
+  return shots.filter((s) => s.out > c.in + m && s.in < c.out - m);
+}
+
+/** A clip that is one shot by its name and shows no other shot whole, only some frames of the shot before or after it:
+ *  a shot extended past its own frames before trims stopped there. It stays the one clip it is, shown
+ *  and edited whole, and is never cut in pieces (the cut is the user's: nothing rewrites it). Its shot, or undefined. */
+function namedShot(c: TimelineClip, shots: Shot[], fps: number): Shot | undefined {
+  const n = labelShot(c);
+  if (n === undefined) return undefined;
+  const t = touched(c, shots, fps);
+  const own = t.find((s) => (subTag(s) ?? String(s.n)) === n);
+  const h = 0.5 / fps;
+  return own && t.every((s) => s === own || s.in < c.in - h || s.out > c.out + h) ? own : undefined;
+}
+
+/** What a clip may use of its file, for a trim, a moved join or an edge trimmed alone (model.ts ClipFrames): the file's
+ *  length and, for a clip of a take cut into shots, its own shot's frames, the one it shows (or the one it is named
+ *  for, when it was already extended past them). A clip left whole over several shots (one played at another speed is
+ *  not cut at its shots) may use the run of shots it spans. A file with one shot, or none known, has its own ends. */
+export function clipFrames(c: TimelineClip, by: BySrc, seconds: number | undefined, fps: number): ClipFrames {
+  if (c.plan || isLine(c)) return seconds;
+  const shots = shotsOf(by.get((c.src ?? '')));
+  if (shots.length < 2) return seconds;
+  const own = namedShot(c, shots, fps);
+  const t = own ? [own] : touched(c, shots, fps);
+  if (!t.length) return seconds;
+  const a = t[0], b = t[t.length - 1];
+  return { seconds, shot: { from: a.in, to: b.out, first: a.n, last: b.n } };
 }
 
 const baseLabel = (c: TimelineClip) => (c.takeRef ? `${c.takeRef.scene} · ${c.takeRef.take}` : (c.label ?? '').replace(/\s*·\s*(shots?\s.*|whole)$/i, ''));
@@ -96,6 +165,8 @@ export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
   const split = (t: TimelineTrack): TimelineClip[] => t.clips.flatMap((c) => {
     const take = by.get((c.src ?? ''));
     if (!take?.cuts || speedOf(c) !== 1) return [c];
+    // already one shot (its name says which), only run on past its own frames: kept whole
+    if (namedShot(c, shotsOf(take), tl.fps)) return [c];
     const inner = take.cuts.filter((b) => b > c.in + m && b < c.out - m);
     if (!inner.length) return [c];
     changed = true;
@@ -103,7 +174,9 @@ export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
     return bounds.slice(0, -1).map((from, i) => {
       const piece: TimelineClip = { ...c, id: i === 0 ? c.id : fresh(`${c.id}~${i + 1}`), in: r6(from), out: r6(bounds[i + 1]), at: r6(c.at + (from - c.in)) };
       const n = shotNo(piece, by);
-      if (n) piece.label = `${baseLabel(c)} · shot ${n}`;
+      // a shot with a letter is named by it ("shot 7b"), as Alma names it
+      const own = n ? ownShotOf(piece, by) : undefined;
+      if (n) piece.label = `${baseLabel(c)} · shot ${own && own.n === n ? subTag(own) ?? n : n}`;
       if (i > 0) { delete piece.fadeIn; delete piece.dissolve; }
       if (i < bounds.length - 2) delete piece.fadeOut;
       return piece;
@@ -160,12 +233,17 @@ export function takeNames(takes: TakeShots[], tl?: Timeline): Map<string, string
   return out;
 }
 
-/** Which shots of which takes the picture uses now: "<src>#<n>". */
+/** Which shots of which takes the picture uses now: "<src>#<n>" (shotKey: "<src>#7a" for a shot with a letter). */
 export function inFilm(tl: Timeline, by: BySrc): Set<string> {
   const out = new Set<string>();
-  for (const c of mainTracks(tl).v?.clips ?? []) { const n = shotNo(c, by); if (n && !c.muted) out.add(`${c.src}#${n}`); }
+  for (const c of mainTracks(tl).v?.clips ?? []) { const s = ownShotOf(c, by); if (s && !c.muted) out.add(shotKey(c.src ?? '', s)); }
   return out;
 }
+/** The letter id of the shot of its take a clip shows ("7a"), or undefined (an ordinary shot, or no shots known). */
+export const clipTag = (c: TimelineClip, by: BySrc): string | undefined => { const s = ownShotOf(c, by); return s ? subTag(s) : undefined; };
+/** The picture clips of a scene's shot `n` that show a shot with the letter `tag` ("7a"), of any take: the place in the
+ *  film a shot of that id fills. Empty for no tag. */
+const sameTag = (clips: TimelineClip[], by: BySrc, tag: string | undefined): TimelineClip[] => (tag ? clips.filter((c) => clipTag(c, by) === tag) : []);
 
 // ---- shots and scenes out of the film (13 Nov 2026: "the scenes should be disabled, and then it should jump
 // from one scene that I had to another scene"). A shot or a whole scene with no clip in the cut is out of the
@@ -201,13 +279,15 @@ export function sceneAnchor(tl: Timeline, by: BySrc, scene: string, order?: stri
 }
 
 /** Take a scene's shot `n` out of the film: its picture (every piece of it) and the sound linked to it go,
- *  and what follows closes up on every track, markers too, as a delete on the picture does. */
-export function takeOutShot(tl: Timeline, by: BySrc, scene: string, n: number, takeName?: string): Edit | undefined {
+ *  and what follows closes up on every track, markers too, as a delete on the picture does. With `tag` ("7b"), only
+ *  the pieces that show a shot of that id: the shot of the column it shares with another goes alone. */
+export function takeOutShot(tl: Timeline, by: BySrc, scene: string, n: number, takeName?: string, tag?: string): Edit | undefined {
   const { v } = mainTracks(tl);
-  const mine = shotClips(tl, by, scene, n);
+  const all = shotClips(tl, by, scene, n);
+  const mine = tag ? sameTag(all, by, tag) : all;
   if (!v || !mine.length) return undefined;
   const e = deleteClips(tl, mine.map((c) => ({ trackId: v.id, clipId: c.id })), true);
-  return e && { tl: e.tl, note: `${scene} shot ${n} taken out of the film${takeName ? ` (${takeName})` : ''}` };
+  return e && { tl: e.tl, note: `${scene} shot ${tag ?? n} taken out of the film${takeName ? ` (${takeName})` : ''}` };
 }
 
 /** Take every shot of a scene out of the film, the gaps closing. */
@@ -224,21 +304,26 @@ let seq = 0;
 /** Put shot `n` of `take` where the scene's shot `n` sits now (or, when the cut has none, after the scene's
  *  earlier shots, else before its later ones; a scene with no clip in the cut at all goes where `sceneAnchor`
  *  puts it). The picture and its sound go in together; when the lengths differ everything after moves by the
- *  difference, on every track, markers too. */
-export function putShot(tl0: Timeline, scene: string, n: number, take: TakeShots, takeName: string, by: BySrc, id?: string, order?: string[]): (Edit & { clipId: string; at: number; frames: number }) | undefined {
-  const shot = shotOf(take, n);
+ *  difference, on every track, markers too. `tag` ("7b"): the take's shot of that id among its shots of `n`; it takes
+ *  the place of the shot of the same id when the film has one there, else of the whole shot `n`. */
+export function putShot(tl0: Timeline, scene: string, n: number, take: TakeShots, takeName: string, by: BySrc, id?: string, order?: string[], into?: { to: number; layout: number }, tag?: string): (Edit & { clipId: string; at: number; frames: number }) | undefined {
+  const shot = shotOf(take, n, tag);
   const tl = clone(tl0);
   const { v, a } = mainTracks(tl);
   if (!shot || !v) return undefined;
   const fps = tl.fps;
+  // the place: the scene's shot `n`, or (a shot of another layout's take, or put in another place) `into.to`
+  const to = into?.to ?? n;
   const mine = v.clips.filter((c) => sceneOf(c, by) === scene);
-  const slot = mine.filter((c) => shotNo(c, by) === n);
+  const whole = mine.filter((c) => shotNo(c, by) === to);
+  const same = into ? [] : sameTag(whole, by, subTag(shot));
+  const slot = same.length ? same : whole;
   let at: number, oldLen: number;
   if (slot.length) {
     at = Math.min(...slot.map((c) => startF(c, fps)));
     oldLen = Math.max(...slot.map((c) => endF(c, fps))) - at;
   } else {
-    const before = mine.filter((c) => (shotNo(c, by) ?? 0) < n);
+    const before = mine.filter((c) => (shotNo(c, by) ?? 0) < to);
     at = before.length ? Math.max(...before.map((c) => endF(c, fps))) : mine.length ? Math.min(...mine.map((c) => startF(c, fps))) : sceneAnchor(tl, by, scene, order);
     oldLen = 0;
   }
@@ -247,6 +332,20 @@ export function putShot(tl0: Timeline, scene: string, n: number, take: TakeShots
   const was = slot[0];
   if (was && slot.length === 1 && was.src === take.src && toF(was.in, fps) === toF(shot.in, fps) && lenF(was, fps) === newLen) return undefined;
   if (a) a.clips = a.clips.filter((c) => !slot.some((s) => s.src === c.src && startF(s, fps) === startF(c, fps) && toF(s.in, fps) === toF(c.in, fps)));
+  // a planned place (its boards, or a planned shot): the planned lines under it give way to the shot's own sound; a line
+  // that runs on past the place keeps the part outside it (a shot of a take put among a layout's boards)
+  if (a && slot.some((c) => c.plan)) {
+    const s0 = at, s1 = at + oldLen;
+    a.clips = a.clips.flatMap((c) => {
+      if (c.plan !== 'line' || c.scene !== scene) return [c];
+      const c0 = startF(c, fps), c1 = endF(c, fps);
+      if (c1 <= s0 || c0 >= s1) return [c];
+      const keep: TimelineClip[] = [];
+      if (c0 < s0) keep.push({ ...c, out: r6(c.in + (s0 - c0) / fps) });
+      if (c1 > s1) keep.push({ ...c, id: `${c.id}~r`, at: toS(s1, fps), in: 0, out: r6((c1 - s1) / fps) });
+      return keep;
+    });
+  }
   v.clips = v.clips.filter((c) => !gone.has(c.id));
   const d = newLen - oldLen;
   // a locked track is never changed (14 Nov): not the picture or its sound, nor one whose clips after the shot would
@@ -264,29 +363,41 @@ export function putShot(tl0: Timeline, scene: string, n: number, take: TakeShots
     for (const mk of tl.markers) if (toF(mk.at, fps) >= at + oldLen) mk.at = toS(toF(mk.at, fps) + d, fps);
   }
   const clipId = id ?? `c${Date.now().toString(36)}${(seq++).toString(36)}`;
-  const clip: TimelineClip = { id: clipId, src: take.src, in: r6(shot.in), out: r6(shot.out), at: toS(at, fps), label: `${scene} · ${takeName} · shot ${n}`, takeRef: { scene, take: takeName } };
+  const name = subTag(shot) ?? String(n);
+  const clip: TimelineClip = { id: clipId, src: take.src, in: r6(shot.in), out: r6(shot.out), at: toS(at, fps), label: `${scene} · ${takeName} · shot ${name}`, takeRef: { scene, take: takeName },
+    ...(into ? { shot: to, layout: into.layout } : {}) };
   v.clips.push(clip);
   v.clips.sort((x, y) => x.at - y.at);
   if (a) { a.clips.push({ ...clip, id: `${clipId}a` }); a.clips.sort((x, y) => x.at - y.at); }
   const wasName = was?.takeRef?.take;
   const diff = d ? `, ${Math.abs(d)} f ${d > 0 ? 'longer' : 'shorter'}` : '';
-  return { tl, clipId, at, frames: newLen, note: `${scene} shot ${n}: ${takeName}${wasName && wasName !== takeName ? ` in place of ${wasName}` : slot.length ? '' : ' added'}${diff}` };
+  const moved = to !== n ? `${scene} shot ${to}: ${takeName} shot ${name}` : `${scene} shot ${name}: ${takeName}`;
+  return { tl, clipId, at, frames: newLen, note: `${moved}${wasName && wasName !== takeName ? ` in place of ${wasName}` : slot.length ? (slot.some((c) => c.plan) ? ' in place of its boards' : '') : ' added'}${diff}` };
 }
 
 // ---- several shots of other takes selected at once (ASKS 52, 14 Nov 2026: "select multiple takes to taste check the
 // full video with them")
 
-/** A shot of a take, chosen in the Takes view: scene, shot number, the take's file. */
-export interface Pick { scene: string; n: number; src: string }
+/** A shot of a take, chosen in the Takes view: scene, shot number, the take's file; `into`, the place it goes when
+ *  that is not the scene's shot `n` of the take's own layout (another layout's take, or another place);
+ *  `tag`, which of the take's shots of `n` when it has more than one ("7b"). */
+export interface Pick { scene: string; n: number; src: string; into?: { to: number; layout: number }; tag?: string }
 
-/** "S2 shot 2, S5 shots 1 and 3, S7 shot 3": the shots by scene, in the film's order of scenes. */
-export function picksWords(picks: { scene: string; n: number }[], order?: string[]): string {
+/** The key of a chosen shot, as the Takes view's cells name theirs: "<src>#<n>", "<src>#7b". */
+export const pickKey = (p: { src: string; n: number; tag?: string }): string => `${p.src}#${p.tag ?? p.n}`;
+/** Two chosen shots that go in the same place of the film, so only one of them can be chosen: the same scene and
+ *  column, unless both have a letter and the letters differ ("7a" and "7b" go side by side). */
+export const samePlace = (a: Pick, b: Pick): boolean =>
+  a.scene === b.scene && (a.into?.to ?? a.n) === (b.into?.to ?? b.n) && (!!a.into || !!b.into || !a.tag || !b.tag || a.tag === b.tag);
+
+/** "S2 shot 2, S5 shots 1 and 3, S7 shots 7a and 7b": the shots by scene, in the film's order of scenes. */
+export function picksWords(picks: { scene: string; n: number; tag?: string }[], order?: string[]): string {
   const scenes = sceneOrder(picks.map((p) => p.scene));
   const list = order ? [...scenes].sort((a, b) => (order.indexOf(a) + 1 || 1e9) - (order.indexOf(b) + 1 || 1e9) || a.localeCompare(b, undefined, { numeric: true })) : scenes;
   const and = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
   return list.map((sc) => {
-    const ns = [...new Set(picks.filter((p) => p.scene === sc).map((p) => p.n))].sort((a, b) => a - b);
-    return `${sc} ${ns.length === 1 ? 'shot' : 'shots'} ${and(ns.map(String))}`;
+    const ns = [...new Set(picks.filter((p) => p.scene === sc).map((p) => p.tag ?? String(p.n)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return `${sc} ${ns.length === 1 ? 'shot' : 'shots'} ${and(ns)}`;
   }).join(', ');
 }
 
@@ -303,7 +414,7 @@ export function withPicks(tl: Timeline, picks: Pick[], by: BySrc, names: Map<str
   picks.forEach((p, i) => {
     const take = by.get(p.src);
     if (!take) return;
-    const e = putShot(cur, p.scene, p.n, take, names.get(p.src) ?? take.name, by, idBase !== undefined ? `${idBase}${i}` : undefined, order);
+    const e = putShot(cur, p.scene, p.n, take, names.get(p.src) ?? take.name, by, idBase !== undefined ? `${idBase}${i}` : undefined, order, p.into, p.tag);
     if (!e) return;
     cur = e.tl; ids.push(e.clipId); note = e.note;
     placed.push({ ...p, clipId: e.clipId, at: e.at, frames: e.frames });
@@ -312,6 +423,6 @@ export function withPicks(tl: Timeline, picks: Pick[], by: BySrc, names: Map<str
   // a later shot moved the earlier ones' places: read them from the cut as it ends up
   const v = mainTracks(cur).v;
   for (const x of placed) { const c = v?.clips.find((k) => k.id === x.clipId); if (c) x.at = startF(c, cur.fps); }
-  if (placed.length > 1) note = `${placed.length} shots from other takes put in the film: ${picksWords(placed, order)}`;
+  if (placed.length > 1) note = `${placed.length} shots from other takes put in the film: ${picksWords(placed.map((x) => ({ scene: x.scene, n: x.into?.to ?? x.n, tag: x.into ? undefined : x.tag })), order)}`;
   return { tl: cur, note, ids, placed };
 }

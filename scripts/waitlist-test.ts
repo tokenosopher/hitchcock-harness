@@ -1,15 +1,16 @@
 // npm run waitlist:test
 // What's next's "waits for you" list (src/components/flow/waitList.ts), fed with the sample films' states
-// (src/fixtures/day1.ts) and a few made-up flows. It follows "Waiting for you" (GatePage):
-// the same order (Alma's cards that ask, in the order the work goes, then the picks in the chains, then those at the
-// gate) and the same count; each item says what it asks for and what the answer is; a voice round asked in a card is
-// asked once; and a step gets a "waits for" line only from a real waiting item, never from the order of the steps.
+// (src/fixtures/day1.ts) and a few made-up flows. "Waiting for you" (GatePage) lists the same items: only what asks the
+// user to choose now (nothing still being made), the most important first whatever the source (locations, faces,
+// clothing, sheets, voices, props, the rest, the go for the video last), and the same count; each item says what it
+// asks for and what the answer is; a voice round asked in a card is asked once; and a step gets a "waits for" line only
+// from a real waiting item, never from the order of the steps.
 // One line per check, a summary line, exit 1 when any check fails.
 import { day1SampleState } from '../src/fixtures/day1';
 import { FIXTURES_BOARDS } from '../src/fixtures';
 import { flowOf, type Flow } from '../src/components/lib/flow';
 import { voiceParts, type GateItem } from '../src/components/lib/derive';
-import { itemHref, soundsOf, waitItemsOf, waitsByStep, waitsLine, type WaitItem } from '../src/components/flow/waitList';
+import { beingMade, byImportance, itemHref, soundsOf, waitItemsOf, waitRank, waitsByStep, waitsLine, type WaitItem } from '../src/components/flow/waitList';
 import { leftChip, waitWords, whatIsLeft, type StepId } from '../src/components/edit/left';
 import type { FeedCard, FilmState } from '../src/server/types';
 
@@ -26,14 +27,14 @@ const sample = (slug: string): FilmState => {
   return JSON.parse(JSON.stringify(s)) as FilmState;
 };
 const keys = (items: WaitItem[]) => items.map((x) => x.key);
-const listOf = (s: FilmState) => { const flow = flowOf(s, []); return { flow, items: waitItemsOf(flow, s) }; };
+const listOf = (s: FilmState) => { const flow = flowOf(s, []); return { flow, items: waitItemsOf(flow) }; };
 const item = (items: WaitItem[], key: string) => items.find((x) => x.key === key);
 
 // ---- the waiting sample: three cards of Alma's ask (a yes on the boards, the Neighbour's voice round, a go with its quote),
 // and the gate holds the Neighbour's Voices pick
 const W = listOf(sample('sample-day1-waiting'));
-ok('waiting sample: "Waiting for you" counts four (three cards and the Voices pick)', W.flow.waiting === 4 && W.flow.asks.length === 3 && W.flow.gate.length === 1, [W.flow.waiting, W.flow.asks.length, W.flow.gate.length]);
-ok('waiting sample: the cards in the order the work goes (Previz, Voices, Scenes)', keys(W.items).join() === 'card:ASK-boards-S1-S2-v2,card:ASK-C08-voice-r1,card:GO-S3-closer', keys(W.items));
+ok('waiting sample: "Waiting for you" counts three (the three cards; the Neighbour\'s voice pick is the card\'s question, asked once)', W.flow.waiting === 3 && W.items.length === 3 && W.flow.asks.length === 3 && W.flow.gate.length === 1, [W.flow.waiting, W.items.length, W.flow.asks.length, W.flow.gate.length]);
+ok('waiting sample: by importance: the voice (Voices) before the boards (Previz), the go at Scenes last', keys(W.items).join() === 'card:ASK-C08-voice-r1,card:ASK-boards-S1-S2-v2,card:GO-S3-closer', keys(W.items));
 
 // the same cards listed by the feed in another order come out in the same order
 const shuffled = sample('sample-day1-waiting');
@@ -63,7 +64,8 @@ const noCard = sample('sample-day1-waiting');
 noCard.feed!.asks = noCard.feed!.asks.filter((c) => c.id !== 'ASK-C08-voice-r1');
 const NC = listOf(noCard);
 const voicesPick = NC.items.find((x) => x.gate?.kind === 'voices');
-ok('voice once: without the card the Voices pick is listed whole', !!voicesPick && voicesPick.ready && !voicesPick.voiceIds && voicesPick.line === 'C08 ready · 1 of 1', voicesPick);
+// one voice card per character whose options landed, its round and count as its line
+ok('voice once: without the card the Neighbour\'s voice pick is listed, its own card', !!voicesPick && voicesPick.ready && voicesPick.key === 'gate:pick:C08:voice' && JSON.stringify(voicesPick.voiceIds) === '["C08"]' && voicesPick.line === 'Round 1 · 3 voices landed 15 Nov', voicesPick);
 ok('voice once: and its sounds are the Neighbour\'s three voices', soundsOf(voicesPick!, noCard).map((x) => x.key).join() === 'C08:1,C08:2,C08:3', soundsOf(voicesPick!, noCard));
 // a second character's round ready too: the pick stays, for that character only
 const two = sample('sample-day1-waiting');
@@ -72,19 +74,19 @@ const ready2 = voiceParts(two, []).filter((p) => p.state === 'ready').map((p) =>
 const T = listOf(two);
 const narrowed = T.items.find((x) => x.gate?.kind === 'voices');
 ok('voice once: two characters ready (C02 and C08), the made-up state is as meant', ready2 === 'C02,C08', ready2);
-ok('voice once: the Voices pick stays for the character no card asks about', JSON.stringify(narrowed?.voiceIds) === '["C02"]' && narrowed?.line === 'C02 ready; C08 asked in a card above', narrowed);
+ok('voice once: the voice card stays for the character no card asks about', JSON.stringify(narrowed?.voiceIds) === '["C02"]' && narrowed?.key === 'gate:pick:C02:voice' && T.items.filter((x) => x.gate?.kind === 'voices').length === 1, narrowed);
 ok('voice once: its sounds are only that character\'s', !!narrowed && soundsOf(narrowed, two).length > 0 && soundsOf(narrowed, two).every((x) => x.key.startsWith('C02:')), narrowed && soundsOf(narrowed, two));
-ok('voice once: a character left, the list is as long as "Waiting for you" (three cards and the Voices pick)', T.flow.waiting === 4 && T.items.length === 4, [T.flow.waiting, T.items.length]);
+ok('voice once: each question once: three cards and C02\'s voice (the gate holds C08\'s too)', T.flow.waiting === 4 && T.items.length === 4, [T.flow.waiting, T.items.length]);
 // only a card at Voices that asks a pick narrows it
 const asYes = sample('sample-day1-waiting');
 asYes.feed!.asks = asYes.feed!.asks.map((c) => (c.id === 'ASK-C08-voice-r1' ? { ...c, ask: { kind: 'yes' as const, options: [] } } : c));
-ok('voice once: a card at Voices that asks a yes leaves the Voices pick whole', !!listOf(asYes).items.find((x) => x.gate?.kind === 'voices' && !x.voiceIds), keys(listOf(asYes).items));
+ok('voice once: a card at Voices that asks a yes leaves the Voices pick whole', !!listOf(asYes).items.find((x) => x.gate?.kind === 'voices' && x.gate.id === 'C08'), keys(listOf(asYes).items));
 const elsewhere = sample('sample-day1-waiting');
 elsewhere.feed!.asks = elsewhere.feed!.asks.map((c) => (c.id === 'ASK-C08-voice-r1' ? { ...c, place: 'faces' as const } : c));
-ok('voice once: a pick card about the Neighbour at another step leaves the Voices pick whole', !!listOf(elsewhere).items.find((x) => x.gate?.kind === 'voices' && !x.voiceIds), keys(listOf(elsewhere).items));
+ok('voice once: a pick card about the Neighbour at another step leaves the Voices pick whole', !!listOf(elsewhere).items.find((x) => x.gate?.kind === 'voices' && x.gate.id === 'C08'), keys(listOf(elsewhere).items));
 
 // ---- the order and count of "Waiting for you": cards, then the chains, then the gate
-ok('count: the same as "Waiting for you" when no voice is asked twice (cards, then the gate\'s pick)', NC.items.length === NC.flow.waiting && keys(NC.items).join() === 'card:ASK-boards-S1-S2-v2,card:GO-S3-closer,gate:pick:voices', [NC.flow.waiting, keys(NC.items)]);
+ok('count: the same as "Waiting for you"; the gate\'s voice pick ranks before the boards card', NC.items.length === NC.flow.waiting && keys(NC.items).join() === 'gate:pick:C08:voice,card:ASK-boards-S1-S2-v2,card:GO-S3-closer', [NC.flow.waiting, keys(NC.items)]);
 // a made-up film at its characters: four faces in every state, a place's look, a voice round
 const cands = (who: string, round: string, n: number, landed: number) => Array.from({ length: n }, (_, k) => ({ id: `${round}-${k + 1}`, ...(k < landed ? { path: `cast/${who}/${round}/${round}-${k + 1}.png` } : {}) }));
 const made = sample('sample-day1-script');
@@ -104,19 +106,21 @@ made.spend = { lines: [
   { date: '2026-11-07', what: 'Faces · C02 round 1', service: 'higgsfield', cost: { credits: 2.4 }, note: '20 × 0.12 cr' },
 ], total: { credits: 4.8 } } as unknown as FilmState['spend'];
 const D = listOf(made);
-ok('made-up film: every pick listed, ready or not, as many as "Waiting for you" counts', D.items.length === D.flow.waiting && D.items.length === 6, [D.items.length, D.flow.waiting]);
-ok('made-up film: the chains first, in their order, then the gate', keys(D.items).join() === 'gate:pick:C01,gate:pick:C02,gate:pick:C03,gate:pick:C04,gate:pick:L01,gate:pick:voices', keys(D.items));
+ok('made-up film: only the picks that can be made, as many as "Waiting for you" counts', D.items.length === D.flow.waiting && D.items.length === 2 && D.flow.gate.length === 5, [D.items.length, D.flow.waiting, D.flow.gate.length]);
+ok('made-up film: the two faces ready, nothing still being made or not started', keys(D.items).join() === 'gate:pick:C01,gate:pick:C04', keys(D.items));
 const word = (k: string) => item(D.items, k);
 ok('picks: a face ready is "Pick one", named by its id, answered by your pick', word('gate:pick:C01')?.word === 'Pick one' && word('gate:pick:C01')?.title === 'C01 · the Keeper face' && word('gate:pick:C01')?.answer === 'your pick' && word('gate:pick:C01')?.ready === true, word('gate:pick:C01'));
-ok('picks: a round being made says so and cannot be answered yet', word('gate:pick:C02')?.word === 'Being made' && word('gate:pick:C02')?.ready === false, word('gate:pick:C02'));
-ok('picks: one not started says "Not ready"', word('gate:pick:C03')?.word === 'Not ready' && word('gate:pick:C03')?.ready === false, word('gate:pick:C03'));
+ok('picks: a round being made or not started is not on the list; the being-made ones are counted for the quiet line', !word('gate:pick:C02') && !word('gate:pick:C03') && !word('gate:pick:L01') && beingMade(D.flow) === D.flow.gate.filter((g) => g.state === 'running' || g.state === 'queued').length + D.flow.working.length && beingMade(D.flow) > 0, [beingMade(D.flow), D.flow.gate.map((g) => `${g.key}:${g.state}`)]);
 ok('picks: the line is the pick\'s round and count', word('gate:pick:C04')?.line === 'Round 1 · 20 candidates landed 7 Nov · 2.40 cr', word('gate:pick:C04')?.line);
-ok('picks: a face belongs to Faces, a master to Locations, the voices to Voices', [word('gate:pick:C01')?.place, word('gate:pick:L01')?.place, word('gate:pick:voices')?.place].join() === 'faces,loc,voices');
-ok('picks: a face opens its character, a master the locations, the voices the Voices page', [itemHref(word('gate:pick:C01')!, D.flow), itemHref(word('gate:pick:L01')!, D.flow), itemHref(word('gate:pick:voices')!, D.flow)].join() === '/character/C01,/locations,/character/voices');
+const readyMaster = { ...D.flow, gate: D.flow.gate.map((g) => (g.kind === 'master' ? { ...g, state: 'ready' as const } : g)) } as Flow;
+const masterItem = waitItemsOf(readyMaster).find((x) => x.key === 'gate:pick:L01');
+ok('picks: a master whose round landed comes first', waitItemsOf(readyMaster)[0]?.key === 'gate:pick:L01', keys(waitItemsOf(readyMaster)));
+ok('picks: a face belongs to Faces, a master to Locations, the voices to Voices', [word('gate:pick:C01')?.place, masterItem?.place, voicesPick?.place].join() === 'faces,loc,voices');
+ok('picks: a face opens its character, a master the locations, the voices the Voices page', [itemHref(word('gate:pick:C01')!, D.flow), itemHref(masterItem!, readyMaster), itemHref(voicesPick!, NC.flow)].join() === '/character/C01,/locations,/character/voices');
 const boards = listOf(sample('sample-day1-boards'));
 const vgo = boards.items[0];
 ok('the go for the video: one item, "Your go", its own title, its meta as the line, the go page', boards.items.length === 1 && boards.flow.waiting === 1 && vgo.word === 'Your go' && vgo.answer === 'your go' && vgo.title === 'Go for the video' && vgo.place === 'scenes' && vgo.line === boards.flow.gate[0].meta && itemHref(vgo, boards.flow) === '/go', vgo);
-ok('nothing waits: an empty list', waitItemsOf(flowOf(FIXTURES_BOARDS.states['the-lighthouse'], []), FIXTURES_BOARDS.states['the-lighthouse']).length === 0);
+ok('nothing waits: an empty list', waitItemsOf(flowOf(FIXTURES_BOARDS.states['the-lighthouse'], [])).length === 0);
 
 // made-up flows: the gate's own order mixed, a sheet, a queued round
 const gi = (o: Partial<GateItem> & Pick<GateItem, 'key' | 'kind' | 'group' | 'state'>): GateItem => ({ id: '', title: o.key, chip: o.key, meta: '', ...o });
@@ -126,23 +130,39 @@ const mixed = { asks: [card('c-scenes', 'scenes', 'go'), card('c-story', 'story'
   gi({ key: 'c-sheet', kind: 'sheet', group: 'chains', state: 'ready', id: 'C05', title: 'the Wife sheet' }),
   gi({ key: 'c-face', kind: 'face', group: 'chains', state: 'queued', id: 'C06', title: 'the Son face' }),
 ], working: [], nodes: {} } as unknown as Flow;
-const M = waitItemsOf(mixed, sample('sample-day1-waiting'));
-ok('made up: cards first by the work\'s order, then every chain pick, then the gate, whatever the gate\'s own order', keys(M).join() === 'card:c-story,card:c-scenes,gate:c-sheet,gate:c-face,gate:g-voices', keys(M));
+const M = waitItemsOf(mixed);
+ok('made up: by importance whatever the source: the story card, the sheet pick, then the card at Scenes; nothing not ready', keys(M).join() === 'card:c-story,gate:c-sheet,card:c-scenes', keys(M));
 ok('made up: a sheet asks a yes', item(M, 'gate:c-sheet')?.word === 'Yes or no' && item(M, 'gate:c-sheet')?.answer === 'your yes' && item(M, 'gate:c-sheet')?.place === 'sheet', item(M, 'gate:c-sheet'));
-ok('made up: a queued round says "Queued"', item(M, 'gate:c-face')?.word === 'Queued' && item(M, 'gate:c-face')?.ready === false, item(M, 'gate:c-face'));
+ok('made up: a queued round and one not started are left out, the queued one counted as being made', !item(M, 'gate:c-face') && !item(M, 'gate:g-voices') && beingMade(mixed) === 1, [keys(M), beingMade(mixed)]);
+
+// ---- the order of "Waiting for you" // choose ... the location to choose, that goes top priority"): what the most later work waits on first, whatever the
+// source; Alma's cards by their step; equal ranks keep their order; the go for the video last
+const all = { asks: [card('a-go', 'scenes', 'go'), card('a-voice', 'voices', 'pick'), card('a-loc', 'loc', 'yes'), card('a-face', 'faces', 'pick'), card('a-previz', 'previz', 'yes')], gate: [
+  gi({ key: 'g-go', kind: 'go', group: 'gate', state: 'ready', title: 'Go for the video' }),
+  gi({ key: 'g-prop', kind: 'prop', group: 'gate', state: 'ready', id: 'P01' }),
+  gi({ key: 'g-voice', kind: 'voices', group: 'gate', state: 'ready', id: 'C02' }),
+  gi({ key: 'g-cloth', kind: 'clothing', group: 'gate', state: 'ready', id: 'C02' }),
+  gi({ key: 'g-face', kind: 'face', group: 'chains', state: 'ready', id: 'C03' }),
+  gi({ key: 'g-master', kind: 'master', group: 'chains', state: 'ready', id: 'L01' }),
+  gi({ key: 'g-sheet', kind: 'sheet', group: 'gate', state: 'ready', id: 'C04' }),
+], working: [], nodes: {} } as unknown as Flow;
+ok('order: locations, faces, clothing, sheets, voices, props, the rest by the work\'s order, the go for the video last', keys(waitItemsOf(all)).join() === 'card:a-loc,gate:g-master,card:a-face,gate:g-face,gate:g-cloth,gate:g-sheet,card:a-voice,gate:g-voice,gate:g-prop,card:a-previz,card:a-go,gate:g-go', keys(waitItemsOf(all)));
+ok('order: the ranks behind it', ['loc', 'faces', 'clothing', 'sheet', 'voices'].map((place) => waitRank({ place: place as WaitItem['place'] })).every((r, i, a) => i === 0 || r > a[i - 1]) && waitRank({ place: 'loc', gate: gi({ key: 'p', kind: 'prop', group: 'gate', state: 'ready' }) }) > waitRank({ place: 'voices' }) && waitRank({ place: 'scenes', gate: gi({ key: 'g', kind: 'go', group: 'gate', state: 'ready' }) }) > waitRank({ place: 'release' }));
+ok('order: equal ranks keep the order they came in', byImportance([{ place: 'faces' as const, k: 'b' }, { place: 'loc' as const, k: 'x' }, { place: 'faces' as const, k: 'a' }]).map((x) => x.k).join() === 'x,b,a');
+ok('order: the go alone is the first item', keys(waitItemsOf({ ...all, asks: [], gate: [all.gate[0]] } as Flow)).join() === 'gate:g-go');
 
 // ---- which step each item holds up: only from a real waiting item, never from the order
 const STEPS: StepId[] = ['script', 'characters', 'places', 'shots', 'boards', 'takes', 'approved', 'full', 'sound', 'subs', 'master', 'final', 'posted'];
 const steps = (current: StepId, done: StepId[] = []) => STEPS.map((id) => ({ id, done: done.includes(id), current: id === current }));
 const at = (m: Map<StepId, WaitItem[]>) => [...m.entries()].map(([k, v]) => `${k}:${v.map((x) => x.key).join('+')}`).join(' ');
 const byStep = waitsByStep(W.items, steps('characters', ['script']));
-ok('steps: each card counts against its own step while that step is still to do', at(byStep) === 'boards:card:ASK-boards-S1-S2-v2 characters:card:ASK-C08-voice-r1 takes:card:GO-S3-closer', at(byStep));
+ok('steps: each card counts against its own step while that step is still to do', at(byStep) === 'characters:card:ASK-C08-voice-r1 boards:card:ASK-boards-S1-S2-v2 takes:card:GO-S3-closer', at(byStep));
 ok('steps: no step gets a line from the order alone (the steps still to do with nothing waiting get none)', byStep.size === 3 && !['places', 'shots', 'approved', 'full', 'sound'].some((id) => byStep.has(id as StepId)), [...byStep.keys()]);
 ok('steps: nothing waiting, no line at all', waitsByStep([], steps('characters', ['script'])).size === 0);
 const behind = waitsByStep(W.items, steps('full', ['script', 'characters', 'places', 'shots', 'boards', 'takes', 'approved']));
-ok('steps: a card whose own step is done counts against the step to look at', at(behind) === 'full:card:ASK-boards-S1-S2-v2+card:ASK-C08-voice-r1+card:GO-S3-closer', at(behind));
+ok('steps: a card whose own step is done counts against the step to look at', at(behind) === 'full:card:ASK-C08-voice-r1+card:ASK-boards-S1-S2-v2+card:GO-S3-closer', at(behind));
 const ahead = waitsByStep(W.items, steps('takes', ['script', 'places', 'shots', 'boards']));
-ok('steps: a card whose own step comes before the step to look at counts against the step to look at', at(ahead) === 'takes:card:ASK-boards-S1-S2-v2+card:ASK-C08-voice-r1+card:GO-S3-closer', at(ahead));
+ok('steps: a card whose own step comes before the step to look at counts against the step to look at', at(ahead) === 'takes:card:ASK-C08-voice-r1+card:ASK-boards-S1-S2-v2+card:GO-S3-closer', at(ahead));
 ok('steps: only what can be answered now holds a step up', at(waitsByStep(D.items, steps('characters', ['script']))) === 'characters:gate:pick:C01+gate:pick:C04', at(waitsByStep(D.items, steps('characters', ['script']))));
 ok('steps: no step to look at (all done), no line', waitsByStep(W.items, STEPS.map((id) => ({ id, done: true, current: false }))).size === 0);
 

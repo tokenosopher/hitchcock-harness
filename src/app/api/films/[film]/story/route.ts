@@ -6,6 +6,8 @@ import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { PickError } from '@/server/actions/pick';
 import { saveStory, settleStory, storyVersionText } from '@/server/actions/story';
 import { isMock } from '@/fixtures/mock';
+import { notifyHub } from '@/server/claude/notify';
+import { storySent } from '@/components/lib/sent';
 
 export async function GET(req: Request, { params }: RouteContext<'/api/films/[film]/story'>): Promise<Response> {
   await connection();
@@ -29,9 +31,13 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
   if (!isMock() && !(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   const dryRun = body.dryRun === true;
   try {
-    const r = typeof body.settle === 'string'
-      ? await settleStory(body.settle, film, { dryRun })
-      : await saveStory({ text: typeof body.text === 'string' ? body.text : '', base: typeof body.base === 'string' ? body.base : undefined, force: body.force === true }, film, { dryRun });
+    if (typeof body.settle === 'string') {
+      const r = await settleStory(body.settle, film, { dryRun });
+      // the story's item leaves the film's count of "Waiting for you" (the sidebar's white dot) at once
+      if (!r.dryRun) notifyHub().userActed(film, [storySent('story', r.version)]);
+      return Response.json(r, { headers: { 'cache-control': 'no-store' } });
+    }
+    const r = await saveStory({ text: typeof body.text === 'string' ? body.text : '', base: typeof body.base === 'string' ? body.base : undefined, force: body.force === true }, film, { dryRun });
     return Response.json(r, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {
     if (e instanceof PickError) return Response.json({ error: e.message }, { status: e.status });

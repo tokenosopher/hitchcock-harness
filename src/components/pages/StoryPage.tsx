@@ -16,9 +16,11 @@ import { IconCheck } from '@/components/shell/icons';
 import { useFilmPage, filmMeta, filmPath } from './common';
 import { cn } from '@/lib/utils';
 import { Feed, ShownLink } from '@/components/feed/Feed';
+import { StepRunning } from '@/components/flow/RunningNow';
 import { StoryEditor } from './StoryEditor';
 import { ScriptPanel } from './ScriptPanel';
 import { storyVersionOf } from '@/lib/script-edit';
+import { settledHow } from '@/lib/story-settled';
 import { useUI } from '@/components/data/ui';
 import { StepIntro } from '@/components/intro/StepIntro';
 
@@ -42,6 +44,8 @@ export function StoryPage() {
   const params = useSearchParams();
   const asked = params.get('tab') as Tab | null;
   const [tab, setTabState] = useState<Tab | undefined>(asked && TABS.includes(asked) ? asked : undefined);
+  // the version a link asked for ("Read the script ›" on a card, ?v=v2): that tab opens at it
+  const askedV = params.get('v') ?? undefined;
   const [edits, setEdits] = useState(0);
   const onEdits = useCallback((n: number) => setEdits(n), []);
   const script = state?.script;
@@ -68,7 +72,7 @@ export function StoryPage() {
   const newer = from && storyV && Number(storyV.slice(1)) > Number(from.slice(1)) ? from : undefined;
   const story = state.story;
   const tag: Record<Tab, string> = {
-    story: story ? `${story.current} · ${story.settled?.version === story.current ? 'settled' : 'not settled'}` : 'not yet',
+    story: story ? `${story.current} · ${story.settled?.version === story.current ? `settled${settledHow(story.settled)}` : 'not settled'}` : 'not yet',
     script: script && current ? `${current} · ${lockedV ? 'locked' : 'draft'}${newer ? ` · from ${newer}` : ''}` : 'not yet',
     brief: '',
   };
@@ -81,8 +85,9 @@ export function StoryPage() {
       <PageBody wide>
         <StageTitle kicker="Stage 1 · Setup and story" title="Story"
           sub={script ? `The brief, the story and the script.${lockedV ? ` Everything after the lock reads script ${lockedV}.` : ''}` : 'The brief and the story. The script is written from the story once you settle it.'}
-          right={<QCChip spec={qcSpec('script')} targets={{ target: FILM_TARGET, label: 'script', entry: qcEntry(state, 'script', FILM_TARGET), ready: !!script, waitsFor: script ? `script ${current ?? ''}`.trim() : 'the script' }} />} />
+          right={<QCChip spec={qcSpec('script')} targets={{ target: FILM_TARGET, label: 'script', entry: qcEntry(state, 'script', FILM_TARGET), ready: !!script, waitsFor: script ? `script ${current ?? ''}`.trim() : 'the script' }} phoneTall />} />
         <StepIntro step="story" />
+        <StepRunning step="story" />
 
         <div className="-mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
           <div role="tablist" aria-label="Story, script or brief" data-story-tabs className="inline-flex max-w-full gap-0.5 rounded-[10px] border border-line bg-raised p-[3px]">
@@ -99,8 +104,8 @@ export function StoryPage() {
         </div>
 
         <div key={shown} className="flex min-w-0 flex-col gap-5 duration-200 ease-out animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none">
-          {shown === 'story' && <StoryEditor key={film} state={state} film={film} locked={!!lockedV} hasScript={!!script} />}
-          {shown === 'script' && (script ? <ScriptPanel state={state} film={film} tasks={tasks} base={base} onEdits={onEdits} /> : (
+          {shown === 'story' && <StoryEditor key={film} state={state} film={film} locked={!!lockedV} hasScript={!!script} version={asked === 'story' ? askedV : undefined} />}
+          {shown === 'script' && (script ? <ScriptPanel state={state} film={film} tasks={tasks} base={base} onEdits={onEdits} version={asked === 'script' ? askedV : undefined} /> : (
             <Card className="flex max-w-[760px] flex-col items-start gap-2.5 px-6 py-7">
               <span className="text-[15px] font-medium">No script yet</span>
               <span className="max-w-[56ch] text-[13px] leading-relaxed text-sub">Alma writes the script from the story once you settle it: the lines, the cut into generations and their timing. The lock comes after, and it is yours.</span>
@@ -161,13 +166,13 @@ function BriefTab({ state, brief }: { state: NonNullable<ReturnType<typeof useFi
           {brief.sections.filter((s) => s.items.length && !/^Characters/.test(s.heading)).map((s) => (
             <div key={s.heading} className="flex flex-col gap-2 border-t border-line px-5 py-3.5">
               <span className="lbl">{s.heading.replace(/\s*\(.*\)$/, '')}</span>
-              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              <ul className="m-0 flex list-none flex-col gap-2 p-0 max-[760px]:-my-2.5 max-[760px]:gap-0">
                 {s.items.map((it, i) => {
                   const id = /^(D\d+)\s+(.*)$/.exec(it.label ?? '');
                   return (
                     <li key={i}>
                       <button type="button" onClick={() => ui.addChip({ id: `brief:${it.label ?? i}`, label: id ? `${id[1]} · ${id[2]}` : (it.label ?? it.text).slice(0, 40) })}
-                        className="flex min-h-6 w-full cursor-pointer gap-2.5 rounded-md text-left text-[13px] leading-normal outline-none focus-visible:shadow-[0_0_0_2px_#A1A1AA]">
+                        className="flex min-h-6 w-full cursor-pointer gap-2.5 rounded-md text-left text-[13px] leading-normal outline-none focus-visible:shadow-[0_0_0_2px_#A1A1AA] max-[760px]:min-h-11 max-[760px]:py-2.5">
                         {id ? <span className="w-6 flex-none font-mono text-[11.5px] text-sub">{id[1]}</span> : <IconCheck size={12} className="mt-1 flex-none text-sub" />}
                         <span className="flex min-w-0 flex-col">
                           {(id?.[2] ?? it.label) && <span className="font-medium text-ink">{id?.[2] ?? it.label}</span>}

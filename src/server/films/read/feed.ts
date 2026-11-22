@@ -14,6 +14,9 @@ import { FEED_PLACES, type FeedAsk, type FeedCard, type FeedMedia, type FeedOpti
 import { answersStamp, readAnswers } from '../../actions/answers';
 import { progressStamp, readProgress } from '../../actions/progress';
 import { abs, asRecord, asString, AUDIO_RE, IMAGE_RE, redact, VIDEO_RE, type FilmCtx } from '../util';
+import { readSounds, sfxRefs, soundAnswerKey } from './sfx';
+import { cutOf } from '../../../components/edit/cutLink';
+import { checkAnswers, checkDebrief, countsOf, DEBRIEF_ANSWERS_REL, DEBRIEF_REL } from '../../../components/lib/debrief';
 
 export interface Feed { cards: FeedCard[]; warnings: string[] }
 
@@ -23,8 +26,9 @@ const str = (v: unknown): string | undefined => {
   const s = asString(v);
   return s === undefined ? undefined : clean(s) || undefined;
 };
+// a card's words keep their line breaks, "- " lists and **bold**: the card draws them (Feed.tsx CardText)
 const paras = (v: unknown): string[] =>
-  (typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []).map(clean).filter(Boolean);
+  (typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []).map((x) => redact(x).trim()).filter(Boolean);
 
 const kindOf = (p: string): FeedMedia['kind'] => (VIDEO_RE.test(p) ? 'video' : AUDIO_RE.test(p) ? 'audio' : IMAGE_RE.test(p) ? 'image' : 'file');
 
@@ -127,9 +131,18 @@ function mediaOf(card: Record<string, unknown>): FeedMedia[] {
 
 function askOf(card: Record<string, unknown>, media: FeedMedia[]): FeedAsk | undefined {
   const kind = asString(card.ask);
-  if (kind !== 'pick' && kind !== 'yes' && kind !== 'go') return undefined;
+  if (kind !== 'pick' && kind !== 'yes' && kind !== 'go' && kind !== 'why') return undefined;
   let options: FeedOption[] = [];
-  if (kind === 'pick') {
+  if (kind === 'why') {
+    // a why card's options are a few likely answers to tap; the user may also write their own, or skip
+    options = (Array.isArray(card.options) ? card.options : []).flatMap((x, i): FeedOption[] => {
+      const o = asRecord(x);
+      const label = typeof x === 'string' ? clean(x) : o ? str(o.label) : undefined;
+      return label ? [{ id: (o && str(o.id)) ?? String(i + 1), label }] : [];
+    });
+  } else if (kind === 'pick' && Array.isArray(card.sfx)) {
+    // a card of sound picks: one pick per sound, the sounds read in readFeed; no options of its own
+  } else if (kind === 'pick') {
     if (Array.isArray(card.options)) {
       options = card.options.flatMap((x, i): FeedOption[] => {
         if (typeof x === 'string') return [{ id: String(i + 1), label: clean(x) }];
@@ -218,7 +231,7 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
 
       const text = [...paras(c.what), ...paras(c.text)];
       // a card's own "who", or a first paragraph that starts "Who:" (how cards said it before the field existed)
-      const whoLine = !str(c.who) && /^Who:\s*/i.test(text[0] ?? '') ? text.shift()!.replace(/^Who:\s*/i, '') : undefined;
+      const whoLine = !str(c.who) && /^Who:\s*/i.test(text[0] ?? '') ? clean(text.shift()!.replace(/^Who:\s*/i, '')) : undefined;
       const card: FeedCard = {
         key: n > 1 ? `${base}~${n}` : base,
         id: own,
@@ -240,6 +253,13 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
       const fl = asRecord(c.fileLine);
       if (fl && str(fl.name)) card.fileLine = { name: str(fl.name)!, sub: str(fl.sub), path: asString(fl.path) };
       if (str(c.note)) card.note = str(c.note);
+      // the place on the cut the card is about: its button opens the Edit page there
+      const cut = cutOf(c.cut);
+      if (cut) card.cut = cut;
+      else if (c.cut !== undefined) warn(`"${title.slice(0, 50)}": its "cut" names no clip, take, sound or moment (clip, take and shot, sound and try, t, at)`);
+      // the sound designer's sounds, by name; readFeed reads where each sits and its tries
+      const refs = sfxRefs(c.sfx);
+      if (refs.length) card.sounds = refs.map((r) => ({ name: r.name, tries: [], ...(r.prediction ? { prediction: r.prediction } : {}) }));
       out.push(card);
       above = card;
     };
@@ -265,7 +285,8 @@ export async function readFeed(ctx: FilmCtx, slug: string): Promise<Feed> {
   } catch {
     return { cards: [], warnings: [] };
   }
-  const stamp = `${file}:${mtime}:${await answersStamp()}:${await progressStamp()}`;
+  const mt = async (rel: string): Promise<number> => (await fs.stat(abs(ctx, rel)).catch(() => undefined))?.mtimeMs ?? 0;
+  const stamp = `${file}:${mtime}:${await answersStamp()}:${await progressStamp()}:${await mt(DEBRIEF_REL)}:${await mt(DEBRIEF_ANSWERS_REL)}:${await mt('audio/sfx/plan.json')}`;
   const hit = cache.get(slug);
   if (hit?.stamp === stamp) return hit.feed;
 
@@ -285,12 +306,56 @@ export async function readFeed(ctx: FilmCtx, slug: string): Promise<Feed> {
     // the user wrote to Alma about the card: in progress until Alma rewrites the card (a newer "updated") or it is answered
     const p = marks[c.key];
     if (c.ask && !c.ask.answer && !c.ask.progress && p && (c.date ?? '') <= p.at) c.ask.progress = { at: p.at, by: 'harness' };
+    // sound picks: each sound's place and tries, the answer given to each; the card is answered once every
+    // sound has one (a try, or "none of these")
+    if (c.sounds?.length) {
+      c.sounds = await readSounds(ctx.dir, c.sounds.map((x) => ({ name: x.name, prediction: x.prediction })));
+      for (const snd of c.sounds) {
+        const sa = answers[soundAnswerKey(c.key, snd.name)];
+        if (sa?.option) snd.answer = { option: sa.option, note: sa.note, at: sa.at };
+      }
+      if (c.ask && !c.ask.answer && c.sounds.every((x) => x.answer)) {
+        const last = c.sounds.map((x) => x.answer!.at ?? '').sort().pop();
+        c.ask.answer = { option: c.sounds.map((x) => `${x.name} ${x.answer!.option}`).join(', '), ...(last ? { at: last } : {}), by: 'harness' };
+      }
+    }
   }
+  const debrief = await debriefCard(ctx, warnings);
+  if (debrief) cards.push(debrief);
   // newest first across the whole record (the record is newest-first only inside each group); undated cards keep their place at the end
   cards.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
   const feed = { cards, warnings };
   cache.set(slug, { stamp, feed });
   return feed;
+}
+
+/** The debrief: one card that waits for the user while review/debrief.json has questions and the answers
+ *  were not sent; it leads to the film's debrief page, where they are answered. Written by the harness, not Alma. */
+async function debriefCard(ctx: FilmCtx, warnings: string[]): Promise<FeedCard | undefined> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await fs.readFile(abs(ctx, DEBRIEF_REL), 'utf8'));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') warnings.push(`${DEBRIEF_REL}: not valid JSON`);
+    return undefined;
+  }
+  const { debrief, problems } = checkDebrief(raw);
+  for (const p of problems) warnings.push(`${DEBRIEF_REL}: ${p}`);
+  if (!debrief?.questions.length) return undefined;
+  let a = checkAnswers({});
+  try { a = checkAnswers(JSON.parse(await fs.readFile(abs(ctx, DEBRIEF_ANSWERS_REL), 'utf8'))); } catch { /* none yet */ }
+  return debriefFeedCard(debrief.questions.length, countsOf(debrief, a), debrief.made, a.sent);
+}
+
+/** The debrief's card, from its counts (also the sample films'). */
+export function debriefFeedCard(n: number, k: { answered: number; skipped: number }, made?: string, sent?: string): FeedCard {
+  return {
+    key: 'DEBRIEF', id: 'DEBRIEF', title: `The debrief: ${n === 1 ? 'one question' : `${n} questions`} about why you changed what you changed`,
+    sub: 'Alma asks where the reason for a change of yours is not plain. Answer on the debrief page; skip any.',
+    date: made, section: 'Release', place: 'release', ids: [], placed: 'card', media: [],
+    debrief: { questions: n, answered: k.answered, skipped: k.skipped },
+    ask: { kind: 'debrief', options: [], ...(sent ? { answer: { at: sent, option: `${k.answered} answered`, by: 'harness' as const } } : {}) },
+  };
 }
 
 export const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;

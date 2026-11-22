@@ -12,3 +12,15 @@ const subscribe = (cb: () => void) => {
 export function useIsPhone() {
   return useSyncExternalStore(subscribe, () => window.matchMedia(Q).matches, () => false);
 }
+
+const COARSE = '(pointer: coarse)';
+const subscribeCoarse = (cb: () => void) => {
+  const m = window.matchMedia(COARSE);
+  m.addEventListener('change', cb);
+  return () => m.removeEventListener('change', cb);
+};
+
+/** A touch-first device (the phone, a tablet), whatever its width: Enter in the message box is a new line there. */
+export function useIsTouch() {
+  return useSyncExternalStore(subscribeCoarse, () => window.matchMedia(COARSE).matches, () => false);
+}

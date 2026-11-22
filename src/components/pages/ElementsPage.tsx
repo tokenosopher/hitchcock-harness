@@ -1,5 +1,8 @@
 'use client';
-// Elements (stage 3b): one 5-second video element per speaking character, from the picked sheet and voice.
+// Character elements (stage 3b): one row per character saying what it has: a 5-second video element for each
+// speaking character, from the picked sheet and voice (from the library when the character came from there), and the
+// image element only for a silent character or a group of extras. A character whose element waits for a go shows that
+// one card, with the sheet, the face and the line in it.
 // design/boards/Elements.dc.html.
 import { usePage } from '@/components/data/ui';
 import { fmtCost, fmtCredits, sumCredits } from '@/components/lib/format';
@@ -11,16 +14,22 @@ import { Badge, Card } from '@/components/shell/atoms';
 import { IconChevronRight, IconInfo } from '@/components/shell/icons';
 import { Media } from '@/components/media/Media';
 import { useFilmPage, filmMeta, filmPath } from './common';
-import { Feed } from '@/components/feed/Feed';
+import { AskCard, Feed } from '@/components/feed/Feed';
+import { useThread } from '@/components/data/thread';
+import { elementPart, needsNewElement, speaks } from '@/components/lib/derive';
+import { repoPath } from '@/components/lib/format';
 import { StepIntro } from '@/components/intro/StepIntro';
 
 const CUTS: [string, string][] = [['0–1', 'full body, front'], ['1–2', 'full body, back'], ['2–3', 'full body, side'], ['3–4', 'eye macro'], ['4–5', 'hands + feet']];
 
 export function ElementsPage() {
   const { state, error, ui, base } = useFilmPage();
-  const speaking = (state?.characters ?? []).filter((c) => !c.extra && !c.silent);
+  const { tasks } = useThread();
+  const all = state?.characters ?? [];
+  // the count is the new video elements only: from the library is done already, the silent and the extras need none
+  const speaking = all.filter(needsNewElement);
   const done = speaking.filter((c) => c.element?.state === 'final').length;
-  usePage(state ? `Elements · ${done} of ${speaking.length} done` : undefined, 'Ask Alma to redo an element, or move on…', done ? ['Play all four', 'Run QC'] : ['What does an element need?'], ['How were the elements made?']);
+  usePage(state ? `Character elements · ${done} of ${speaking.length} done` : undefined, 'Ask Alma to redo an element, or move on…', done ? ['Play all four', 'Run QC'] : ['What does an element need?'], ['How were the elements made?']);
   if (!state) return <Loading error={error} />;
 
   // the element's own jobs; "video elements" in a scene's line is that scene's references, not an element job
@@ -30,11 +39,12 @@ export function ElementsPage() {
 
   return (
     <>
-      <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Elements' }]}
-        meta={filmMeta(state, `${speaking.length} elements`)} phoneSub={`Elements · ${done} of ${speaking.length} done`} />
+      <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Character elements' }]}
+        back={{ label: 'Back to Character elements', href: `${base}?open=elements`, soft: true }}
+        meta={filmMeta(state, `${speaking.length} new video ${speaking.length === 1 ? 'element' : 'elements'}`)} phoneSub={`Character elements · ${done} of ${speaking.length} done`} />
       <PageBody wide>
-        <StageTitle kicker="Stage 3b · Video elements" title="Elements"
-          sub="One 5-second video element for each speaking character, made from the picked sheet and the picked voice. Every scene takes it as a video reference, with the head-to-toe sheet beside it."
+        <StageTitle kicker="Stage 3b · Character elements" title="Character elements"
+          sub="One 5-second video element for each speaking character, made from the picked sheet and the picked voice. Every scene takes it as a video reference, with the head-to-toe sheet beside it. A silent character or a group of extras has its image element only."
           right={
             <div className="flex flex-col items-end gap-1.5">
               <div className="flex items-center gap-2">
@@ -83,19 +93,35 @@ export function ElementsPage() {
         )}
 
         <div className="grid grid-cols-2 gap-3 max-[1100px]:grid-cols-1">
-          {speaking.map((c) => {
+          {all.filter((c) => speaks(c) || c.extra || c.silent).map((c) => {
+            const part = elementPart(state, tasks, c);
+            if (!speaks(c))
+              return (
+                <Card key={c.id} as="article" dashed className="line-in flex flex-col gap-1.5 p-4" data-element-row={c.id}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-ink" /><span className="font-mono text-[12px] text-sub">{c.id}</span><span className="text-[14px] font-medium">{c.name}</span></span>
+                    <Badge dim dashed>Image element only</Badge>
+                  </div>
+                  <span className="text-[12.5px] text-sub">{part.line.replace(/^Image element only · /, '')}</span>
+                </Card>
+              );
+            // a card that asks about this element (its go, with the sheet, the face and the line) shows in its row
+            const mine = (id: string) => id === c.id || new RegExp(`^${c.id}[a-z]$`).test(id);
+            const asks = c.element?.state === 'final' ? [] : (state.feed?.asks ?? []).filter((a) => a.place === 'elements' && a.ids.some(mine));
             const pickedVoice = c.voice?.rounds.flatMap((r) => r.candidates).find((o) => o.id === c.voice?.pick?.candidateId);
             const state3 = c.element?.state ?? 'none';
             return (
-              <Card key={c.id} as="article" dashed={state3 === 'none'} className="flex flex-col gap-3 p-4">
+              <Card key={c.id} as="article" dashed={state3 === 'none'} className="flex flex-col gap-3 p-4" data-element-row={c.id}>
                 <div className="flex items-center justify-between gap-2">
                   <button type="button" onClick={() => ui.addChip({ id: `element:${c.id}`, label: `E-${c.id} ${c.name}`, ref: c.element?.path })} className="flex cursor-pointer items-center gap-2 text-left">
                     <span className={state3 === 'final' ? 'size-1.5 rounded-full bg-ink' : 'size-1.5 rounded-full border border-mute'} />
                     <span className="font-mono text-[12px] text-sub">E-{c.id}</span><span className="text-[14px] font-medium">{c.name}</span>
                   </button>
-                  <Badge dim={state3 !== 'final'} dashed={state3 === 'none'}>{state3 === 'final' ? 'Done' : state3 === 'draft' ? 'Draft' : out ? 'Not made' : 'Waiting for picks'}</Badge>
+                  <Badge dim={state3 !== 'final'} dashed={state3 === 'none'}>{state3 === 'final' ? (c.reused ? 'From the library' : 'Done') : state3 === 'draft' ? 'Draft' : out ? 'Not made' : asks.length ? 'Waiting for your go' : 'Waiting for picks'}</Badge>
                 </div>
-                <div className="grid grid-cols-1 gap-3.5">
+                <span key={part.line} data-element-line className="line-in -mt-1.5 text-[12.5px] text-sub">{part.line}</span>
+                {asks.map((a) => <AskCard key={a.key} film={state.film.slug} card={a} toRepo={(r) => repoPath(state.film.folder, state.film.repo, r)} from="the Character elements page" />)}
+                {!asks.length && <div className="grid grid-cols-1 gap-3.5">
                   <div className="flex flex-col gap-1">
                     {c.element?.path
                       ? <Media path={filmPath(state, c.element.path)} w={320} t={0.5} play fit="cover" className="aspect-[16/9] rounded-[6px] border border-edge" onPlay={() => ui.addChip({ id: `element:${c.id}`, label: `E-${c.id} ${c.name}`, ref: c.element?.path })} />
@@ -107,12 +133,13 @@ export function ElementsPage() {
                     <dt className="text-sub">Voice</dt><dd className="m-0">{c.voice?.pick ? `${c.voice.pick.candidateId.replace('-', ' ')}${pickedVoice?.hz !== undefined ? ` · ${pickedVoice.hz.toFixed(1)} Hz` : ''}` : 'not picked'}</dd>
                     <dt className="text-sub">Line</dt><dd className="m-0">{c.voice?.elementLine?.seconds !== undefined ? `${c.voice.elementLine.seconds} s, cut from the preview` : '—'}</dd>
                   </dl>
-                </div>
+                </div>}
               </Card>
             );
           })}
         </div>
-        <Feed query="place=elements" note="element clips and their tests" from="the Elements page" />
+        <Feed query="place=elements" note="element clips and their tests" from="the Character elements page"
+          except={(state.feed?.asks ?? []).filter((a) => a.place === 'elements' && all.some((c) => speaks(c) && c.element?.state !== 'final' && a.ids.some((id) => id === c.id || new RegExp(`^${c.id}[a-z]$`).test(id)))).map((a) => a.key)} />
       </PageBody>
     </>
   );

@@ -2,6 +2,7 @@
 // partial text and sub-agent cards need (which message a delta belongs to, which tool_use is an Agent).
 import { randomUUID } from 'node:crypto';
 import type { ThreadEvent } from '../types';
+import { limitFromAssistant, limitFromResult, type LimitHit } from './accounts';
 import { redact, redactDeep } from './redact';
 import { oneLine, resultSummary, toolSummary } from './summarize';
 import { resumedAgent, TaskTracker } from './tasks';
@@ -24,6 +25,12 @@ export interface StreamSignals {
   init?: { model?: string; cwd?: string; permissionMode?: string; mcp: { name: string; status: string }[]; tools: number; skills: number };
   result?: { ok: boolean; totalCostUsd?: number; durationMs?: number; sessionId: string };
   controlRequest?: { requestId: string; subtype?: string };
+  /** rate_limit_event's rate_limit_info as sent: the account's usage windows (accounts.ts reads it). */
+  rateLimit?: Record<string, unknown>;
+  /** The plan's limit refused a request (the CLI's own assistant message, or the turn's result). */
+  limit?: LimitHit;
+  /** Background jobs still running by the CLI's own list (background_tasks_changed), ambient watchers aside. */
+  background?: number;
 }
 
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
@@ -66,7 +73,7 @@ export class StreamParser {
       case 'stream_event':
         return this.partial(msg, at);
       case 'assistant':
-        return this.assistant(msg, at);
+        return this.assistant(msg, at, signals);
       case 'user':
         return this.user(msg, at);
       case 'result':
@@ -75,6 +82,9 @@ export class StreamParser {
         signals.controlRequest = { requestId: s(msg.request_id) ?? '', subtype: s(obj(msg.request).subtype) };
         return [];
       }
+      case 'rate_limit_event':
+        signals.rateLimit = obj(msg.rate_limit_info);
+        return [];
       default:
         return [];
     }
@@ -112,6 +122,9 @@ export class StreamParser {
         // the same id the transcript reader gives this denial, so history and live merge into one line
         return [{ kind: 'system', id: `denied:${tuid}`, at, text: oneLine(`Permission denied · ${s(msg.tool_name) ?? 'tool'}${reason ? ` · ${reason}` : ''}`, 300) }];
       }
+      case 'background_tasks_changed':
+        signals.background = (Array.isArray(msg.tasks) ? msg.tasks : []).filter((t) => obj(t).ambient !== true).length;
+        return [];
       case 'api_retry':
         return [{ kind: 'system', id, at, text: `Retrying (attempt ${String(msg.attempt)} of ${String(msg.max_retries)}) · ${s(msg.error) ?? 'error'}` }];
       case 'task_started': {
@@ -180,7 +193,9 @@ export class StreamParser {
     }
   }
 
-  private assistant(msg: Json, at: string): ThreadEvent[] {
+  private assistant(msg: Json, at: string, signals: StreamSignals = {}): ThreadEvent[] {
+    const limit = limitFromAssistant(msg);
+    if (limit) signals.limit = limit;
     const parent = s(msg.parent_tool_use_id) ?? null;
     const m = obj(msg.message);
     const mid = s(m.id) ?? s(msg.uuid) ?? randomUUID();
@@ -262,6 +277,8 @@ export class StreamParser {
     const total = typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : undefined;
     const durationMs = typeof msg.duration_ms === 'number' ? msg.duration_ms : undefined;
     signals.result = { ok, totalCostUsd: total, durationMs, sessionId };
+    const limit = limitFromResult(msg);
+    if (limit) signals.limit = limit;
     const out: ThreadEvent[] = [];
     for (const d of Array.isArray(msg.permission_denials) ? msg.permission_denials : []) {
       const dd = obj(d);

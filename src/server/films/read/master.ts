@@ -37,7 +37,7 @@ function soundOf(card: FeedCard | undefined): string | undefined {
   if (!card) return undefined;
   for (const m of card.title.matchAll(/\(([^)]+)\)/g)) if (/dialogue|music|mix|sound|effects|silent/i.test(m[1])) return m[1].trim();
   for (const para of card.text ?? []) {
-    const s = para.split(/(?<=\.)\s+/).find((x) => /^(the )?sound\b/i.test(x));
+    const s = para.replace(/\*\*|`/g, '').split(/(?<=\.)\s+/).find((x) => /^(the )?sound\b/i.test(x));
     if (s) return s.split(':')[0].replace(/\.$/, '').trim();
   }
   return undefined;

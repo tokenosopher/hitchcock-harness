@@ -130,7 +130,9 @@ export async function mockMedia(p: string | null): Promise<Resolved | undefined>
   const render = !!p && /^assets\/films\/[^/]+\/cut\/renders\/[^/]+\.(mp4|wav)$/.test(p);
   // MOCK_MEDIA_DIR (16 Nov, the playback tests on a slow link): the sample film's own files, takes and sounds, from a
   // folder of made-up media at the same paths under it (`<dir>/blocks/S3/takes/…`); without it they do not exist
-  const own = process.env.MOCK_MEDIA_DIR && p && !render ? /^assets\/films\/the-lighthouse\/((?:blocks|audio)\/[^\0]+)$/.exec(p)?.[1] : undefined;
+  const own = process.env.MOCK_MEDIA_DIR && p && !render ? /^assets\/films\/the-lighthouse\/((?:blocks|audio)\/[^\0]+)$/.exec(p)?.[1]
+    // …and the sample of a take cut into its shots (trim.ts): <dir>/generations/…, <dir>/title-card.mp4
+    ?? /^assets\/films\/sample-trim-shots\/((?:generations\/|audio\/|title-card\.mp4$)[^\0]*)$/.exec(p)?.[1] : undefined;
   // the sample master (the base of the 1080p view) plays the same small test video unless MOCK_MASTER_FILE names a
   // heavier one (MOCK_TAKE_FILE for a take's full-size file): a 1080p view whose picture cannot be shown drops to 480p,
   // so without a file here the sample's 1080p view and its Upscale tab never showed

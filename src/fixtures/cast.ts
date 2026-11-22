@@ -77,7 +77,7 @@ export function castSampleState(slug: string): FilmState | undefined {
 
 /** The sample's pictures: every image path of the film is one of the drawings, by what it is. */
 const DRAWINGS = path.join(process.cwd(), 'src/fixtures/media/cast');
-function drawingFor(rel: string): string | undefined {
+export function drawingFor(rel: string): string | undefined {
   if (!/\.png$/i.test(rel)) return undefined;
   if (/C06-C07/.test(rel)) return 'group.png';
   if (/\/pick\.png$/.test(rel) && /^cast\//.test(rel)) return 'sheet.png';

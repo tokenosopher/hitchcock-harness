@@ -10,15 +10,20 @@ import { feedFor, readFeed } from '@/server/films/read/feed';
 import { isMock } from '@/fixtures/mock';
 import { sampleFeed } from '@/fixtures/masters';
 import { leftSampleFeed } from '@/fixtures/left';
+import { elementsSampleFeed } from '@/fixtures/elements';
+import { resetSoundSample, soundSampleFeed } from '@/fixtures/soundpick';
 import { Warnings } from '@/server/films/util';
 import { mockReleaseCards } from '@/server/release/mockAlma';
+import { storySampleFeed } from '@/fixtures/story';
 
 export async function GET(req: Request, { params }: RouteContext<'/api/films/[film]/feed'>) {
   await connection();
   const { film } = await params;
   // MOCK=boards: the sample films' cards at Finish (src/fixtures/masters.ts)
+  // MOCK=boards: ?reset=1 puts a sound sample back as the fixtures have it (its picks, answers and reasons)
+  if (isMock() && new URL(req.url).searchParams.get('reset') === '1') resetSoundSample(film);
   const asked = (new URL(req.url).searchParams.get('place') ?? '').split(',').filter(Boolean);
-  const sample = isMock() ? (sampleFeed(film) ?? leftSampleFeed(film))?.filter((c) => !asked.length || asked.includes(c.place)) : undefined;
+  const sample = isMock() ? (sampleFeed(film) ?? leftSampleFeed(film) ?? soundSampleFeed(film) ?? elementsSampleFeed(film) ?? storySampleFeed(film))?.filter((c) => !asked.length || asked.includes(c.place)) : undefined;
   if (sample) {
     return Response.json({ cards: sample, total: sample.length, warnings: [] }, { headers: { 'cache-control': 'no-store' } });
   }

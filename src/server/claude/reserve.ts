@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { childEnv } from '../childEnv';
 import { claudeConfig } from './config';
 
 export const RESERVE_KEY_NAME = 'HARNESS_RESERVE_API_KEY';
@@ -125,7 +126,8 @@ const KEPT_CLAUDE_CODE = new Set(['CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS', 'CLAUD
  *  when a reserve key is given, and then with CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1, so the key does not reach the
  *  commands she runs. The reserve key's own name never passes through. */
 export function almaEnv(base: NodeJS.ProcessEnv, reserveKey?: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base };
+  // the server's secrets (the reserve key, the remote-access token) never reach Alma's shell
+  const env = childEnv({}, base);
   for (const k of Object.keys(env)) {
     if (k === 'ANTHROPIC_API_KEY' || k === 'ANTHROPIC_AUTH_TOKEN' || k === RESERVE_KEY_NAME || k === 'HARNESS_TUNNEL_TOKEN' || k === 'CLAUDECODE' || k === 'CLAUDE_PID' || k === 'CLAUDE_EFFORT' || (k.startsWith('CLAUDE_CODE_') && !KEPT_CLAUDE_CODE.has(k))) delete env[k];
   }

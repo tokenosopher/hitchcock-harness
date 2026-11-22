@@ -75,8 +75,9 @@ export function PlannedView({ tl, frame }: { tl: Timeline; frame: number }) {
           </>
         ) : <span className="line-clamp-[8] text-[13.5px] italic leading-snug text-ink-3">{shown.text}</span>}
       </span>
+      {/* in the phone's small player the line stops short of the full-screen button in its corner */}
       {next && next.scene === shown.scene && (
-        <span key={`n-${next.id}`} title={next.who ? `${next.who.charAt(0) + next.who.slice(1).toLowerCase()}, “${next.text}”` : next.text} className="mx-3 mb-3 truncate border-t border-white/10 pt-2 text-[11px] text-sub duration-200 animate-in fade-in-0">
+        <span key={`n-${next.id}`} title={next.who ? `${next.who.charAt(0) + next.who.slice(1).toLowerCase()}, “${next.text}”` : next.text} className="mx-3 mb-3 truncate border-t border-white/10 pt-2 text-[11px] text-sub duration-200 animate-in fade-in-0 [[data-phone-picture]:not([data-full])_&]:mr-14">
           Next: {next.who ? <span className="text-ink-3">{next.who.charAt(0) + next.who.slice(1).toLowerCase()}, “{next.text}”</span> : <i className="text-ink-3">{next.text}</i>}
         </span>
       )}

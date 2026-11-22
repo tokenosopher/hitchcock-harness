@@ -10,6 +10,7 @@ import { Media } from '@/components/media/Media';
 import { Dot } from '@/components/shell/atoms';
 import { IconCheck, IconChevronDown, IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
+import { rememberBack } from '@/components/shell/BackLink';
 
 type Chip = (id: string, label: string, ref?: string) => void;
 
@@ -190,7 +191,7 @@ export function PlaceDeep({ s, l, base, onChip }: { s: FilmState; l: LocationRef
             </div>
           </details>
         )}
-        <Link href={`${base}/locations`} className="text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Every round and prop, on the Locations page</Link>
+        <Link href={`${base}/locations`} onClick={() => rememberBack(`${base}/locations`, `Back to ${placeName(l.name)}`)} className="text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Every round and prop, on the Locations page</Link>
       </div>
       <div className="flex min-w-0 flex-col gap-4">
         <section aria-label="Views" className="flex flex-col gap-2">
