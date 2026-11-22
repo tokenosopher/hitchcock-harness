@@ -59,7 +59,7 @@ export function QCChip({ spec, targets, chipLabel, note, lockWord, phoneTall }: 
   return (
     <div ref={box} className={cn('relative flex flex-none flex-col gap-1.5', side === 'right' ? 'items-end' : 'items-start')}>
       <button type="button" aria-expanded={open} aria-label={`${label}. Open the QC panel`}
-        onClick={() => { const r = box.current?.getBoundingClientRect(); const host = box.current?.closest('main')?.getBoundingClientRect().left ?? 0; if (r) setSide(r.right - 520 < host + 8 ? 'left' : 'right'); setOpen(!open); if (!open) ui.addChip({ id: `qc:${spec.stage}:${many ? 'all' : list[0].target}`, label: `QC · ${many ? chipLabel ?? spec.name : list[0].label}` }); }}
+        onClick={() => { const r = box.current?.getBoundingClientRect(); const host = box.current?.closest('main')?.getBoundingClientRect().left ?? 0; if (r) setSide(r.right - 520 < host + 8 ? 'left' : 'right'); setOpen(!open); if (!open) ui.addChip({ id: `qc:${spec.stage}:${many ? 'all' : list[0].pickup ?? list[0].target}`, label: `QC · ${many ? chipLabel ?? spec.name : list[0].label}` }); }}
         className={cn('inline-flex max-w-[min(520px,calc(100vw-32px))] cursor-pointer items-center rounded-[14px]', phoneTall && 'max-[760px]:-my-2 max-[760px]:h-11')}>
         <span className={cn('inline-flex h-7 min-w-0 max-w-full items-center gap-[7px] whitespace-nowrap rounded-[14px] border px-2.5 text-[12px] font-medium tabular-nums text-ink', hasRun ? 'border-faint bg-panel' : settled ? 'border-transparent px-1 font-normal text-mute hover:text-sub' : 'border-dashed border-edge-strong', open && 'bg-raised')}>
           {!settled && <span className={cn('size-1.5 flex-none rounded-full', !hasRun ? 'border border-mute' : good ? 'bg-ok' : 'bg-ink')} />}

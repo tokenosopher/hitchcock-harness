@@ -3,11 +3,10 @@
 // parent_tool_use_id = the Agent tool_use id; each becomes a step on its card and the newest one is the
 // card's live line ("higgsfield · generate_image_batch · 12 jobs", "higgsfield · jobs_wait · 14/15").
 // The CLI's task_progress events add the tool-call count. See docs/claude-p.md "Live task cards".
-import { readFile, stat } from 'node:fs/promises';
-import os from 'node:os';
+import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { TaskCard } from '../types';
-import { projectSlug } from './config';
+import { homeForSession, subagentsDir } from './accounts';
 import { redact } from './redact';
 import { oneLine, resultSummary, resultText, toolSummary } from './summarize';
 
@@ -310,8 +309,8 @@ export class TaskTracker {
   /** History: a job still marked running whose own file says otherwise. Its agent ended its last turn and nothing
    *  has been written for 45 minutes (its report was lost, for example when the CLI restarted), or nothing at all
    *  has been written for six hours. A job that ended a turn to wait on its own render writes again within minutes. */
-  async settleStale(cwd: string, sessionId: string, now = Date.now()): Promise<string[]> {
-    const dir = path.join(os.homedir(), '.claude', 'projects', projectSlug(cwd), sessionId, 'subagents');
+  async settleStale(cwd: string, sessionId: string, now = Date.now(), home: string = homeForSession(sessionId)): Promise<string[]> {
+    const dir = subagentsDir(home, cwd, sessionId);
     const settled: string[] = [];
     for (const [toolUseId, m] of this.meta) {
       const c = this.cards.get(toolUseId);
@@ -396,8 +395,8 @@ export class TaskTracker {
   private filled = new Set<string>();
   private filledDone = new Set<string>();
 
-  async fillFromSubagents(cwd: string, sessionId: string): Promise<void> {
-    const dir = path.join(os.homedir(), '.claude', 'projects', projectSlug(cwd), sessionId, 'subagents');
+  async fillFromSubagents(cwd: string, sessionId: string, home: string = homeForSession(sessionId)): Promise<void> {
+    const dir = subagentsDir(home, cwd, sessionId);
     for (const [toolUseId, m] of this.meta) {
       const agentId = m.agentId ?? m.taskId;
       const c = this.cards.get(toolUseId);
@@ -439,4 +438,36 @@ export class TaskTracker {
 function doneLine(c: TaskCard): string {
   const n = c.toolUses ?? c.steps.length;
   return n ? `done · ${plural(n, 'tool call')}` : 'done';
+}
+
+/** A sub-agent's last step from the tail of its transcript (subagents/agent-<id>.jsonl): its newest tool call as the
+ *  card would show it, else the start of its newest words. Reads the last 256 KB only; undefined when there is none. */
+export async function lastStepOf(file: string): Promise<string | undefined> {
+  let text: string;
+  try {
+    const fh = await open(file, 'r');
+    try {
+      const { size } = await fh.stat();
+      const len = Math.min(size, 256 * 1024);
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, size - len);
+      text = buf.toString('utf8');
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return undefined;
+  }
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let e: Json;
+    try { e = obj(JSON.parse(lines[i])); } catch { continue; } // the first line of the tail may be cut
+    if (e.type !== 'assistant') continue;
+    const content = arr(obj(e.message).content).map(obj);
+    const tool = [...content].reverse().find((b) => b.type === 'tool_use');
+    if (tool) return stepLine(str(tool.name) ?? '?', tool.input);
+    const words = [...content].reverse().find((b) => b.type === 'text' && str(b.text));
+    if (words) return `said: ${oneLine(str(words.text) ?? '', 100)}`;
+  }
+  return undefined;
 }

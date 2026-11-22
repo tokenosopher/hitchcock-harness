@@ -7,6 +7,8 @@ import { PickError } from '@/server/actions/pick';
 import { saveScript, ScriptClash, type ScriptBase, lockScript } from '@/server/actions/script';
 import { isMock } from '@/fixtures/mock';
 import { resetStorySample } from '@/fixtures/story';
+import { notifyHub } from '@/server/claude/notify';
+import { storySent } from '@/components/lib/sent';
 
 export async function POST(req: Request, { params }: RouteContext<'/api/films/[film]/script'>): Promise<Response> {
   await connection();
@@ -24,7 +26,13 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
   }
   if (!isMock() && !(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   try {
-    if (typeof body.lock === 'string') return Response.json(await lockScript(body.lock, film, { dryRun: body.dryRun === true }), { headers: { 'cache-control': 'no-store' } });
+    if (typeof body.lock === 'string') {
+      const r = await lockScript(body.lock, film, { dryRun: body.dryRun === true });
+      // the script's item leaves the film's count of "Waiting for you" (the sidebar's white dot) at once, and stays out
+      // while Alma records the lock (lib/sent.ts storySent)
+      if (!r.dryRun) notifyHub().userActed(film, [storySent('script', r.version)]);
+      return Response.json(r, { headers: { 'cache-control': 'no-store' } });
+    }
     const r = await saveScript({ edits: body.edits, base: body.base as ScriptBase }, film, { dryRun: body.dryRun === true });
     return Response.json(r, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {

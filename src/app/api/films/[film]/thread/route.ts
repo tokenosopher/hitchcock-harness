@@ -9,6 +9,7 @@ import { getAlma } from '@/server/claude/process';
 import { isAlmaModel } from '@/server/claude/model';
 import { hasReserveKey, readReserve } from '@/server/claude/reserve';
 import { isMock, mockPost, mockStop, mockThread } from '@/fixtures/mock';
+import { hasCommand } from '@/server/context';
 import { knownThread, parseContext, sendToAlma, threadHistory, threadInfo, validFilm } from '@/server/claude/thread';
 
 type Ctx = { params: Promise<{ film: string }> };
@@ -46,9 +47,11 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
   const b = (body ?? {}) as { text?: unknown; context?: unknown };
   // a <harness-action> tag typed by hand is defused: only the harness's own buttons write the real one
   const text = typeof b.text === 'string' ? defuse(b.text.trim()) : '';
-  if (!text) return Response.json({ error: 'text is empty' }, { status: 400 });
+  // a message can be a button's ask alone (a chip that carries it, the box left empty: 22 Nov 2026)
+  const context = parseContext(film, b.context);
+  if (!text && !hasCommand(context)) return Response.json({ error: 'text is empty' }, { status: 400 });
   if (isMock()) {
-    mockPost(film, text, parseContext(film, b.context));
+    mockPost(film, text, context);
     return Response.json({ ok: true }, { status: 202 });
   }
   // only a film the registry knows (or the library or settings thread) gets an Alma
@@ -56,7 +59,7 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
   // "/compact" (alone, or followed by what to keep) is Claude Code's own command: it only works as the first thing
   // in the message, so it goes to Alma without the page context in front of it
   const command = /^\/compact(\s|$)/.test(text);
-  const result = await sendToAlma(film, text, command ? undefined : parseContext(film, b.context));
+  const result = await sendToAlma(film, text, command ? undefined : context);
   return Response.json(result, { status: 202 });
 }
 

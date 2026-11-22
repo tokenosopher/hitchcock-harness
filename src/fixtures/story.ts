@@ -10,13 +10,15 @@
 //                         v1 kept under "Earlier drafts" (the Script page's cards)
 //   sample-story-asks     the same script v2 draft, with two of Alma's cards waiting at story: the lock of script v2
 //                         and a question on story v2's wording, each with only words ("Read the script ›")
+//   sample-story-waits    script v2 (draft, the user's edit of S1 line 1) re-timed and waiting for the user's lock, no
+//                         cast yet: the only thing in "Waiting for you" is the script
 import type { FeedCard, FilmRef, FilmState, ScriptLine, StoryInfo } from '@/server/types';
 import { castSampleState } from './cast';
 import { SAMPLE_SCRIPT, SAMPLE_STORY } from './story-text';
 import { readScriptText } from '@/server/films/read/script';
 import { withSettled } from '@/lib/story-settled';
 
-type Id = 'sample-story-new' | 'sample-story-draft' | 'sample-story-script' | 'sample-story-newer' | 'sample-story-locked' | 'sample-story-card' | 'sample-story-asks';
+type Id = 'sample-story-new' | 'sample-story-draft' | 'sample-story-script' | 'sample-story-newer' | 'sample-story-locked' | 'sample-story-card' | 'sample-story-asks' | 'sample-story-waits';
 const cast = castSampleState('sample-cast')!;
 const repo = cast.film.repo;
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
@@ -28,6 +30,7 @@ export const STORY_SAMPLES: Record<Id, FilmRef> = {
   'sample-story-locked': ref('sample-story-locked', 'Sample · story: the script locked', 2),
   'sample-story-card': ref('sample-story-card', 'Sample · story: a title card changed', 1),
   'sample-story-asks': ref('sample-story-asks', 'Sample · story: the lock and a story question waiting', 1),
+  'sample-story-waits': ref('sample-story-waits', 'Sample · story: the script waits for your lock', 1),
 };
 export const isStorySample = (slug: string): slug is Id => slug in STORY_SAMPLES;
 export const storySampleFilms = (): FilmRef[] => Object.values(STORY_SAMPLES);
@@ -62,6 +65,14 @@ const CARD = SAMPLE_SCRIPT
   .replace(/^\*v1, draft\. 2026-11-16: /m, '*v2, draft. 2026-11-19: the user\'s ask in the thread: the title card reads "THE POINT · 1890" and comes after S1. v1, draft. 2026-11-16: ')
   .replace(/^None yet\.$/m, `### v1 (2026-11-16, as sent)\n\n${V1_BODY}`);
 
+// script v2: the user's edit of S1 line 1 on the Story page, re-timed; v1 word for word under "Earlier drafts"
+const OLD_LINE = 'Post, Miss Holt! Nothing but bills again.';
+const NEW_LINE = 'Post, Miss Holt! Only bills again.';
+const WAITS = SAMPLE_SCRIPT
+  .replace(`**TOBIAS:** "${OLD_LINE}"`, `**TOBIAS:** "${NEW_LINE}"`)
+  .replace(/^\*v1, draft\. 2026-11-16: /m, `*v2, draft. 2026-11-22: the user's edit on the Story page, word for word: S1 line 1 (TOBIAS): "${NEW_LINE}" (was "${OLD_LINE}"); re-timed. v1, draft. 2026-11-16: `)
+  .replace(/^None yet\.$/m, `### v1 (2026-11-16, as sent)\n\n${V1_BODY}`);
+
 interface Memory { story: { version: string; text: string; by: 'you' | 'alma'; at: string }[]; settled?: string; script?: string }
 const g = globalThis as unknown as { __hhStoryMock?: Partial<Record<Id, Memory>> };
 const mem = (g.__hhStoryMock ??= {});
@@ -75,6 +86,7 @@ function seed(slug: Id): Memory {
     case 'sample-story-newer': return { story: [v('v1', s1, 'alma', '2026-11-11T15:38:00Z'), v('v2', s2, 'you', '2026-11-16T15:28:00Z'), v('v3', s3, 'alma', '2026-11-16T15:59:00Z'), v('v4', s3.replace('says Tobias.', 'says Tobias, very quietly.'), 'you', '2026-11-16T17:10:00Z')], settled: 'v3', script: SAMPLE_SCRIPT };
     case 'sample-story-asks':
     case 'sample-story-card': return { story: [v('v1', s1, 'alma', '2026-11-11T15:38:00Z'), v('v2', s2, 'you', '2026-11-16T15:28:00Z'), v('v3', s3, 'alma', '2026-11-16T15:59:00Z')], settled: 'v3', script: CARD };
+    case 'sample-story-waits': return { story: [v('v1', s1, 'alma', '2026-11-11T15:38:00Z'), v('v2', s2, 'you', '2026-11-16T15:28:00Z'), v('v3', s3, 'alma', '2026-11-16T15:59:00Z')], settled: 'v3', script: WAITS };
     case 'sample-story-locked': return { story: [v('v1', s1, 'alma', '2026-11-11T15:38:00Z'), v('v2', s2, 'you', '2026-11-16T15:28:00Z'), v('v3', s3, 'alma', '2026-11-16T15:59:00Z')], settled: 'v3', script: LOCKED };
   }
 }
@@ -104,7 +116,7 @@ export function storySampleState(slug: string): FilmState | undefined {
   if (!m) return undefined;
   const film = STORY_SAMPLES[slug as Id];
   const base: FilmState = { ...cast, film, cut: undefined, master: undefined, post: { cuts: [], masters: [], captions: [] }, feed: { counts: {}, asks: [] }, qc: {}, warnings: [], updatedAt: new Date().toISOString(),
-    brief: { path: 'brief.md', markdown: BRIEF }, characters: slug === 'sample-story-new' || slug === 'sample-story-draft' ? [] : cast.characters, locations: [], scenes: [], research: undefined };
+    brief: { path: 'brief.md', markdown: BRIEF }, characters: slug === 'sample-story-new' || slug === 'sample-story-draft' || slug === 'sample-story-waits' ? [] : cast.characters, locations: [], scenes: [], research: undefined };
   const script = m.script ? readScriptText(m.script) : undefined;
   return {
     ...base,

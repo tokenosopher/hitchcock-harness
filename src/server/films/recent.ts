@@ -2,8 +2,8 @@
 // the background. Kept in harness/recent.json, the harness's own folder (never the film
 // folder), so the phone and the Mac see the same order: { "<slug>": { "active"?: iso, "opened"?: iso } }.
 //   active  the user sent Alma a message or an answer (their text, a card's answer, Done picking: sendToAlma), or
-//           something new needs them: Alma's reply landed, or a new card waits for them (the notices of
-//           src/server/claude/notify.ts, kinds "turn" and "pick"). Her work, her sub-agents and the app's writes do not.
+//           something new needs them: a new item in the film's "Waiting for you" (the notify hub's notice "pick",
+//           src/server/claude/notify.ts). Her reply alone, her work, her sub-agents and the app's writes do not.
 //   opened  no longer written (opening a film no longer moves it); a time from before still counts as it was
 // Under MOCK=boards the record is harness/recent.mock.json, so a sample run never touches the real one.
 import { promises as fs } from 'node:fs';
@@ -78,7 +78,7 @@ function note(slug: string | undefined, kind: keyof RecentEntry, at?: string): v
 
 /** The user wrote to the film's Alma: a message, a card's answer, Done picking (sendToAlma, and the sample's mockPost). */
 export const noteUserWrote = (slug: string | undefined): void => note(slug, 'active');
-/** Something new needs the user in the film: Alma's reply landed, or a new card waits (the notify hub). */
+/** Something new needs the user in the film: a new item in its "Waiting for you" (the notify hub). */
 export const noteAttention = (slug: string | undefined, at?: string): void => note(slug, 'active', at);
 
 /** When each film last moved up: the newest of its record's times. */

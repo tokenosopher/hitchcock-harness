@@ -22,7 +22,9 @@ export function useSendAsUser(film: string) {
   const { pinned, chips, removeChips, playhead } = useUI();
   const page = usePathname();
   return useCallback(async (text: string, extra: Chip[] = []) => {
-    const selected = [...chips.filter((c) => !extra.some((e) => e.id === c.id)), ...extra];
+    // a request sent at the press (a chip with `command`) goes alone: one a button left in the box earlier stays there
+    const own = extra.some((e) => !!e.command);
+    const selected = [...chips.filter((c) => !extra.some((e) => e.id === c.id) && !(own && (c.command || c.about))), ...extra];
     const ok = await send(text, { film, page, pinned, selected, ...(playhead ? { playhead } : {}) });
     if (ok) removeChips(selected.filter((c) => !c.id.startsWith('keep:')).map((c) => c.id));
     return ok;

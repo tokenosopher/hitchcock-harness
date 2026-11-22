@@ -10,7 +10,6 @@
 import { useEffect, useState } from 'react';
 import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
-import { picksWaiting } from '@/components/lib/derive';
 import { IconCheck } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 
@@ -119,7 +118,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
         {flow.done && !count ? (
           <><span className="font-semibold text-ink">Delivered{flow.deliveredOn ? ` ${flow.deliveredOn}` : ''}</span><span className="truncate text-sub">· every step done</span></>
         ) : (
-          <><span className="font-semibold text-ink">The flow</span><span key={count ? 'n' : flow.work?.headline ?? ''} className="truncate text-sub duration-200 animate-in fade-in-0 motion-reduce:animate-none">· {count ? picksWaiting(count) : flow.work ? flow.work.headline : 'nothing waiting for you'}</span></>
+          <><span className="font-semibold text-ink">The flow</span><span key={count ? 'n' : flow.work?.headline ?? ''} className="truncate text-sub duration-200 animate-in fade-in-0 motion-reduce:animate-none">· {count ? flow.waitWords : flow.work ? flow.work.headline : 'nothing waiting for you'}</span></>
         )}
         <svg className={cn('ml-auto flex-none transition-transform duration-200', expanded && 'rotate-180')} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
@@ -137,7 +136,9 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
             className="group/story -my-px inline-flex h-6 cursor-pointer items-center text-[11.5px] text-ink-3 max-[760px]:my-0 max-[760px]:h-11">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-md border px-2 transition-colors duration-200 max-[760px]:h-11',
               open === 'story' ? 'border-ink bg-[#141416]' : 'border-edge bg-transparent group-hover/story:bg-panel')}>
-              <StepGlyph g={glyphOf(story.state)} /><span className="font-medium text-ink">Story</span>{story.short}
+              <span key={glyphOf(story.state)} className="inline-flex duration-200 animate-in fade-in-0 motion-reduce:animate-none"><StepGlyph g={glyphOf(story.state)} /></span><span className="font-medium text-ink">Story</span>
+              {/* the story or the script waiting on the user reads as the boxes' "yours to look at" does: orange */}
+              <span key={story.short} className={cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', glyphOf(story.state) === 'now' && 'text-warn')}>{story.short}</span>
             </span>
           </button>
           <span className="ml-auto flex flex-wrap items-center gap-3 text-[11.5px] text-sub max-[760px]:hidden" aria-label="Key">

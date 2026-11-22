@@ -2,7 +2,8 @@
 // memory only: a pick, an answer, a reason or a debrief answer changes the sample until the server restarts (or a
 // test resets it), and nothing is written to disk or sent to Alma (the line goes to the sample's mock thread).
 //   sample-sound-picks  the sound designer's pick card for S1 (a surf bed, a gull, a bottle, a carry-over across the join,
-//                       3 to 5 tries each, two picks predicted) and a why card about a trim, both waiting
+//                       3 to 5 tries each, two picks predicted) and a why card about a trim, both waiting; its Edit page
+//                       has the-lighthouse's cut with the four sounds on it and a take of S1 newer than the cut's
 //   sample-debrief      a released film's debrief: eight questions (cutting, sound, previz, prompts), one answered
 // The sounds are five short noises beside the fixtures (src/fixtures/media/sound/try-1.mp3 to try-5.mp3); the
 // debrief's pictures are the day-one sample's drawings.
@@ -14,6 +15,7 @@ import { debriefFeedCard } from '@/server/films/read/feed';
 import { checkAnswers, countsOf, setAnswer, type Debrief, type DebriefAnswers } from '@/components/lib/debrief';
 import { setReason, type ReasonsFile } from '@/components/edit/reasons';
 import boardFilm from './boards/the-lighthouse.json';
+import cutFilm from './boards/cut-the-lighthouse.json';
 
 const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
@@ -116,11 +118,39 @@ function cards(slug: Id): FeedCard[] {
   };
   const why: FeedCard = {
     key: WHY_CARD, id: WHY_CARD, title: 'Why did S1 shot 2 lose 30 frames at its head?', date: '2026-11-19T14:40:00Z', section: 'Edit', place: 'edit', ids: ['S1'], placed: 'card', media: [],
-    sub: 'Your trim at 00:00:06:10, in v12. Skip it if the reason is plain.',
+    sub: 'Your trim at 00:00:06:10, in v12. Skip it if the reason is plain.', cut: { t: 6.42 },
     ask: { kind: 'why', options: [{ id: '1', label: 'The movement started too slowly' }, { id: '2', label: 'Bad frames at the start' }, { id: '3', label: 'Pacing' }],
       ...(m.why ? { answer: { ...m.why, by: 'harness' as const } } : {}) },
   };
   return [sfx, why];
+}
+
+// ---- the sample's cut: the-lighthouse's cut with the four planned sounds on a track of their own, each at
+// its plan's place and set to its try 1, so "Hear it in the cut" finds each one and the Edit page hears its other tries
+
+const SFX_DIR = (name: string) => `assets/films/sample-sound-picks/audio/sfx/${name}`;
+interface CutFile { note?: string; current: { tracks: { id: string; kind: string; name: string; clips: unknown[] }[] } & Record<string, unknown>; versions: unknown[]; sourceSeconds?: Record<string, number> }
+export function soundSampleCut(slug: string): { current: unknown; versions: unknown[]; sourceSeconds?: Record<string, number> } | undefined {
+  if (slug !== 'sample-sound-picks') return undefined;
+  const base = JSON.parse(JSON.stringify(cutFilm)) as CutFile;
+  const clips = PLAN.effects!.map((e, i) => {
+    const name = String(e.name), secs = Number(e.seconds);
+    return { id: `fx-${name}`, src: `${SFX_DIR(name)}/${name}-try1.wav`, in: 0, out: Math.min(secs, TRIES[name][0].seconds), at: Number(e.start?.frame) / 24, label: `${name} · try 1`, gain: Number(e.level_db), ...(i === 0 ? { fadeIn: 1, fadeOut: 1.5 } : {}) };
+  });
+  // the surf bed under everything on one track, the reactions on another (they overlap the bed)
+  const at = base.current.tracks.findIndex((t) => t.id === 'A2') + 1;
+  base.current.tracks.splice(at, 0, { id: 'A3', kind: 'audio', name: 'Sound bed', clips: clips.slice(0, 1) }, { id: 'A4', kind: 'audio', name: 'Effects', clips: clips.slice(1) });
+  return { current: base.current, versions: base.versions, sourceSeconds: base.sourceSeconds };
+}
+
+/** GET …/options on the sample: each planned sound's tries, as the folder of its clip holds them. */
+export function soundSampleOptions(film: string, dirs: string[]): { dir: string; options: { src: string; files: string[]; name: string; seconds?: number; words?: string; peaks?: number[] }[] }[] | undefined {
+  if (film !== 'sample-sound-picks') return undefined;
+  return Object.entries(TRIES).filter(([name]) => dirs.includes(SFX_DIR(name))).map(([name, ts]) => ({
+    dir: SFX_DIR(name),
+    options: ts.map((t, i) => ({ src: `${SFX_DIR(name)}/${name}-try${i + 1}.wav`, files: [`${SFX_DIR(name)}/${name}-try${i + 1}.wav`], name: `try ${i + 1}`, seconds: t.seconds, words: t.prompt,
+      peaks: Array.from({ length: 96 }, (_, k) => Math.round(Math.abs(Math.sin((k + i * 7) / (6 + i))) * (0.4 + 0.15 * i) * 100) / 100) })),
+  }));
 }
 
 export function soundSampleFeed(slug: string): FeedCard[] | undefined {

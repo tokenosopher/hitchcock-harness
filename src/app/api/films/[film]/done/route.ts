@@ -6,6 +6,7 @@ import { DRIVE_MISSING, driveConnected } from '@/server/actions/film';
 import { PickError, PICK_KINDS, type PickInput, type PickKind } from '@/server/actions/pick';
 import { LIBRARY_KINDS, LibraryUnavailable, type LibraryKind } from '@/server/library/store';
 import { isMock } from '@/fixtures/mock';
+import { notifyHub } from '@/server/claude/notify';
 import { soundMockDone } from '@/fixtures/soundpick';
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -34,11 +35,15 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
       libraryKind: libraryKind && LIBRARY_KINDS.includes(libraryKind) ? libraryKind : undefined, from: s(x.from), card: s(x.card),
     });
   }
+  // what was answered leaves the film's count of "Waiting for you" (the sidebar's white dot) within a moment
+  const acted = () => notifyHub().userAnswered(film, answers, picks);
   const mocked = isMock() ? soundMockDone(film, answers, picks) : undefined;
-  if (mocked) return mocked;
+  if (mocked) { if (mocked.ok) acted(); return mocked; }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   try {
-    return Response.json(await sendChoices({ answers, picks }, film, { dryRun: body.dryRun === true }), { headers: { 'cache-control': 'no-store' } });
+    const r = await sendChoices({ answers, picks }, film, { dryRun: body.dryRun === true });
+    if (body.dryRun !== true) acted();
+    return Response.json(r, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {
     if (e instanceof PickError) return Response.json({ error: e.message }, { status: e.status });
     if (e instanceof LibraryUnavailable) return Response.json({ error: e.message }, { status: 503 });

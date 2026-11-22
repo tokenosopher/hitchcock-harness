@@ -2,8 +2,10 @@
 // Pure functions, no I/O; everything here is derived from the contract in src/server/types.ts.
 import type { CharacterRef, CutInfo, FeedCard, FilmState, LocationRef, Round, SceneRef, ScriptLine, Stage, TakeRef, TaskCard, ThreadEvent } from '@/server/types';
 import { cutTakeIds as timelineTakeIds } from './cut';
-import { fmtCredits, fmtDate, sumCredits, takeLabel } from './format';
+import { fmtClock, fmtCredits, fmtDate, sumCredits, takeLabel } from './format';
 import { takesReady } from '@/components/edit/takesReady';
+import { scriptCards } from '@/lib/script-cards';
+import { sectionSpan, storyVersionOf } from '@/lib/script-edit';
 
 export type PickState = 'ready' | 'running' | 'queued' | 'waiting' | 'picked';
 
@@ -330,7 +332,141 @@ export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
     && !(g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id))));
 }
 
-/** The page a stage belongs to, as the sidebar names it. */
+/** Every item of "Waiting for you" now, by its key ("story:<script|story>-<version>", "card:<card key>", "gate:<gate
+ *  item key>"): the story or the script when it waits on the user (storyWait), Alma's cards that ask and the gate's picks
+ *  that can be made (gateChoices), what was sent and not shown answered yet left out (the state as the pages read it,
+ *  lib/sent.ts withSent). The one rule the page (waitList.ts waitItemsOf lists these items), the sidebar's subtitle and
+ *  white dot, and the server's count for every film (src/server/claude/notify.ts) all go by. */
+export function waitingKeys(s: FilmState, tasks: TaskCard[], gate: GateItem[] = gateItems(s, tasks)): string[] {
+  const asks = s.feed?.asks ?? [];
+  const story = storyWait(s, tasks);
+  return [...(story && !story.sent ? [story.key] : []), ...asks.map((c) => `card:${c.key}`), ...gateChoices(gate, asks).map((g) => `gate:${g.key}`)];
+}
+/** How many items "Waiting for you" lists (waitingKeys); `gate` when the caller has gateItems(s, tasks) already. */
+export const waitingCount = (s: FilmState, tasks: TaskCard[], gate?: GateItem[]): number => waitingKeys(s, tasks, gate).length;
+
+/** What waits, in a few words, from waitingKeys: "1 pick waiting", "3 picks waiting"; the story or the script alone
+ *  says what it waits for ("waits for your lock", and `long`: "Script v3 waits for your lock", for a notice). */
+export function waitingWords(keys: string[], long = false): string {
+  const m = keys.length === 1 ? /^story:(script|story)-(.+)$/.exec(keys[0]) : null;
+  if (!m) return picksWaiting(keys.length);
+  const what = m[1] === 'script' ? 'your lock' : 'your read';
+  return long ? `${m[1] === 'script' ? 'Script' : 'Story'} ${m[2]} waits for ${what}` : `waits for ${what}`;
+}
+
+// ---- The story or the script waiting on the user: the sidebar's white dot shows for them too
+
+/** The story or the script that waits on the user: the script draft for their lock, or, before there is a script, the
+ *  story for their read and settle. One item of "Waiting for you" (key `story:script-v3`, `story:story-v6`). */
+export interface StoryWait {
+  kind: 'script' | 'story';
+  key: string;
+  version: string;
+  /** "Script v3 is ready to lock", "Story v7 is ready to read and settle". */
+  title: string;
+  /** One line under it: "1:38 · 5 scenes · 13 spoken lines · 3 differ from story v6". */
+  line: string;
+  /** The Story step's words on the flow: "v3 draft · waits for your lock". */
+  status: string;
+  /** What goes on in the story, from the files: a few lines for its card. */
+  summary: string[];
+  /** "Lock v3" or "Settle" was pressed and the state does not show it yet (lib/sent.ts): Alma's move, not waiting. */
+  sent: boolean;
+}
+
+/** The film is still at the story, so a draft or an unsettled story is the user's to look at: stage 1 by its files
+ *  (the registry's stageOf: no cast picture, element, location master, previz, prompt, take or cut video on disk), no
+ *  scene file, prompt or take in its state, no cut file or master, and not delivered. A film made before the harness
+ *  had a script lock (takes and cuts, no lock flag in script.md) is past it, so its unlocked script never waits. (The
+ *  timeline alone does not count: the planned cut is made from the script at the lock.) */
+export function atStoryStage(s: FilmState): boolean {
+  if (s.film.status === 'delivered' || (s.film.stage ?? 1) > 1) return false;
+  if (s.scenes.some((sc) => sc.sceneFile || sc.promptVersions.length || sc.takes.length)) return false;
+  return !s.post?.cuts?.length && !s.master;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** "S1 lines 2 and 3, S5 line 4". */
+function linesWord(rows: { scene: string; n: number }[]): string {
+  const by = new Map<string, number[]>();
+  for (const r of rows) by.set(r.scene, [...(by.get(r.scene) ?? []), r.n]);
+  return [...by].map(([sc, ns]) => `${sc} ${ns.length === 1 ? 'line' : 'lines'} ${ns.length > 2 ? `${ns.slice(0, -1).join(', ')} and ${ns[ns.length - 1]}` : ns.join(' and ')}`).join(', ');
+}
+/** Words only, for comparing a line with the story it came from ("It's sweet," she says → it's sweet she says). */
+const bare = (t: string) => ` ${t.toLowerCase().replace(/[‘’]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim()} `;
+/** A spoken line is in the story when each of its phrases is, word for word: the story's prose may split a line
+ *  around "she says". */
+const inStory = (line: string, story: string) => line.split(/[.,!?;:—–…]+/).map((p) => bare(p)).filter((p) => p.trim()).every((p) => story.includes(p));
+
+/** The story or the script, when it waits on the user (the one rule waitingKeys, the flow's Story step and the item of
+ *  "Waiting for you" share):
+ *  - the script: its current version is a draft and no version of it was ever locked, and Alma's own card does not
+ *    ask for the lock already (one question, not two);
+ *  - the story, before there is a script: its current version is not settled, and no card of Alma's asks to settle it.
+ *  Never while a story sub-agent is running or queued (it is Alma's work then), and only at the story stage
+ *  (atStoryStage): a settled story without a script waits on Alma, not the user. */
+export function storyWait(s: FilmState, tasks: TaskCard[]): StoryWait | undefined {
+  if (!atStoryStage(s) || liveAims(tasks, 'story').length) return undefined;
+  const asks = (s.feed?.asks ?? []).filter((c) => c.place === 'story');
+  const sent = (key: string) => !!s.sentKeys?.includes(key);
+  const sc = s.script;
+  if (sc) {
+    const v = sc.current;
+    if (!v || sc.versions.some((x) => x.locked) || asks.some((c) => /\block/i.test(c.title))) return undefined;
+    const md = sc.markdown ?? '';
+    const scenes = scriptScenes(s).filter((x) => x.rows.length);
+    const spoken = scenes.flatMap((x) => x.rows.flatMap((r) => (r.kind === 'line' ? [{ scene: x.id, n: r.n, text: r.text }] : [])));
+    // the length as the Script page's timing table adds it up: each scene's seconds and the cards with a length
+    const timed = scenes.every((x) => (x.seconds ?? x.scriptSeconds) !== undefined);
+    const secs = timed && scenes.length ? scenes.reduce((n, x) => n + (x.seconds ?? x.scriptSeconds ?? 0), 0) + scriptCards(md).reduce((n, c) => n + (c.seconds ?? 0), 0) : undefined;
+    // the story it came from: the settled one (its words are the newest story's while that one is settled), else the
+    // version the script's own "## Story" names, whose words it copies under that heading
+    const from = storyVersionOf(md);
+    const settledV = s.story?.settled?.version;
+    const baseV = settledV ?? from;
+    const lines = md.split('\n');
+    const span = sectionSpan(lines, /^##\s+Story\b/);
+    const baseText = settledV && settledV === s.story?.current ? s.story.text : baseV && baseV === from && span ? lines.slice(span.head + 1, span.end).join('\n') : undefined;
+    const story = baseText ? bare(baseText) : undefined;
+    const differ = story ? spoken.filter((l) => !inStory(l.text, story)) : undefined;
+    const key = `story:script-${v}`;
+    const newer = s.story && baseV && s.story.current !== baseV ? s.story.current : undefined;
+    return {
+      kind: 'script', key, version: v, sent: sent(key),
+      title: `Script ${v} is ready to lock`,
+      line: [secs !== undefined ? fmtClock(secs) : '', plural(scenes.length, 'scene'), plural(spoken.length, 'spoken line'),
+        differ && baseV ? (differ.length ? `${differ.length} ${differ.length === 1 ? 'differs' : 'differ'} from story ${baseV}` : `word for word from story ${baseV}`) : ''].filter(Boolean).join(' · '),
+      status: `${v} draft · waits for your lock`,
+      summary: [
+        scenes.length ? `The scenes: ${scenes.map((x) => `${x.id} ${x.title}`).join(' · ')}.` : '',
+        baseV ? `Written from story ${baseV}${baseV === settledV ? `, the story you settled${s.story?.settled?.at ? ` on ${fmtDate(s.story.settled.at)}` : ''}` : ''}${newer ? `; story ${newer} is newer and not in it` : ''}.` : '',
+        differ && baseV ? (differ.length ? `Changed from story ${baseV}: ${linesWord(differ)}.` : `Every spoken line is word for word from story ${baseV}.`) : '',
+        'Your lock is the go for the first round of asset work: the places and the people start from it.',
+      ].filter(Boolean),
+    };
+  }
+  const st = s.story;
+  if (!st || st.settled?.version === st.current || asks.some((c) => /\bsettl/i.test(c.title))) return undefined;
+  const cur = st.versions.find((x) => x.version === st.current);
+  const words = st.text.split(/\s+/).filter(Boolean).length;
+  // its first sentence, past any heading
+  const prose = st.text.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n').trim();
+  const first = /^[\s\S]*?[.!?]["”’]?(?=\s|$)/.exec(prose)?.[0].replace(/\s+/g, ' ').trim();
+  const key = `story:story-${st.current}`;
+  return {
+    kind: 'story', key, version: st.current, sent: sent(key),
+    title: `Story ${st.current} is ready to read and settle`,
+    line: [plural(words, 'word'), cur?.by === 'you' ? 'your edit' : 'Alma’s draft', cur?.date ? fmtDate(cur.date) : '', st.versions.length > 1 ? plural(st.versions.length, 'version') : ''].filter(Boolean).join(' · '),
+    status: `story ${st.current} · waits for your read`,
+    summary: [
+      first ? `It opens: “${first.length > 180 ? `${first.slice(0, 179).trimEnd()}…` : first}”` : '',
+      st.settled ? `Story ${st.settled.version} was settled before; ${st.current} is newer.` : '',
+      'Once you settle it, Alma writes the script from it. The lock comes after, and it is yours.',
+    ].filter(Boolean),
+  };
+}
+
+/** The page a stage belongs to, as the sidebar names it (SPEC §6a: Story = 1, Character = 2–3, …). */
 export const STAGE_SHORT: Record<Stage, string> = {
   1: 'Story', 2: 'Characters', 3: 'Voices', 4: 'Locations', 5: 'Previz', 6: 'Scenes', 7: 'Scenes', 8: 'Scenes',
   9: 'Edit', 10: 'Finish', 11: 'Sound', 12: 'Release',
@@ -340,9 +476,8 @@ export const STAGE_SHORT: Record<Stage, string> = {
 export function filmSubtitle(s: FilmState, tasks: TaskCard[]): string {
   const stage = s.film.stage;
   const name = stage ? STAGE_SHORT[stage] : 'Story';
-  const asks = s.feed?.asks ?? [];
-  const waiting = gateChoices(gateItems(s, tasks), asks).length + asks.length;
-  return waiting ? `${name} · ${picksWaiting(waiting)}` : name;
+  const keys = waitingKeys(s, tasks);
+  return keys.length ? `${name} · ${waitingWords(keys)}` : name;
 }
 
 /** "1 pick waiting", "6 picks waiting" (never "0 of 6"). */
@@ -435,7 +570,9 @@ function sectionRows(section: string, sid: string, lines: ScriptLine[]): ScriptR
   return rows;
 }
 
-/** The "≈ s" cell of the scene's row in the script's timing table under it ("53 ÷ 2.9 + 3.0 + 4 = 25.3 → 25" → 25). */
+/** The "≈ s" cell of the scene's row in the script's timing table under it: the figure after its last "→" or "="
+ *  ("53 ÷ 2.9 + 3.0 + 4 = 25.3 → 25" → 25, "14.2 → **15**" → 15, "52 ÷ 2.9 + 0.5 × 3 + 5 = 24" → 24), else its first
+ *  ("**12** (inside S7's 23 s)" → 12). */
 function tableSeconds(body: string, sid: string): number | undefined {
   const rows = body.split('\n').filter((l) => l.trim().startsWith('|')).map((l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()));
   const head = rows.find((r) => r.some((c) => /^≈\s*s$/.test(c)));
@@ -444,7 +581,8 @@ function tableSeconds(body: string, sid: string): number | undefined {
   const row = rows.find((r) => r[0] === sid || r[0]?.startsWith(`${sid} `));
   const cell = row?.[col];
   if (!cell) return undefined;
-  const n = /→\s*(\d+(?:\.\d+)?)\s*$/.exec(cell)?.[1] ?? /^(\d+(?:\.\d+)?)\b/.exec(cell)?.[1];
+  const c = cell.replace(/\*\*/g, '');
+  const n = /[→=]\s*(\d+(?:\.\d+)?)(?![\s\S]*[→=])/.exec(c)?.[1] ?? /^(\d+(?:\.\d+)?)\b/.exec(c)?.[1];
   return n ? Number(n) : undefined;
 }
 

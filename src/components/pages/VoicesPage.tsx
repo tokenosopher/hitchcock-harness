@@ -70,7 +70,7 @@ export function VoicesPage() {
       <Header crumbs={[{ label: 'Films' }, { label: state.film.title, href: base }, { label: 'Voices' }]}
         back={{ label: 'Back to Voices', href: `${base}?open=voices`, soft: true }}
         meta={<>{[state.film.aspect, filmPath(state, 'voices'), 'Higgsfield'].filter(Boolean).join(' · ')} · <span title={filmCost(state).title}>{filmCost(state).text}</span></>} phoneSub={`Voices · ${picked} of ${total} picked`}
-        actions={<HeaderLink icon={<IconPlay size={11} />} onClick={() => ui.prefill('Play all the picked voices, one after the other')}>Play all picks</HeaderLink>} />
+        actions={<HeaderLink icon={<IconPlay size={11} />} onClick={() => ui.command({ id: 'voices:play-all', label: 'Play all the picked voices' }, 'Play all the picked voices, one after the other')}>Play all picks</HeaderLink>} />
       <PageBody wide>
         <StageTitle kicker="Stage 3 · Voices" title={<>Voices <span className="text-[15px] font-normal text-sub">· {picked} of {total} picked</span></>}
           sub="One designed voice per character. The element line, “This is how I look and this is how I sound.”, is cut from the picked preview. The video elements have their own page."

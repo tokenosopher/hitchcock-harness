@@ -61,6 +61,17 @@ When you tell the user that something is on a page, make the page's name a link,
 
 A clip made on a scene that is not one of its takes (a test take, a trial) shows on that scene's page in the open, under the takes, as "Test takes": give its card `"at": "scenes"` and `"for": "<the scene>"`, keep its file outside `generations/`, and link it as `[the test takes](page:scenes/S2#tests)`. A web address written out in full is a link too and opens in a new tab.
 
+After the takes, a decision about something on the cut is made on the Edit page, in the cut: link the place, not only the page. The page opens with the playhead a second before it; nothing plays until the user presses play, and nothing is saved until they keep it:
+
+| What to decide | Link (in chat or a card's words) |
+|---|---|
+| One clip of the cut (an effect, a title card, a shot) | `[the laugh in the cut](page:edit?clip=s-laugh2)`: that clip selected and brought into view; the id as `cut/working.json` has it (`A4:s-laugh2` names its track too) |
+| A moment | `[00:01:12](page:edit?t=72.0)` (seconds) or `page:edit?at=1732` (frames) |
+| A take, tried in its shot's place | `[take 3 in the cut](page:edit?take=FIX-S4-tap-take3&shot=S4:7a)`: shown in place and not in the film, as a shot selected in the Takes view; the user keeps it with "Use in the film" or drops it with "Back to the film". `take` is the take's file (its path from the film folder, or its end), `FIX-S4-tap-take3` or `S4 take 2`; `shot` (`S4:7`, `S4:7a`) when the take has several shots and only one is meant (without it, every shot of the take goes in) |
+| A sound's try, heard in its place | `[try 4 in the cut](page:edit?sound=crowd-laugh-long&try=4)`: the sound's clip selected (its folder under `audio/sfx/`) and that try in its place; Enter uses it, Esc goes back, ↑ ↓ steps through the other tries |
+
+A card about one of these says so with `"cut"`, and shows the button "See it in the cut" (a sound: "Hear it in the cut") that opens the same place: `"cut": {"clip": "s-laugh2"}`, `{"take": "generations/FIX-S4-tap/takes/take3/FIX-S4-tap-take3-480p.mp4", "shot": "S4:7a"}`, `{"sound": "crowd-laugh-long", "try": 4}`, `{"t": 72.0}`. A sound pick card (`"sfx"`) and a pick among takes of a scene that is in the cut get their buttons without it. What the page cannot find (a clip not in the cut, a sound not on the timeline yet) leaves the page as it is and its toolbar says what was not found. A take that lands for a shot already in the cut is shown by itself: its clip on the timeline gets a quiet "1 new take" mark, which puts it in place the same way.
+
 Link the most exact page: a scene's own page for a take, a character's own page for a face. One link per thing named is enough. A plain "the Story page" is linked by the harness anyway; a card's title is not, so name the page the card is on and link that. A link to a web address opens in a new tab; never link a file path.
 
 ## What the Scenes page reads about a take

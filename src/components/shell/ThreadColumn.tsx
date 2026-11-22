@@ -22,7 +22,7 @@ import { useHydrated, useSize } from '@/components/lib/sizes';
 import { Edge } from './Edge';
 import { uploadImage } from '@/components/lib/uploads';
 import { usePresence } from './Reveal';
-import { isUsageLimitText } from '@/server/claude/limit';
+import { lastTurnHitLimit } from '@/server/claude/limit';
 import { UserWords } from './RefCard';
 import { ActionChip } from './ActionChip';
 import { parseHarnessAction } from '@/components/lib/harnessAction';
@@ -43,7 +43,7 @@ function sameThing(c: Chip, refs: InlineRef[]): boolean {
 type Row =
   | { kind: 'divider'; key: string; text: string }
   | { kind: 'event'; key: string; e: ThreadEvent; pending?: PendingSend }
-  | { kind: 'alma'; key: string; text?: string; tasks: Task[]; tools: ThreadEvent[] };
+  | { kind: 'alma'; key: string; text?: string; tasks: Task[]; tools: ThreadEvent[]; ids: string[] };
 
 /** Groups the flat event list into what the thread shows: date dividers, bubbles, Alma's turns with their cards. */
 /** "MCP not connected: a (failed), plugin:design:x (failed)" without the design plugin's servers (lines written
@@ -76,17 +76,18 @@ function rows(events: ThreadEvent[], keyOf: ReadonlyMap<string, string>): Row[] 
       turn = undefined;
     }
     if (e.kind === 'assistant_text') {
-      turn = { kind: 'alma', key: e.id, text: e.text, tasks: [], tools: [] };
+      turn = { kind: 'alma', key: e.id, text: e.text, tasks: [], tools: [], ids: [e.id] };
       out.push(turn);
     } else if (e.kind === 'task') {
       if (seenTask.has(e.task.id)) continue;
       seenTask.add(e.task.id);
-      if (!turn) { turn = { kind: 'alma', key: `t-${e.id}`, tasks: [], tools: [] }; out.push(turn); }
+      if (!turn) { turn = { kind: 'alma', key: `t-${e.id}`, tasks: [], tools: [], ids: [] }; out.push(turn); }
       turn.tasks.push(latest.get(e.task.id)!);
     } else if (e.kind === 'tool_use' || e.kind === 'tool_result') {
       if (e.kind === 'tool_use' && e.name === 'Agent') continue; // shown as its task card
-      if (!turn) { turn = { kind: 'alma', key: `x-${e.id}`, tasks: [], tools: [] }; out.push(turn); }
+      if (!turn) { turn = { kind: 'alma', key: `x-${e.id}`, tasks: [], tools: [], ids: [] }; out.push(turn); }
       turn.tools.push(e);
+      turn.ids.push(e.id);
     } else if (e.kind === 'result') {
       out.push({ kind: 'event', key: e.id, e });   // the turn's cost line
       turn = undefined;
@@ -97,6 +98,25 @@ function rows(events: ThreadEvent[], keyOf: ReadonlyMap<string, string>): Row[] 
     }
   }
   return out;
+}
+
+/** A row of a turn the chat no longer shows (a turn Alma started on her own schedule that changed nothing):
+ *  it fades and folds away, the column's gap above it with it, before the thread drops it. Reduce motion: it goes at once. */
+function Leaving({ on, className, children }: { on: boolean; className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !on) return;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.style.height = `${el.offsetHeight}px`;
+    el.style.overflow = 'hidden';
+    void el.offsetHeight; // its height drawn once, so the change below is a transition
+    el.style.transition = still ? 'none' : 'height 260ms ease-out, margin-top 260ms ease-out, opacity 180ms ease-out';
+    el.style.height = '0px';
+    el.style.marginTop = '-12px'; // the gap-3 above it
+    el.style.opacity = '0';
+  }, [on]);
+  return <div ref={ref} className={className} aria-hidden={on || undefined}>{children}</div>;
 }
 
 function Avatar({ empty }: { empty?: boolean }) {
@@ -205,15 +225,8 @@ function ReserveOffer({ onUse }: { onUse: () => Promise<{ ok: boolean; error?: s
   );
 }
 
-/** True when the last turn (after the last user message) ended with Claude Code's usage-limit words. */
-function lastTurnHitLimit(events: ThreadEvent[]): boolean {
-  let i = events.length - 1;
-  while (i >= 0 && events[i].kind !== 'user') i--;
-  return events.slice(i + 1).some((e) => (e.kind === 'assistant_text' || e.kind === 'error' || e.kind === 'system') && isUsageLimitText(e.text));
-}
-
 export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: () => void }) {
-  const { events, loaded, tasks, error, toAlma, workingSince, model, setModel, reserve, turnOnReserve } = useThread();
+  const { events, loaded, tasks, error, toAlma, workingSince, model, setModel, reserve, turnOnReserve, leaving } = useThread();
   const { pending, keyOf, retry } = usePendingSends();
   const threadW = useSize('thread');
   const ready = useHydrated();
@@ -246,6 +259,22 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
   const subTitle = `Thread · ${title}${lastUser ? ` · your last message ${fmtDate(lastUser.at)}` : ''}`;
   // the turn Alma is in now: its steps show as they come; a finished turn folds them to one grey line
   const liveKey = workingSince !== undefined ? [...list].reverse().find((r) => r.kind === 'alma')?.key : undefined;
+  // a hidden turn's rows on screen fade out before they go; task cards never leave
+  const goes = (r: Row): boolean => leaving.size > 0 && (r.kind === 'alma' ? !r.tasks.length && r.ids.length > 0 && r.ids.every((id) => leaving.has(id))
+    : r.kind === 'event' && r.e.kind === 'result' && leaving.has(r.e.id));
+  // a date line goes with them when every row under it does
+  const datesGoing = new Set<string>();
+  if (leaving.size) {
+    let all = true;
+    let any = false;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (r.kind !== 'divider') { any = true; all &&= goes(r); continue; }
+      if (any && all) datesGoing.add(r.key);
+      all = true;
+      any = false;
+    }
+  }
 
   // Follow the newest message while the reader is at the bottom; leave them be when they scrolled up.
   const atBottom = useRef(true);
@@ -431,14 +460,14 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
             {list.map((r) => {
               if (r.kind === 'divider') {
                 return (
-                  <div key={r.key} className="flex items-center gap-2.5 text-[11.5px] text-sub">
+                  <Leaving key={r.key} on={datesGoing.has(r.key)} className="flex items-center gap-2.5 text-[11.5px] text-sub">
                     <span className="h-px flex-1 bg-line" />{r.text}<span className="h-px flex-1 bg-line" />
-                  </div>
+                  </Leaving>
                 );
               }
               if (r.kind === 'alma') {
                 return (
-                  <div key={r.key} className="flex gap-2.5">
+                  <Leaving key={r.key} on={goes(r)} className="flex gap-2.5">
                     <Avatar empty={!r.text} />
                     <div className="flex min-w-0 flex-1 flex-col gap-2">
                       {r.text && <AlmaText text={r.text} film={film} />}
@@ -466,7 +495,7 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
                           onToggle={() => toggleTask(t)} onOpenResult={() => ui.setThreadOpen(false)} />
                       ))}
                     </div>
-                  </div>
+                  </Leaving>
                 );
               }
               const e = r.e;
@@ -477,11 +506,25 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
                 // sent from here: it came in at the tap (fading up), and is marked while it is on its way
                 const own = !!r.pending || keyOf.has(e.id);
                 const state = r.pending?.state;
+                // a button's ask that went as a chip: the chip shows in the bubble, ahead of any words the
+                // user added; the words Alma read are on hover, not a wall of text in the thread
+                const asks = (e.context?.selected ?? []).filter((c) => c.command);
                 return (
                   <div key={r.key} data-pending={state === 'sending' || state === 'failed' ? state : undefined}
                     className={cn('flex max-w-[88%] flex-col items-end gap-[5px] self-end', own && 'duration-200 ease-out animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none')}>
                     {/* the user's words, with the things they put into them drawn as chips */}
-                    <div className={cn('max-w-full whitespace-pre-wrap rounded-[14px_14px_4px_14px] [overflow-wrap:anywhere] bg-bubble px-[13px] py-[9px] text-[13.5px] text-ink transition-opacity duration-200 motion-reduce:transition-none', hasRefTags(e.text) ? 'leading-[1.6]' : 'leading-normal', state === 'sending' ? 'opacity-60' : 'opacity-100')}><UserWords text={e.text} film={film} /></div>
+                    <div className={cn('max-w-full whitespace-pre-wrap rounded-[14px_14px_4px_14px] [overflow-wrap:anywhere] bg-bubble px-[13px] py-[9px] text-[13.5px] text-ink transition-opacity duration-200 motion-reduce:transition-none', hasRefTags(e.text) ? 'leading-[1.6]' : 'leading-normal', state === 'sending' ? 'opacity-60' : 'opacity-100')}>
+                      {asks.length > 0 && (
+                        <span className={cn('flex flex-wrap justify-end gap-1', e.text && 'mb-1.5')}>
+                          {asks.map((c) => (
+                            <span key={c.id} data-sent-ask="" title={c.command} className="inline-flex h-[22px] min-w-0 max-w-full items-center gap-[5px] rounded-[6px] border border-edge-strong bg-raised px-[7px] text-[11.5px] text-ink">
+                              <span className="size-[5px] flex-none rounded-full bg-ink" /><span className="truncate">{c.label}</span>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {e.text && <UserWords text={e.text} film={film} />}
+                    </div>
                     {own && (
                       <>
                         <Reveal open={state === 'sending'}>
@@ -499,7 +542,7 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
                     {e.context && e.context.selected.length > 0 && (() => {
                       const inline = hasRefTags(e.text) ? splitRefTags(e.text).filter((p): p is InlineRef => typeof p !== 'string') : [];
                       const pictures = e.context.selected.filter((c) => uploadImage(c));
-                      const seen = e.context.selected.filter((c) => !uploadImage(c) && !sameThing(c, inline));
+                      const seen = e.context.selected.filter((c) => !uploadImage(c) && !c.command && !sameThing(c, inline));
                       // pictures the user attached show as pictures, above the rest
                       const shown = pictures.length > 0 && (
                         <div className="flex max-w-full flex-wrap justify-end gap-1.5">
@@ -569,9 +612,9 @@ export function ThreadColumn({ film, onCollapse }: { film: string; onCollapse?: 
                 // the turn's share of the plan's list-price estimate: the Max plan does not charge it
                 const parts = [e.costUsd !== undefined ? `$${e.costUsd.toFixed(2)} · plan estimate` : '', e.durationMs !== undefined ? `${Math.round(e.durationMs / 1000)} s` : ''].filter(Boolean);
                 return (
-                  <div key={r.key} className={cn('pl-8 font-mono text-[11px]', e.ok ? 'text-mute' : 'text-bad')}>
+                  <Leaving key={r.key} on={goes(r)} className={cn('pl-8 font-mono text-[11px]', e.ok ? 'text-mute' : 'text-bad')}>
                     {e.ok ? parts.join(' · ') || 'done' : `turn failed${parts.length ? ` · ${parts.join(' · ')}` : ''}`}
-                  </div>
+                  </Leaving>
                 );
               }
               if (e.kind === 'compaction') {

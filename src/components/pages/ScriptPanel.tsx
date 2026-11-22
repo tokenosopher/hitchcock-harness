@@ -30,6 +30,8 @@ import { ToConfirm } from './postCommon';
 import { isSaveKey, SaveBar } from './SaveBar';
 import { IconClock, IconLink, IconLock, IconPen } from './storyIcons';
 import { almaFetch } from '@/components/data/almaOutbox';
+import { markSent } from '@/components/data/choices';
+import { storySent } from '@/components/lib/sent';
 
 /** "v4" → 4; drafts ("Draft 2") sort before the numbered versions of the same day. */
 const order = (v: string) => (/^v(\d+(?:\.\d+)?)/.exec(v) ? 100 + parseFloat(v.slice(1)) : parseFloat(/\d+/.exec(v)?.[0] ?? '0'));
@@ -127,6 +129,8 @@ export function ScriptPanel({ state, film, tasks, base, onEdits, version }: { st
       const r = await almaFetch(film, `/api/films/${film}/script`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lock: current }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       setLockAsk(r.ok ? { version: current, sent: true } : { version: '', error: j.error ?? `the harness answered ${r.status}` });
+      // the script's item leaves "Waiting for you" (and the white dot goes) at once, until script.md shows the lock
+      if (r.ok) markSent(film, [storySent('script', current)]);
     } catch {
       setLockAsk({ version: '', error: 'the harness did not answer' });
     }
@@ -407,7 +411,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits, version }: { st
 
             {lockedV ? (
               <p className="m-0 flex items-center gap-2 px-4 pt-3 text-[12.5px] text-sub"><IconLock className="flex-none" />Click a line to ask Alma about it.
-                <Btn className="ml-auto max-[760px]:h-11" onClick={() => ui.prefill('Unlock to change a line: ', { id: `unlock:${lockedV.version}`, label: `script ${lockedV.version} · unlock` })}>Unlock to change a line</Btn>
+                <Btn className="ml-auto max-[760px]:h-11" onClick={() => ui.about({ id: `unlock:${lockedV.version}`, label: `Unlock · script ${lockedV.version}` }, `Unlock script ${lockedV.version} to change a line. The user says which line and how`, 'Which line, and how should it change…')}>Unlock to change a line</Btn>
               </p>
             ) : saved ? (
               <div role="status" className="flex flex-col gap-1 px-4 pt-3 text-[12.5px] leading-normal duration-200 animate-in fade-in-0">

@@ -134,8 +134,8 @@ export function LocationsPage() {
               )}
               {r && st !== 'picked' && chosen && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <Btn primary onClick={() => ui.prefill(`Pick ${chosen} as the master for ${l.id}`, { id: `pick:${l.id}`, label: `${l.id} · ${chosen}` })}>Pick {chosen} as master</Btn>
-                  <Btn ghost onClick={() => ui.prefill(`Save ${l.id} ${chosen} to the library`)}><IconBookmark size={13} />Save to library</Btn>
+                  <Btn primary onClick={() => ui.command({ id: `pick:${l.id}`, label: `Pick as master · ${l.id} ${chosen}` }, `Pick ${chosen} as the master for ${l.id}`)}>Pick {chosen} as master</Btn>
+                  <Btn ghost onClick={() => ui.command({ id: `save:${l.id}`, label: `Save to the library · ${l.id} ${chosen}` }, `Save ${l.id} ${chosen} to the library`)}><IconBookmark size={13} />Save to library</Btn>
                 </div>
               )}
               {l.master?.picked && (

@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Feed, ShownLink } from '@/components/feed/Feed';
 import { StepRunning } from '@/components/flow/RunningNow';
 import { qcTargets } from '@/components/qc/targets';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import { refData } from '@/components/lib/refPick';
 import { sceneRefOf, takeRefOf } from '@/components/shell/refItems';
 import type { InlineRef } from '@/lib/refs';
@@ -284,7 +285,7 @@ export function ScenesPage() {
           sub={<ScenesSummary state={state} tasks={tasks} />}
           right={<span className="flex flex-wrap items-center gap-2">
             <QCChip spec={qcSpec('prompt')} chipLabel="prompts"
-              targets={scenes.map((s) => { const p = s.promptVersions[s.promptVersions.length - 1]; return { target: s.id, label: `${s.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!p, waitsFor: p ? `${s.id} prompt ${p.version}` : `${s.id}'s first prompt` }; })} />
+              targets={scenes.map((s) => { const p = s.promptVersions[s.promptVersions.length - 1]; return withPickupCheck(state, 'prompt', { target: s.id, label: `${s.id} prompt${p ? ` ${p.version}` : ''}`, entry: qcEntry(state, 'prompt', s.id), ready: !!p, waitsFor: p ? `${s.id} prompt ${p.version}` : `${s.id}'s first prompt` }); })} />
             {/* the take checks' chip, as the Scenes step under the flow showed it beside the prompts' */}
             <QCChip spec={qcSpec('take')} chipLabel="take checks" targets={qcTargets(state, 'take')} />
           </span>} />

@@ -20,16 +20,21 @@ interface UIValue {
   setDraft: (s: string) => void;
   /** The chips put into the message's words, by their key in the draft ("\uE000<key>\uE001"). */
   setDraftRefs: (f: (refs: Record<string, InlineRef>) => Record<string, InlineRef>) => void;
-  /** Put a message in the composer instead of acting (buttons that would spend credits do this). */
-  prefill: (text: string, chip?: Chip) => void;
-  /** Opens the box about a thing (a card's "Say something else", "Ask Alma about S1"): the box starts empty, the thing
-   *  shows as its chip and the box asks `placeholder`. `about` is what the message is about, in words; Alma reads it
-   *  with the chip ahead of the message. Removing the chip makes it an ordinary message. */
+  /** Opens the box about a thing (a card's "Say something else", "Ask Alma about S1", "Retake this shot…"): the thing
+   *  shows as its chip, the box keeps what the user had typed (empty, most often) and asks `placeholder`. `about` is
+   *  what the message is about, in words; Alma reads it with the chip ahead of the message. Removing the chip makes it
+   *  an ordinary message. */
   about: (chip: Chip, about: string, placeholder: string) => void;
+  /** A button's whole ask, put in the box as a chip instead of acting (buttons that would spend credits do this): the
+   *  chip carries `text`, which Alma reads as the user's message, and Send with the box empty sends it; words typed
+   *  first are added after it. Nothing is sent until the user presses Send. */
+  command: (chip: Chip, text: string, placeholder?: string) => void;
   /** Brings Alma's column out and puts the cursor in her box, leaving its words as they are. */
   focusBox: () => void;
   /** The text a button replaced, when the box still holds exactly what the button wrote: Command-Z in the box
-   *  brings it back (the user, 13 Nov 2026). `redoDraft` is the way forward again. Undefined = nothing of ours. */
+   *  brings it back. `redoDraft` is the way forward again. Undefined = nothing of ours.
+   *  (Since 22 Nov 2026 no button writes words into the box, so nothing is written over: kept for the drafts saved
+   *  in this tab's visit before.) */
   undoDraft: (current: string) => string | undefined;
   redoDraft: (current: string) => string | undefined;
   openTask?: string;
@@ -45,6 +50,9 @@ interface UIValue {
 
 /** What the open page suggests in the composer: its placeholder and up to two quick messages. */
 export interface ComposerHint { placeholder?: string; quick?: string[] }
+
+/** What the box asks while a button's ask (a command chip) is in it. */
+export const COMMAND_PLACEHOLDER = 'Press send, or add a word first…';
 
 const Ctx = createContext<UIValue | null>(null);
 const key = (film: string) => `hh:ui:${film}`;
@@ -85,10 +93,8 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   const [hint, setHint] = useState<ComposerHint>({});
   const [loadedFor, setLoadedFor] = useState<string>();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  // What the user had typed each time a button wrote over it (prefill), newest last; kept for this tab's visit
+  // What the user had typed each time a button wrote over it, newest last; kept for this tab's visit
   // in sessionStorage so a reload does not lose it. `fwd` is what an undo took away again.
-  const draftNow = useRef('');
-  useEffect(() => { draftNow.current = draft; }, [draft]);
   const backKey = `hh:draft-back:${film}`;
   const back = useRef<{ prev: string; next: string }[]>([]);
   const fwd = useRef<{ prev: string; next: string }[]>([]);
@@ -130,7 +136,7 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   const addChip = useCallback((c: Chip) => setChips((l) => {
     const i = l.findIndex((x) => x.id === c.id);
     if (i < 0) return [...l, c];
-    if (l[i].label === c.label && l[i].ref === c.ref && l[i].about === c.about && l[i].placeholder === c.placeholder) return l;
+    if (l[i].label === c.label && l[i].ref === c.ref && l[i].about === c.about && l[i].command === c.command && l[i].placeholder === c.placeholder) return l;
     const next = l.slice();
     next[i] = c;
     return next;
@@ -142,24 +148,34 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   }, []);
   const clearChips = useCallback(() => setChips([]), []);
   const hasChip = useCallback((id: string) => chips.some((c) => c.id === id), [chips]);
-  const prefill = useCallback((text: string, chip?: Chip) => {
-    if (chip) addChip(chip);
-    // a button writes over what is in the box: what was there is kept, so Command-Z in the box brings it back
-    const had = draftNow.current;
-    if (had.trim() && had !== text) { back.current.push({ prev: had, next: text }); fwd.current = []; keepBack(); }
-    // Alma's column may be folded away (13 Nov): words put in her box bring it back. All of it is drawn now, inside
-    // the tap, so the cursor can go in the box in the same tap (below).
+  /** A button put its thing in the box as a chip: Alma's column comes out and the cursor goes in her box, the words
+   *  there kept (nothing is written over: 22 Nov 2026). One such chip at a time: one an earlier button put there goes,
+   *  as its words used to be written over. All of it is drawn now, inside the tap, so the cursor can go in the box in
+   *  the same tap (focusComposer). */
+  const putChip = useCallback((chip: Chip) => {
     flushSync(() => {
-      setDraft(text);
+      setChips((l) => {
+        const kept = l.filter((x) => (!x.about && !x.command) || x.id === chip.id);
+        const i = kept.findIndex((x) => x.id === chip.id);
+        if (i < 0) return [...kept, chip];
+        const next = kept.slice();
+        next[i] = chip;
+        return next;
+      });
       window.dispatchEvent(new Event('hh:alma-show'));
     });
     focusComposer(composerRef);
-  }, [addChip, keepBack]);
+  }, []);
   const about = useCallback((chip: Chip, words: string, placeholder: string) => {
-    // one thing at a time: a chip an earlier "about" button put there goes, as its words used to be written over
-    setChips((l) => l.filter((x) => !x.about || x.id === chip.id));
-    prefill('', { ...chip, about: words, placeholder });
-  }, [prefill]);
+    const { command: _c, ...rest } = chip;
+    void _c;
+    putChip({ ...rest, about: words, placeholder });
+  }, [putChip]);
+  const command = useCallback((chip: Chip, text: string, placeholder?: string) => {
+    const { about: _a, ...rest } = chip;
+    void _a;
+    putChip({ ...rest, command: text, placeholder: placeholder ?? COMMAND_PLACEHOLDER });
+  }, [putChip]);
   const focusBox = useCallback(() => {
     flushSync(() => { window.dispatchEvent(new Event('hh:alma-show')); });
     focusComposer(composerRef);
@@ -168,12 +184,12 @@ export function UIProvider({ film, children }: { film: string; children: React.R
   // The draft is not in this value: it changes on every key press, and everything that reads the UI state
   // (the whole thread, every page) would re-render with it. It has its own context, read by the message box only.
   const value = useMemo<UIValue>(() => ({
-    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, setDraftRefs, prefill, about, focusBox, undoDraft, redoDraft,
+    pinned, setPinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraft, setDraftRefs, about, command, focusBox, undoDraft, redoDraft,
     openTask, setOpenTask, playhead, setPlayhead, composerRef, threadOpen, setThreadOpen, hint, setHint,
-  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraftRefs, prefill, about, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
+  }), [pinned, chips, addChip, removeChip, removeChips, hasChip, clearChips, setDraftRefs, about, command, focusBox, undoDraft, redoDraft, openTask, playhead, threadOpen, hint]);
   // The setters and actions alone, which never change: a page that only writes (the pinned chip, the playhead, a
-  // prefill) reads these, so it does not draw itself again each time the pinned chip or the playhead it set changes.
-  const actions = useMemo<UIActions>(() => ({ setPinned, setHint, setPlayhead, addChip, removeChip, prefill, about, focusBox }), [addChip, removeChip, prefill, about, focusBox]);
+  // chip) reads these, so it does not draw itself again each time the pinned chip or the playhead it set changes.
+  const actions = useMemo<UIActions>(() => ({ setPinned, setHint, setPlayhead, addChip, removeChip, about, command, focusBox }), [addChip, removeChip, about, command, focusBox]);
   return <Ctx.Provider value={value}><ActionsCtx.Provider value={actions}><DraftCtx.Provider value={draft}><RefsCtx.Provider value={refs}>{children}</RefsCtx.Provider></DraftCtx.Provider></ActionsCtx.Provider></Ctx.Provider>;
 }
 
@@ -213,7 +229,7 @@ function focusComposer(ref: React.RefObject<HTMLTextAreaElement | null>): void {
 }
 
 /** The parts of the UI state a page writes and never reads: stable for the film. */
-export type UIActions = Pick<UIValue, 'setPinned' | 'setHint' | 'setPlayhead' | 'addChip' | 'removeChip' | 'prefill' | 'about' | 'focusBox'>;
+export type UIActions = Pick<UIValue, 'setPinned' | 'setHint' | 'setPlayhead' | 'addChip' | 'removeChip' | 'about' | 'command' | 'focusBox'>;
 const ActionsCtx = createContext<UIActions | null>(null);
 export function useUIActions(): UIActions {
   const v = useContext(ActionsCtx);

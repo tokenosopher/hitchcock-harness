@@ -1,8 +1,8 @@
 'use client';
 // The films registry and the library counts: live on every page (the sidebar is never a snapshot).
 // `recent`: when each film last moved up the sidebar, newest first: the user wrote in it (a message, a card's answer,
-// Done picking), or something new needs them (Alma's reply landed, a new card came in). Never Alma working in the
-// background, the app's writes, or opening the film. The server keeps the record (GET
+// Done picking), or something new needs them (a new item in its "Waiting for you"). Never Alma working in the
+// background, her reply alone, the app's writes, or opening the film. The server keeps the record (GET
 // /api/films/recent, so the phone and the Mac agree) and the page reads it again on focus and every 15 s while it is
 // shown; its own sends (almaOutbox's onPosted) and the notices it hears (useNotify's `moved`) move a film at once.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -77,7 +77,7 @@ export function FilmsProvider({ children }: { children: React.ReactNode }) {
   }, [readRecent]);
   // a message, an answer or Done picking sent from this page moves its film at once (sendToAlma notes it on the server)
   useEffect(() => onPosted((film, ok) => { if (ok) bump(film); }), [bump]);
-  // her reply or a new card, heard on the notices' stream
+  // a new item waiting for the user, heard on the notices' stream
   const { moved } = useNotify();
   const order = useMemo(() => {
     let out = recent;

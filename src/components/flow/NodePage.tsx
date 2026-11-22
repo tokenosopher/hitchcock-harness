@@ -68,7 +68,7 @@ function PrevizQC({ s, onChip }: { s: FilmState; onChip: (id: string, label: str
   const t = targets.find((x) => x.target === sel) ?? graded[0] ?? targets.find((x) => x.ready) ?? targets[0];
   if (!t) return null;
   const spec = qcSpecsFor('previz')[0];
-  const goQc = () => { onChip(`qc:previz:${t.target}`, `QC · ${t.label}`); document.getElementById('qc')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+  const goQc = () => { onChip(`qc:previz:${t.pickup ?? t.target}`, `QC · ${t.label}`); document.getElementById('qc')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); };
   return (
     <>
       <div role="tablist" aria-label="Scenes" className="flex flex-nowrap gap-1.5 overflow-x-auto">

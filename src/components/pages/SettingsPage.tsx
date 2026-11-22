@@ -128,7 +128,7 @@ export function SettingsPage() {
             One session per film · the thread is that session
             <span className="block text-[12px] text-sub">{s.sessions.threads.length ? `${s.sessions.threads.length} started: ${s.sessions.threads.join(', ')}` : 'none started yet'}</span>
           </Row>
-          <Row k="Permissions" action={<Btn onClick={() => ui.prefill('Explain what Alma may do without asking, and what changes with HARNESS_ALMA_PERMISSIONS=ask.', { id: 'settings:perm', label: 'Alma’s permissions' })}>Ask</Btn>}>
+          <Row k="Permissions" action={<Btn onClick={() => ui.command({ id: 'settings:perm', label: 'Explain · Alma’s permissions' }, 'Explain what Alma may do without asking, and what changes with HARNESS_ALMA_PERMISSIONS=ask.')}>Ask</Btn>}>
             <Lamp on={s.permissions.mode !== 'permissions off'} />{s.permissions.mode}
             <span className="font-mono text-[11.5px] text-mute"> · HARNESS_ALMA_PERMISSIONS={s.permissions.value}</span>
             <span className="block text-[12px] text-sub">{s.permissions.words}</span>
@@ -153,7 +153,7 @@ export function SettingsPage() {
           </Row>
           {s.folders.map((f, i) => (
             <Row key={`${f.label}-${i}`} k={f.label}
-              action={<Btn onClick={() => ui.prefill(`Change the ${f.label.toLowerCase()} folder (now ${f.shown}) to `, { id: `settings:folder:${i}`, label: `folder · ${f.label}` })}>{f.label === 'Rules' ? 'Ask' : 'Change'}</Btn>}>
+              action={<Btn onClick={() => ui.about({ id: `settings:folder:${i}`, label: `Change the folder · ${f.label}` }, `Change the ${f.label.toLowerCase()} folder (now ${f.shown}). The user says to what`, 'Change it to…')}>{f.label === 'Rules' ? 'Ask' : 'Change'}</Btn>}>
               <Lamp on={f.state === 'connected'} warn={f.state === 'missing' || f.state === 'no answer'} />
               <span className="break-all font-mono text-[12px]">{f.shown}</span>
               <span className="text-sub"> · {FOLDER_WORD[f.state]}</span>
@@ -165,7 +165,7 @@ export function SettingsPage() {
         <Section label="Services" sub="Keys stay in the .env files; this page reads their names only, and Alma never shows a key or a signed address.">
           {s.services.map((v) => (
             <Row key={v.name} k={v.name}
-              action={<Btn disabled={v.state === 'n/a'} onClick={() => ui.prefill(`Check the ${v.name} connection.`, { id: `settings:svc:${v.name}`, label: `service · ${v.name}` })}>Check</Btn>}>
+              action={<Btn disabled={v.state === 'n/a'} onClick={() => ui.command({ id: `settings:svc:${v.name}`, label: `Check the connection · ${v.name}` }, `Check the ${v.name} connection.`)}>Check</Btn>}>
               <Lamp on={SERVICE_ON(v)} warn={v.state === 'failed' || v.state === 'no key' || v.state === 'missing'} />
               {v.how} · <span className={cn(v.state === 'connected' && 'text-ok')}>{v.state}</span>
               <span className="text-sub"> · {v.uses}</span>
@@ -192,7 +192,7 @@ export function SettingsPage() {
         {t && (
           <Section label="Phone access" sub={`The harness on your phone, through a cloudflared quick tunnel to port ${t.port}.`}>
             <Row k="Tunnel"
-              action={t.running ? undefined : <Btn primary onClick={() => ui.prefill(`Start the cloudflared quick tunnel for the harness on port ${t.port}.`, { id: 'settings:tunnel', label: 'tunnel' })}>Start</Btn>}>
+              action={t.running ? undefined : <Btn primary onClick={() => ui.command({ id: 'settings:tunnel', label: `Start the tunnel · port ${t.port}` }, `Start the cloudflared quick tunnel for the harness on port ${t.port}.`)}>Start</Btn>}>
               <Lamp on={t.running && !!t.url} />
               {t.running ? (t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 break-all font-mono text-[12px] text-ink no-underline hover:underline">{t.url.replace(/^https:\/\//, '')}<IconArrowUpRight size={12} /></a> : 'Running, address not readable') : 'Stopped'}
               <span className="text-sub">{t.running ? ` · cloudflared${t.pid ? ` pid ${t.pid}` : ''}` : ' · no address until you start it'}</span>

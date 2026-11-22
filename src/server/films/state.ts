@@ -252,9 +252,18 @@ function markPick(rounds: Round[] | undefined, id: string | undefined): void {
 
 // Survive Next.js dev reloads: one cache per process, shared with the watcher.
 interface Cached { promise: Promise<FilmStateX>; at: number }
-const g = globalThis as unknown as { __filmStateCache?: Map<string, Cached>; __filmStateWatched?: Set<string> };
+type BuiltListener = (slug: string, state: FilmStateX) => void;
+const g = globalThis as unknown as { __filmStateCache?: Map<string, Cached>; __filmStateWatched?: Set<string>; __filmStateBuilt?: Set<BuiltListener> };
 const cache = (g.__filmStateCache ??= new Map());
 const watched = (g.__filmStateWatched ??= new Set());
+const built = (g.__filmStateBuilt ??= new Set());
+
+/** Told each film state built afresh, whoever asked for it (a page, the folder watcher, the notify hub): the hub counts
+ *  the film's "Waiting for you" from it at no extra cost (src/server/claude/notify.ts). */
+export function onFilmStateBuilt(fn: BuiltListener): () => void {
+  built.add(fn);
+  return () => { built.delete(fn); };
+}
 
 /** How long a state is trusted with no watcher on the film's folder (no page open on it). */
 const UNWATCHED_MS = 5_000;
@@ -277,7 +286,11 @@ export async function getFilmState(slug: string): Promise<FilmStateX | undefined
   if (!film) return undefined;
   const entry: Cached = { promise: buildFilmState(film), at: Date.now() };
   cache.set(slug, entry);
-  entry.promise.catch(() => {
+  entry.promise.then((state) => {
+    for (const fn of built) {
+      try { fn(slug, state); } catch { /* a listener's own trouble */ }
+    }
+  }, () => {
     if (cache.get(slug) === entry) cache.delete(slug);
   });
   return entry.promise;

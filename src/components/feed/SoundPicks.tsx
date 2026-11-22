@@ -6,7 +6,8 @@
 // play button (the app's one sound player, as the Voices card has). Choosing a try, or "None of these", sets
 // the choice aside like every other pick; "Done picking" sends it (the only confirm), and the pick runs the studio's
 // own command when it has it (sfx.py --pick), which records it with the tries not picked. A line of why can go with
-// each pick.
+// each pick. "Hear it in the cut" opens the Edit page with the try in question in the sound's place, the playhead a
+// second before it.
 import Link from 'next/link';
 import { useState } from 'react';
 import type { FeedCard, FeedSound } from '@/server/types';
@@ -15,6 +16,7 @@ import { choose, useChoices } from '@/components/data/choices';
 import type { PickBody } from '@/components/library/data';
 import { cn } from '@/lib/utils';
 import { kindWord, placeLine, stripOf, tryLabel } from './soundPick';
+import { CutButton } from './CutButton';
 
 type ToRepo = (rel: string) => string;
 
@@ -53,7 +55,8 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
         <span className="text-[12.5px] tabular-nums text-ink-3">{placeLine(s)}</span>
         <Strip s={s} />
         {eff?.reason && <span className="max-w-[640px] text-[12.5px] leading-normal text-sub">{eff.reason}</span>}
-        {eff?.startFrame !== undefined && <Link href={`/films/${film}/edit?at=${eff.startFrame}`} className="w-fit text-[12px] text-sub underline decoration-edge-strong underline-offset-4 transition-colors duration-200 hover:text-ink">Open its place on the Edit page</Link>}
+        {/* the try in question heard in its place on the timeline: the one chosen, else kept, else Alma's, else the first */}
+        {s.tries.length > 0 && <CutButton film={film} cut={{ sound: s.name, try: Number(sel && sel !== 'none' ? sel : answered && answered.option !== 'none' ? answered.option : s.prediction ?? s.tries[0].n) || s.tries[0].n, ...(eff?.startFrame !== undefined ? { at: eff.startFrame } : {}) }} className="mt-0.5" />}
       </div>
       {answered ? (
         <p className="m-0 text-[12.5px] text-ink-3 duration-200 animate-in fade-in-0">

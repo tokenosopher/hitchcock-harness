@@ -10,7 +10,7 @@ import { repoPath, smpte, takeLabel, fmtDate } from '@/components/lib/format';
 import { Btn } from '@/components/shell/atoms';
 import { IconX } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
-import { clipName, lenF, partnerOf, pastEnd, patchClip, replaceTake, retimeClips, speedOf, startF, superseded, toConfirm, toF, type ClipRef, type Edit } from './model';
+import { clipName, lenF, partnerOf, pastEnd, pastShot, patchClip, shotFrames, replaceTake, retimeClips, speedOf, startF, superseded, toConfirm, toF, type ClipFrames, type ClipRef, type Edit } from './model';
 import { setFade, setFlip } from './controls';
 import type { HistoryStep } from './history';
 import { isLine } from './subs';
@@ -25,6 +25,8 @@ interface Props {
   steps: HistoryStep[];
   readOnly?: boolean;
   srcSeconds: (src: string) => number | undefined;
+  /** What a clip may use of its file (shots.ts clipFrames), for the note on a clip that shows another shot's frames. */
+  framesOf?: (c: TimelineClip) => ClipFrames;
   onEdit: (e: Edit | undefined) => void;
   onClose: () => void;
   onAsk: () => void;
@@ -83,7 +85,7 @@ function WordsField({ text, disabled, onCommit }: { text: string; disabled?: boo
   );
 }
 
-export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, onEdit, onClose, onAsk, onChip }: Props) {
+export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, framesOf, onEdit, onClose, onAsk, onChip }: Props) {
   const fps = tl.fps;
   const track: TimelineTrack | undefined = sel ? tl.tracks.find((t) => t.id === sel.trackId) : undefined;
   const clip: TimelineClip | undefined = track?.clips.find((c) => c.id === sel?.clipId);
@@ -162,6 +164,15 @@ export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, o
         <Row k="Record in"><span title={`${(s / fps).toFixed(2)} s`}>{smpte(s / fps, fps)}</span></Row>
         {srcLen !== undefined && <Row k="Source length"><span title={`${srcLen.toFixed(2)} s`}>{toF(srcLen, fps)} f</span></Row>}
         {pastEnd(clip, srcLen, fps) > 0 && <p className="m-0 pt-1 text-[12px] leading-normal text-warn">Runs {pastEnd(clip, srcLen, fps)} f past the end of its file: that part has no picture or sound of its own. Drag the clip&apos;s end in to fix it.</p>}
+        {(() => {
+          // a shot extended past its own frames before trims stopped there: what it shows of the shot beside
+          const fr = framesOf?.(clip), sh = shotFrames(fr), ps = pastShot(clip, fr, fps);
+          if (!sh || (!ps.head && !ps.tail)) return null;
+          return <p data-past-shot-note="" className="m-0 pt-1 text-[12px] leading-normal text-warn">
+            {ps.head ? `Starts ${ps.head} f before shot ${sh.first}'s own frames: those frames are the shot before's. Drag the clip's start in to fix it. ` : ''}
+            {ps.tail ? `Runs ${ps.tail} f past shot ${sh.last}'s own frames: those frames are the next shot's. Drag the clip's end in to fix it.` : ''}
+          </p>;
+        })()}
         <p className="m-0 truncate pt-1 font-mono text-[10.5px] text-mute" title={clip.src}>{clip.src}</p>
       </div>
       )}

@@ -1,7 +1,8 @@
 // The test hook that plays the notify hub's part for a sample film (MOCK=boards only, 404 otherwise): POST
 // {film, kind: "turn" | "pick" | "task", text?} sends the notice every page gets on GET /api/notify, as when Alma's
-// reply lands ("turn"), a new card waits for the user ("pick") or a sub-agent ends ("task"). A "turn" or "pick" also
-// moves the film to the top of the sidebar, as the real hub does (src/server/claude/notify.ts).
+// reply lands ("turn"), a new card waits for the user ("pick") or a sub-agent ends ("task"). A "pick" also moves the
+// film to the top of the sidebar, as the real hub does (src/server/claude/notify.ts); a "turn" does not. The white dot
+// does not follow these notices: it follows the sample's own "Waiting for you".
 import { connection } from 'next/server';
 import { isMock } from '@/fixtures/mock';
 import { notifyHub } from '@/server/claude/notify';

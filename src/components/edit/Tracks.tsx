@@ -12,8 +12,8 @@ import { cn } from '@/lib/utils';
 import { StepGlyph } from '@/components/flow/FlowBoard';
 import { useDrawCount } from './drawCount';
 import {
-  addTrack, clampAlone, clampRoll, clampTrim, clipName, cutPoints, endF, lenF, moveClip, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, partnerOf, pastEnd, patchClip, patchTrack, rollEdit, rollPairs, snapDelta, splitClip, startF,
-  speedOf, superseded, toConfirm, toF, totalF, trimAlone, trimClip, type ClipRef, type Edit, type NameOf,
+  addTrack, clampAlone, clampRoll, clampTrim, clipName, cutPoints, endF, lenF, moveClip, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, partnerOf, pastEnd, pastShot, patchClip, patchTrack, rollEdit, rollPairs, shotFrames, snapDelta, splitClip, startF,
+  speedOf, superseded, toConfirm, toF, totalF, trimAlone, trimClip, trimLimit, type ClipFrames, type ClipRef, type Edit, type NameOf,
 } from './model';
 import { wheelPastEdge } from './swipe';
 import { addGainPoint, maxDissolveF, moveGainPoint, pointRange, setDissolve, setFade } from './controls';
@@ -50,6 +50,9 @@ interface Props {
   snap: boolean;
   readOnly?: boolean;
   srcSeconds: (src: string) => number | undefined;
+  /** What a clip may use of its file (shots.ts clipFrames): with its take's shots known, a trim, a moved join and a
+   *  picture trimmed alone stop at its shot's own first and last frame. Without it, the file's ends. */
+  framesOf?: (c: TimelineClip) => ClipFrames;
   toolbar: React.ReactNode;
   notice?: React.ReactNode;
   zoomCmd?: { n: number; dir: 1 | -1 | 0 };
@@ -67,6 +70,8 @@ interface Props {
    *  the exception: an upscaled take a thin light line along the top, Seedance the line in blue and a tiny label, no full-size
    *  picture an amber dashed top and an amber "480p". `marked`: its take is marked to redo in Seedance (dashed amber). */
   clipMark?: (c: TimelineClip, t: TimelineTrack) => { kind: 'upscaled' | 'seedance' | 'small'; marked?: boolean } | undefined;
+  /** A quiet mark on a picture clip that can be pressed ("1 new take": a take newer than the cut's). */
+  clipNote?: (c: TimelineClip, t: TimelineTrack) => { text: string; title: string; onPress: () => void } | undefined;
   /** The tracks listened to alone, and the S button's click: a way of listening, never saved (13 Nov). */
   solo?: Set<string>;
   onSolo?: (trackId: string) => void;
@@ -164,7 +169,7 @@ const isMove = (d?: Drag): d is MoveDrag => !!d && (d.kind === 'move' || d.kind 
 /** The ramp drawn over a faded end: the line from full sound to none, the lost part darkened. */
 const ramp = (dir: 'in' | 'out') => `linear-gradient(to top ${dir === 'in' ? 'left' : 'right'}, transparent calc(50% - 1px), #fafafa calc(50% - 1px), #fafafa calc(50% + .5px), rgba(0,0,0,.72) calc(50% + .5px))`;
 
-export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, ripple, snap, readOnly, srcSeconds, toolbar, notice, zoomCmd, focus, scenes, openScene, clipText, tryIds, clipMark, solo, onSolo, pasteTo, onPasteTo, group, onBox, nudge, onMenu, onHeadMenu, renaming, onRenamed, onPeek, nameOf, onPress, point, onPoint, fileDrag, onDropFile, retype, laneNote }: Props) {
+export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, ripple, snap, readOnly, srcSeconds, framesOf, toolbar, notice, zoomCmd, focus, scenes, openScene, clipText, tryIds, clipMark, clipNote, solo, onSolo, pasteTo, onPasteTo, group, onBox, nudge, onMenu, onHeadMenu, renaming, onRenamed, onPeek, nameOf, onPress, point, onPoint, fileDrag, onDropFile, retype, laneNote }: Props) {
   const fps = tl.fps;
   const total = Math.max(totalF(tl), fps * 10);
   const scroller = useRef<HTMLDivElement>(null);
@@ -496,10 +501,10 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
           const sd = snapDelta([cur.j + v], [...cutPoints(tl, new Set([...cur.lefts, ...cur.rights])), frame], snapTol());
           if (sd !== undefined) v += sd;
         }
-        let r = moved ? clampRoll(tl, cur.left, cur.right, v, srcSeconds) : { d: 0, why: undefined };
+        let r = moved ? clampRoll(tl, cur.left, cur.right, v, framesBy) : { d: 0, why: undefined };
         // held at 0 (a frame not reached yet, or snapped back to the playhead on the join) in a direction where the
         // join cannot move at all: the tag says why from the first pixels on
-        if (moved && !r.d && !r.why && Math.round(dx)) { const k = clampRoll(tl, cur.left, cur.right, Math.sign(dx), srcSeconds); if (!k.d && k.why) r = { d: 0, why: k.why }; }
+        if (moved && !r.d && !r.why && Math.round(dx)) { const k = clampRoll(tl, cur.left, cur.right, Math.sign(dx), framesBy); if (!k.d && k.why) r = { d: 0, why: k.why }; }
         if (r.d !== cur.d || r.why !== cur.why || moved !== cur.moved) {
           const nd = { ...cur, d: r.d, why: r.why, moved };
           dragRef.current = nd; setDrag(nd);
@@ -552,12 +557,18 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
         // at a limit, why; stuck at 0 in a direction it cannot go at all, why too
         const c = clipOf(cur.ref);
         const sign = Math.sign(df);
-        const why = !moved ? undefined : aloneLimit(cur, raw).why ?? (!d && sign && c ? clampAlone(tl, cur.ref, cur.kind, sign, srcSeconds((c.src ?? ''))).why : undefined);
+        const why = !moved ? undefined : aloneLimit(cur, raw).why ?? (!d && sign && c ? clampAlone(tl, cur.ref, cur.kind, sign, lim(c)).why : undefined);
         const nd = { ...cur, d, moved, why };
         dragRef.current = nd; setDrag(nd);
         return;
       }
-      const nd = { ...cur, d, moved };
+      // held at the first or the last frame of its shot: the edge stops there and its tag says so; only
+      // a stop that is the shot's own (the drag going past it), not every limit of a plain trim
+      const c = clipOf(cur.ref);
+      const grow = cur.kind === 'head' ? raw < 0 : raw > 0;
+      const lw = moved && grow && c ? trimLimit(tl, cur.ref, cur.kind, d === 0 ? Math.sign(raw) : raw, ripple, lim(c)) : undefined;
+      const why = lw?.why && lw.d === d && /^(start|end) of shot /.test(lw.why) ? lw.why : undefined;
+      const nd = { ...cur, d, moved, why };
       dragRef.current = nd; setDrag(nd);
     };
     // the edge scrolling: each frame while the pointer is held near an edge or past it, moving or not
@@ -596,7 +607,7 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
         onPeek?.(undefined);
         // a click on the join without a drag puts the playhead on it
         if (!cur.moved) setFrame(cur.j);
-        else if (cur.d) onEdit(rollEdit(tl, cur.left, cur.right, cur.d, srcSeconds));
+        else if (cur.d) onEdit(rollEdit(tl, cur.left, cur.right, cur.d, framesBy));
         return;
       }
       // a plain click on a clip (no drag): the playhead goes to where the click was
@@ -643,12 +654,12 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
       else if (cur.alone) {
         // one edge alone: a sound grown over its neighbour lands on the track beside, and stays selected there
         const c = clipOf(cur.ref);
-        const e = trimAlone(tl, cur.ref, cur.kind, cur.d, c ? srcSeconds((c.src ?? '')) : undefined, nameOf);
+        const e = trimAlone(tl, cur.ref, cur.kind, cur.d, c ? lim(c) : undefined, nameOf);
         onEdit(e);
         const t = e?.tl.tracks.find((x) => x.clips.some((k) => k.id === cur.ref.clipId));
         const k = t?.clips.find((x) => x.id === cur.ref.clipId);
         if (t && k && t.id !== cur.ref.trackId) onSelect({ trackId: t.id, clipId: k.id }, k, t);
-      } else { const c = clipOf(cur.ref); onEdit(trimClip(tl, cur.ref, cur.kind, cur.d, ripple, c ? srcSeconds((c.src ?? '')) : undefined)); }
+      } else { const c = clipOf(cur.ref); onEdit(trimClip(tl, cur.ref, cur.kind, cur.d, ripple, c ? lim(c) : undefined)); }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -657,6 +668,9 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
   };
 
   const clipOf = (r: ClipRef) => tl.tracks.find((t) => t.id === r.trackId)?.clips.find((c) => c.id === r.clipId);
+  /** What a clip may use of its file: its shot's own frames when the page knows its take's shots, else its file's ends. */
+  const lim = (c: TimelineClip): ClipFrames => (framesOf ? framesOf(c) : srcSeconds((c.src ?? '')));
+  const framesBy = (src: string, c?: TimelineClip): ClipFrames => (c ? lim(c) : srcSeconds(src));
 
   // the player shows the frame after a picture join while it moves: asked once the join rests 120 ms
   const peekT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -736,14 +750,23 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
     const s = startF(c, fps), e = endF(c, fps);
     let v = raw;
     if (snap) {
-      const pts = [...cutPoints(tl, d.ids), frame];
+      const pts = [...cutPoints(tl, d.ids), frame, ...(d.kind === 'move' ? [] : shotStop(c, d.kind))];
       const edges = d.kind === 'move' ? [s + raw, e + raw] : d.kind === 'head' ? [s + raw] : [e + raw];
       const sd = snapDelta(edges, pts, snapTol());
       if (sd !== undefined) v = raw + sd;
     }
     if (d.kind === 'move') return Math.max(-s, v);
-    return clampTrim(tl, d.ref, d.kind, v, ripple, srcSeconds((c.src ?? '')));
+    return clampTrim(tl, d.ref, d.kind, v, ripple, lim(c));
   };
+  /** Where the edge would meet its shot's first (head) or last (tail) frame, on the timeline: a snap for a trim, so a
+   *  clip that already runs past its shot's frames (an older trim) is brought back to exactly the stop. */
+  const shotStop = (c: TimelineClip, edge: 'head' | 'tail'): number[] => {
+    const sh = shotFrames(lim(c));
+    if (!sh) return [];
+    const sp = speedOf(c);
+    return [edge === 'head' ? startF(c, fps) + Math.round((toF(sh.from, fps) - toF(c.in, fps)) / sp) : endF(c, fps) + Math.round((toF(sh.to, fps) - toF(c.out, fps)) / sp)];
+  };
+  const t0 = (r: ClipRef) => tl.tracks.find((t) => t.id === r.trackId);
   /** An edge trimmed alone: snapped as any trim (its own picture's or sound's edge among the cuts), then kept
    *  inside its file; a sound is not stopped by its neighbour. */
   const aloneLimit = (d: Extract<Drag, { kind: 'head' | 'tail' }>, raw: number): { d: number; why?: string } => {
@@ -751,10 +774,10 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
     if (!c) return { d: 0 };
     let v = raw;
     if (snap) {
-      const sd = snapDelta([(d.kind === 'head' ? startF(c, fps) : endF(c, fps)) + raw], [...cutPoints(tl, d.ids), frame], snapTol());
+      const sd = snapDelta([(d.kind === 'head' ? startF(c, fps) : endF(c, fps)) + raw], [...cutPoints(tl, d.ids), frame, ...(t0(d.ref)?.kind === 'video' ? shotStop(c, d.kind) : [])], snapTol());
       if (sd !== undefined) v = raw + sd;
     }
-    return clampAlone(tl, d.ref, d.kind, v, srcSeconds((c.src ?? '')));
+    return clampAlone(tl, d.ref, d.kind, v, lim(c));
   };
 
   /** A clip too narrow to hit (under 14 px) that the pointer is on or within 6 px of, on this track (13 Nov: drawn
@@ -917,9 +940,19 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                     const gain = drag?.kind === 'gain' && drag.ref.clipId === c.id ? drag.db : c.gain ?? 0;
                     const txt = t.kind === 'video' ? clipText?.(c, t) : undefined;
                     const mark = t.kind === 'video' ? clipMark?.(c, t) : undefined;
+                    const note = t.kind === 'video' ? clipNote?.(c, t) : undefined;
                     const isTry = !!tryIds?.has(c.id) || !!mark?.marked;
                     const still = !isMove(drag) && drag?.kind !== 'roll';
                     const over = pastEnd(c, srcSeconds((c.src ?? '')), fps);
+                    // frames of the shot before or after its own (a shot extended past them before trims stopped
+                    // there), less what the edge in hand has taken back so far
+                    const fr = t.kind === 'captions' ? undefined : lim(c);
+                    const ps = fr ? pastShot(c, fr, fps) : { head: 0, tail: 0 };
+                    const held = (drag?.kind === 'head' || drag?.kind === 'tail') && drag.ids.has(c.id) ? drag : undefined;
+                    const psHead = Math.max(0, ps.head - (held?.kind === 'head' ? held.d : 0)), psTail = Math.max(0, ps.tail + (held?.kind === 'tail' ? held.d : 0));
+                    const psShot = shotFrames(fr);
+                    // the edge in hand held at its shot's first or last frame: lit in amber while it is held there
+                    const atStop = held && held.why && held.ref.clipId === c.id ? held.kind : undefined;
                     const lenNow = Math.max(1, len + dw / z);
                     const fIn = drag?.kind === 'fadeIn' && drag.ref.clipId === c.id ? drag.f : Math.min(lenNow, toF(c.fadeIn ?? 0, fps));
                     const fOut = drag?.kind === 'fadeOut' && drag.ref.clipId === c.id ? drag.f : Math.min(lenNow, toF(c.fadeOut ?? 0, fps));
@@ -943,7 +976,7 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                     };
                     // a planned shot is drawn as a shot (its number and words), not as a line of text (15 Nov)
                     const line = isLine(c) && c.plan !== 'shot';
-                    const tip = line ? `${c.who ? `${c.who}: ` : ''}${c.text}\n${smpte(s / fps, fps)} → ${smpte((s + len) / fps, fps)} · ${len} f (${(len / fps).toFixed(2)} s)${c.muted ? '\nmuted' : ''}${!readOnly && !t.locked ? '\ndouble-click or Enter to retype' : ''}` : `${clipName(c)}\n${smpte(s / fps, fps)} → ${smpte((s + len) / fps, fps)} · ${len} f (${(len / fps).toFixed(2)} s)\nsource ${smpte(c.in, fps)} → ${smpte(c.out, fps)} (${c.in.toFixed(2)}–${c.out.toFixed(2)} s)${speedOf(c) !== 1 ? `\nspeed ${Math.round(speedOf(c) * 100)}%` : ''}${c.gain !== undefined ? `\ngain ${fmtDb(c.gain)}` : ''}${c.flip ? '\nmirrored left to right' : ''}${c.fadeIn ? `\n${t.kind === 'video' ? 'picture' : 'sound'} fades in over ${toF(c.fadeIn, fps)} f` : ''}${c.fadeOut ? `\n${t.kind === 'video' ? 'picture' : 'sound'} fades out over ${toF(c.fadeOut, fps)} f` : ''}${c.dissolve ? `\n${t.kind === 'audio' ? 'cross-fades' : 'dissolves'} from the clip before over ${toF(c.dissolve, fps)} f` : ''}${c.gainPoints?.length ? `\n${c.gainPoints.length} level point${c.gainPoints.length === 1 ? '' : 's'}` : ''}${toConfirm(c) ? '\nto confirm' : ''}${sup ? `\n${sup}` : ''}${over ? `\nruns ${over} f (${(over / fps).toFixed(2)} s) past the end of its file: that part has no picture or sound of its own; drag its end in to fix` : ''}`;
+                    const tip = line ? `${c.who ? `${c.who}: ` : ''}${c.text}\n${smpte(s / fps, fps)} → ${smpte((s + len) / fps, fps)} · ${len} f (${(len / fps).toFixed(2)} s)${c.muted ? '\nmuted' : ''}${!readOnly && !t.locked ? '\ndouble-click or Enter to retype' : ''}` : `${clipName(c)}\n${smpte(s / fps, fps)} → ${smpte((s + len) / fps, fps)} · ${len} f (${(len / fps).toFixed(2)} s)\nsource ${smpte(c.in, fps)} → ${smpte(c.out, fps)} (${c.in.toFixed(2)}–${c.out.toFixed(2)} s)${speedOf(c) !== 1 ? `\nspeed ${Math.round(speedOf(c) * 100)}%` : ''}${c.gain !== undefined ? `\ngain ${fmtDb(c.gain)}` : ''}${c.flip ? '\nmirrored left to right' : ''}${c.fadeIn ? `\n${t.kind === 'video' ? 'picture' : 'sound'} fades in over ${toF(c.fadeIn, fps)} f` : ''}${c.fadeOut ? `\n${t.kind === 'video' ? 'picture' : 'sound'} fades out over ${toF(c.fadeOut, fps)} f` : ''}${c.dissolve ? `\n${t.kind === 'audio' ? 'cross-fades' : 'dissolves'} from the clip before over ${toF(c.dissolve, fps)} f` : ''}${c.gainPoints?.length ? `\n${c.gainPoints.length} level point${c.gainPoints.length === 1 ? '' : 's'}` : ''}${toConfirm(c) ? '\nto confirm' : ''}${sup ? `\n${sup}` : ''}${over ? `\nruns ${over} f (${(over / fps).toFixed(2)} s) past the end of its file: that part has no picture or sound of its own; drag its end in to fix` : ''}${psShot && ps.head ? `\nstarts ${ps.head} f (${(ps.head / fps).toFixed(2)} s) before shot ${psShot.first}'s own frames: those are the shot before's; drag its start in to fix` : ''}${psShot && ps.tail ? `\nruns ${ps.tail} f (${(ps.tail / fps).toFixed(2)} s) past shot ${psShot.last}'s own frames: those are the next shot's; drag its end in to fix` : ''}`;
                     return (
                       <div key={c.id} title={tip} role="button" tabIndex={-1} aria-pressed={isSel} aria-label={`${t.id} ${clipName(c)} at ${smpte(s / fps, fps)}`}
                         onPointerDown={(e) => clipDown(e, t, c, 'body')}
@@ -987,6 +1020,13 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                           <span data-mirror="" title="Mirrored left to right (right-click: Stop mirroring)" className={cn('pointer-events-none absolute bottom-1 z-[2] flex size-[18px] items-center justify-center rounded-[5px] bg-black text-ink-3 animate-in fade-in-0 duration-200', c.unlinked ? 'right-[23px]' : 'right-1')}>
                             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><path d="M8 1.5v13" strokeDasharray="1.6 1.6" /><path d="M5.5 4.5 1.5 12h4z" /><path d="M10.5 4.5l4 7.5h-4z" fill="currentColor" /></svg>
                           </span>
+                        )}
+                        {note && w >= 18 && (
+                          // pressed without selecting or dragging the clip under it
+                          <button type="button" data-new-take="" title={note.title} aria-label={note.text} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); note.onPress(); }}
+                            className={cn('absolute top-1 z-[3] inline-flex h-4 cursor-pointer items-center gap-1 rounded-[4px] border border-white/15 bg-black/75 text-[10px] leading-none text-ink-3 transition-colors duration-200 animate-in fade-in-0 hover:border-warn/60 hover:text-ink', speedOf(c) !== 1 && w >= 34 ? 'right-12' : 'right-1', w >= 76 ? 'px-1' : 'w-4 justify-center')}>
+                            <span aria-hidden="true" className="size-1.5 flex-none rounded-full bg-warn" />{w >= 76 && note.text}
+                          </button>
                         )}
                         {mark && <span data-mark={mark.kind} aria-hidden="true" className={cn('pointer-events-none absolute inset-x-0 top-0 z-[2] duration-200 animate-in fade-in-0', mark.kind === 'small' ? 'border-t-2 border-dashed border-warn' : mark.kind === 'seedance' ? 'h-[2px] bg-sky-400' : 'h-px bg-white/40')} />}
                         {mark && mark.kind !== 'upscaled' && w >= 40 && <span className={cn('pointer-events-none absolute bottom-1 right-1 z-[2] inline-flex h-4 items-center rounded-[4px] bg-black/80 px-1 font-mono text-[9.5px] duration-200 animate-in fade-in-0', mark.kind === 'small' ? 'text-warn' : 'text-sky-300')}>{mark.kind === 'small' ? '480p' : 'Seedance'}</span>}
@@ -1064,6 +1104,15 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                         {/* a clip that runs past the end of its file (an older version's, or a file that changed): the part
                             past the end is underlined in amber; the clip's title says by how much */}
                         {over > 0 && w >= 4 && <span aria-hidden="true" data-past-end={over} className="pointer-events-none absolute bottom-0 right-0 z-[2] h-[3px] bg-warn" style={{ width: Math.max(3, Math.min(w, over * z)) }} />}
+                        {/* a clip that shows frames of the shot before or after its own (extended past them before trims
+                            stopped at a shot's ends): those frames underlined in amber, shrinking as the edge is dragged in */}
+                        {(ps.head > 0 || ps.tail > 0) && w >= 4 && (
+                          <>
+                            <span aria-hidden="true" data-past-shot="head" className="pointer-events-none absolute bottom-0 left-0 z-[2] h-[3px] bg-warn transition-[width,opacity] duration-150 ease-out" style={{ width: Math.min(w, psHead * z), opacity: psHead ? 1 : 0 }} />
+                            <span aria-hidden="true" data-past-shot="tail" className="pointer-events-none absolute bottom-0 right-0 z-[2] h-[3px] bg-warn transition-[width,opacity] duration-150 ease-out" style={{ width: Math.min(w, psTail * z), opacity: psTail ? 1 : 0 }} />
+                          </>
+                        )}
+                        {atStop && <span aria-hidden="true" data-shot-stop={atStop} className={cn('pointer-events-none absolute inset-y-0 z-[4] w-[2px] bg-warn duration-150 animate-in fade-in-0', atStop === 'head' ? 'left-0' : 'right-0')} />}
                         {/* trim handles only on clips wide enough to keep a body to click (at "fit" a short clip is all handle);
                             beside a join they are 9 px, 3 of them under the join's own zone */}
                         {!readOnly && !t.locked && w >= TRIM_MIN && (
@@ -1157,6 +1206,18 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                       <span data-alone-tag="" className="pointer-events-none absolute bottom-[5px] z-[6] -translate-x-1/2 whitespace-nowrap rounded-[4px] bg-ink px-1.5 text-[10.5px] font-medium leading-4 text-bg animate-in fade-in-0 duration-150"
                         style={{ left: x * z }}>
                         {t.kind === 'video' ? 'picture' : 'sound'} alone · {drag.d === 0 ? '0 f' : `${drag.d > 0 ? '→' : '←'} ${Math.abs(drag.d)} f`}{drag.why ? ` · ${drag.why}` : ''}
+                      </span>
+                    );
+                  })()}
+                  {(drag?.kind === 'head' || drag?.kind === 'tail') && !drag.alone && drag.moved && drag.why && drag.ref.trackId === t.id && (() => {
+                    // a trim held at its shot's first or last frame: the edge stops, and says why
+                    const c = t.clips.find((x) => x.id === drag.ref.clipId);
+                    if (!c) return null;
+                    const x = (drag.kind === 'head' ? startF(c, fps) : endF(c, fps)) + drag.d;
+                    return (
+                      <span data-stop-tag="" className="pointer-events-none absolute bottom-[5px] z-[6] -translate-x-1/2 whitespace-nowrap rounded-[4px] bg-ink px-1.5 text-[10.5px] font-medium leading-4 text-bg animate-in fade-in-0 duration-150"
+                        style={{ left: x * z }}>
+                        {drag.d === 0 ? '0 f' : `${drag.d > 0 ? '→' : '←'} ${Math.abs(drag.d)} f`} · {drag.why}
                       </span>
                     );
                   })()}

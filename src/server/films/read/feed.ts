@@ -15,6 +15,7 @@ import { answersStamp, readAnswers } from '../../actions/answers';
 import { progressStamp, readProgress } from '../../actions/progress';
 import { abs, asRecord, asString, AUDIO_RE, IMAGE_RE, redact, VIDEO_RE, type FilmCtx } from '../util';
 import { readSounds, sfxRefs, soundAnswerKey } from './sfx';
+import { cutOf } from '../../../components/edit/cutLink';
 import { checkAnswers, checkDebrief, countsOf, DEBRIEF_ANSWERS_REL, DEBRIEF_REL } from '../../../components/lib/debrief';
 
 export interface Feed { cards: FeedCard[]; warnings: string[] }
@@ -252,6 +253,10 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
       const fl = asRecord(c.fileLine);
       if (fl && str(fl.name)) card.fileLine = { name: str(fl.name)!, sub: str(fl.sub), path: asString(fl.path) };
       if (str(c.note)) card.note = str(c.note);
+      // the place on the cut the card is about: its button opens the Edit page there
+      const cut = cutOf(c.cut);
+      if (cut) card.cut = cut;
+      else if (c.cut !== undefined) warn(`"${title.slice(0, 50)}": its "cut" names no clip, take, sound or moment (clip, take and shot, sound and try, t, at)`);
       // the sound designer's sounds, by name; readFeed reads where each sits and its tries
       const refs = sfxRefs(c.sfx);
       if (refs.length) card.sounds = refs.map((r) => ({ name: r.name, tries: [], ...(r.prediction ? { prediction: r.prediction } : {}) }));

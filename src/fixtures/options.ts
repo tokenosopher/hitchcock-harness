@@ -4,6 +4,7 @@
 // title-boom-9.wav) holds three tries: the one in the film, a shorter one and a longer one. Their files do not
 // exist: nothing plays, the list and the swap can be tested. Pure and free of randomness.
 import type { OptionGroup } from '@/server/edit/options';
+import { soundSampleOptions } from './soundpick';
 
 const peaks = (n: number, k: number) => Array.from({ length: 96 }, (_, i) => Math.round(Math.abs(Math.sin((i + k) / n)) * 100) / 100);
 
@@ -21,5 +22,5 @@ const GROUPS: Record<string, OptionGroup[]> = {
 
 /** The groups asked for (by folder) of the sample film; none for any other film or folder. */
 export function mockOptions(film: string, dirs: string[]): OptionGroup[] {
-  return (GROUPS[film] ?? []).filter((g) => dirs.includes(g.dir));
+  return soundSampleOptions(film, dirs) ?? (GROUPS[film] ?? []).filter((g) => dirs.includes(g.dir));
 }

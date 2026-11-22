@@ -84,7 +84,7 @@ export function FinishPage() {
                   {settled ? '' : 'Last run: '}{f.upscale.lastRun.service ?? 'Higgsfield upscale'} · {fmtDate(f.upscale.lastRun.date)} · {f.upscale.segments.length ? `${f.upscale.segments.length} segments, ` : ''}{f.upscale.source?.frames ? `${Math.round(f.upscale.source.frames / fps)} s, ` : ''}{f.upscale.lastRun.cost ?? ''}
                 </p>
               )}
-              {!settled && <Btn primary={!master} className="h-auto min-h-8 self-start whitespace-normal py-1.5 text-left" onClick={() => ui.prefill(`Make the 1080p of ${cutV} with Seedance 2.5: finalize each take at 1080p, then render the master.`, { id: 'finish:1080', label: `1080p · ${cutV}` })}>
+              {!settled && <Btn primary={!master} className="h-auto min-h-8 self-start whitespace-normal py-1.5 text-left" onClick={() => ui.command({ id: 'finish:1080', label: `Make the 1080p · ${cutV}` }, `Make the 1080p of ${cutV} with Seedance 2.5: finalize each take at 1080p, then render the master.`)}>
                 {master ? `Render ${cutV} again` : `Render the 1080p master of ${cutV}`}
               </Btn>}
             </div>
@@ -176,7 +176,7 @@ export function FinishPage() {
                   </p>
                 ))}
                 {!settled && !f.sharpness.applied && f.variants.some((v) => v.label === 'soft') && (
-                  <Btn className="self-start" onClick={() => ui.prefill(`Use soft for the kit: rebuild the captioned kit files on ${f.variants.find((v) => v.label === 'soft')!.path}.`, { id: 'finish:soft', label: 'soft preset · the kit' })}>Use soft for the kit</Btn>
+                  <Btn className="self-start" onClick={() => ui.command({ id: 'finish:soft', label: 'Use soft for the kit' }, `Use soft for the kit: rebuild the captioned kit files on ${f.variants.find((v) => v.label === 'soft')!.path}.`)}>Use soft for the kit</Btn>
                 )}
               </div>
             )}
@@ -221,12 +221,12 @@ export function FinishPage() {
             ) : (
               <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
                 <p className="m-0 text-[12.5px] leading-normal text-sub">No music row in spend.md, no music track with a file on the timeline.{f.music.track ? ` The Edit timeline has ${f.music.track.id} (${f.music.track.name}) with ${f.music.track.clips.length} clips.` : ''}</p>
-                {!settled && <Btn className="self-start" onClick={() => ui.prefill(`Find music for ${cutV}: `, { id: 'finish:music', label: `music · ${cutV}` })}>Ask Alma for music</Btn>}
+                {!settled && <Btn className="self-start" onClick={() => ui.about({ id: 'finish:music', label: `Find music · ${cutV}` }, `Find music for ${cutV}. The user says what kind`, 'What music…')}>Ask Alma for music</Btn>}
               </div>
             )}
             {f.music.peak && (
               <div className="border-b border-line px-4 py-3">
-                <Flag quiet={settled} from={f.music.peak.fact.from} action={settled ? undefined : <Btn className="self-start" onClick={() => ui.prefill(`The mix peaks at ${f.music.peak!.value > 0 ? '+' : ''}${f.music.peak!.value} ${f.music.peak!.unit} on ${f.cut?.render ?? cutV}. What do you suggest?`, { id: 'finish:peak', label: `mix peak ${f.music.peak!.value > 0 ? '+' : ''}${f.music.peak!.value} ${f.music.peak!.unit}` })}>Ask Alma about the peak</Btn>}>
+                <Flag quiet={settled} from={f.music.peak.fact.from} action={settled ? undefined : <Btn className="self-start" onClick={() => ui.command({ id: 'finish:peak', label: `The mix peak · ${f.music.peak!.value > 0 ? '+' : ''}${f.music.peak!.value} ${f.music.peak!.unit}` }, `The mix peaks at ${f.music.peak!.value > 0 ? '+' : ''}${f.music.peak!.value} ${f.music.peak!.unit} on ${f.cut?.render ?? cutV}. What do you suggest?`)}>Ask Alma about the peak</Btn>}>
                   The mix peaks at {f.music.peak.value > 0 ? '+' : ''}{f.music.peak.value} {f.music.peak.unit} on {f.cut?.render ?? cutV}{f.music.peak.value > 0 && f.music.peak.unit === 'dBFS' ? ', so it clips' : ''}.
                 </Flag>
                 {f.music.peak.earlier.map((e) => <p key={e.text} className="m-0 mt-2 text-[11.5px] text-mute">Earlier: {e.text} <From>{e.from}</From></p>)}
@@ -281,7 +281,7 @@ export function FinishPage() {
               <p className="m-0 border-b border-line px-4 py-3 text-[12.5px] leading-normal text-sub">No subtitles/ or social/ caption files yet. Captions follow the 1080p master: the script lines timed on its dialogue, burned in the gold style (Flow v3 - 12).</p>
             )}
             {!settled && <div className="px-4 py-3">
-              <Btn className="h-auto min-h-8 whitespace-normal py-1.5 text-left" onClick={() => ui.prefill(sidecar ? `Make captions from the ${capEdition} SRT.` : `Make captions for ${cutV}.`, { id: 'finish:captions', label: `captions · ${capEdition}` })}>
+              <Btn className="h-auto min-h-8 whitespace-normal py-1.5 text-left" onClick={() => ui.command({ id: 'finish:captions', label: `Make captions · ${capEdition}` }, sidecar ? `Make captions from the ${capEdition} SRT.` : `Make captions for ${cutV}.`)}>
                 {sidecar ? `Make captions from the ${capEdition} SRT` : `Make captions for ${cutV}`}
               </Btn>
             </div>}

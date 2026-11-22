@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { useNav } from './Shell';
-import { IconMenu, IconMore } from './icons';
+import { IconMenu } from './icons';
+import { MoreMenu } from './MoreMenu';
 import { BackLink, useRememberedBack, type Back } from './BackLink';
 
 /** `node`: a crumb drawn by the page itself (a deeper page's step, with its menu). */
@@ -29,7 +30,7 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
           <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{last?.label}</span>
           {sub && <span className="truncate text-[12px] text-sub">{sub}</span>}
         </div>
-        <button type="button" aria-label="More: open folder, spend" className="flex size-11 flex-none items-center justify-center rounded-[10px] text-ink"><IconMore size={16} /></button>
+        <MoreMenu phone />
       </div>
       {/* a deeper page without a row of its own: its way back under the top bar, on the phone */}
       {phoneRow && way && (
@@ -60,7 +61,7 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
         </div>
         <div className="flex flex-none gap-2">
           {actions}
-          <button type="button" aria-label="More: open folder, spend" className="flex size-8 cursor-pointer items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconMore /></button>
+          <MoreMenu />
         </div>
       </header>
     </>

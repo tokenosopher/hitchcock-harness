@@ -250,15 +250,16 @@
   background: var(--color-ink);
 }
 .row-orb {
-  background: rgb(250 250 250 / 0.8);
-  box-shadow: 0 0 4px rgb(250 250 250 / 0.3);
+  /* dim grey, near the page's black, so it never reads as the white dot */
+  background: #52525b;
+  box-shadow: 0 0 4px rgb(113 113 122 / 0.3);
 }
 .row-orb::before {
   content: '';
   position: absolute;
   inset: -6px;
   border-radius: 9999px;
-  background: radial-gradient(closest-side, rgb(250 250 250 / 0.45), rgb(250 250 250 / 0.12) 60%, rgb(250 250 250 / 0));
+  background: radial-gradient(closest-side, rgb(113 113 122 / 0.45), rgb(113 113 122 / 0.12) 60%, rgb(113 113 122 / 0));
   opacity: 0.25;
   animation: row-orb-breathe 2.4s ease-in-out infinite paused;
 }

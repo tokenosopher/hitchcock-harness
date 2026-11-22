@@ -9,7 +9,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePage } from '@/components/data/ui';
-import { picksWaiting, type FlowKey } from '@/components/lib/derive';
+import type { FlowKey } from '@/components/lib/derive';
 import { defaultOpen, flowOf, ORDER, PAGE_STEPS, stepHref, type Flow } from '@/components/lib/flow';
 import { goBack } from '@/components/shell/BackLink';
 import type { FilmState, Stage } from '@/server/types';
@@ -40,7 +40,8 @@ const STAGE_NODE: Record<Stage, FlowKey> = {
 function stagePinned(stage: Stage | undefined, flow: Flow): string {
   const n = flow.nodes[stage ? STAGE_NODE[stage] : 'story'];
   const parts = [stage ? `stage ${stage}` : n.chip, n.status || n.name];
-  if (flow.waiting) parts.push(picksWaiting(flow.waiting));
+  // what waits, unless the node's words say it already ("v3 draft · waits for your lock")
+  if (flow.waiting && !parts[1].includes(flow.waitWords)) parts.push(flow.waitWords);
   return parts.join(' · ');
 }
 
@@ -94,7 +95,7 @@ export function MainPage() {
   const onAt = (id: string) => router.push(`${pathname}?open=${open}&at=${encodeURIComponent(id)}`, { scroll: false });
   const place = at ? state.locations.find((l) => l.id === at) : undefined;
   const chip = (id: string, label: string, ref?: string) => ui.addChip({ id, label, ref });
-  const prefill = (t: string, id: string, label: string) => ui.prefill(t, { id, label });
+  const prefill = (t: string, id: string, label: string) => ui.command({ id, label }, t);
   const n = flow.nodes[open];
 
   return (

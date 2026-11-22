@@ -9,6 +9,7 @@ import type { FilmState, GoMediaItem, GoReview, GoScene, GoShot } from '@/server
 import { useUI } from '@/components/data/ui';
 import { fmtDate, fmtSecs, repoPath, takeLabel } from '@/components/lib/format';
 import { qcEntry, qcSpec } from '@/components/lib/qc';
+import { withPickupCheck } from '@/components/lib/pickupCheck';
 import { QCChip } from '@/components/shell/QCChip';
 import { Badge, Btn } from '@/components/shell/atoms';
 import { IconChevronDown, IconFile } from '@/components/shell/icons';
@@ -207,10 +208,11 @@ export function CheckLine({ scene }: { scene: GoScene }) {
   );
 }
 
-/** The scene's prompt QC (qc/prompt-<S>-r<n>.json), the shared chip and popover. */
+/** The scene's prompt QC (qc/prompt-<S>-r<n>.json), the shared chip and popover; a pick-up's own prompt check
+ *  (qc/prompt-FIX-<name>-r<n>.json) when it has one, the scene's kept as the earlier one. */
 export function PromptQC({ scene, s }: { scene: GoScene; s: FilmState }) {
   const v = scene.prompt?.version;
-  return <QCChip spec={qcSpec('prompt')} targets={{ target: scene.id, label: `${scene.id} prompt${v ? ` ${v}` : ''}`, entry: qcEntry(s, 'prompt', scene.id), ready: !!v, waitsFor: v ? `${scene.id} prompt ${v}` : `${scene.id}'s first prompt` }} />;
+  return <QCChip spec={qcSpec('prompt')} targets={withPickupCheck(s, 'prompt', { target: scene.id, label: `${scene.id} prompt${v ? ` ${v}` : ''}`, entry: qcEntry(s, 'prompt', scene.id), ready: !!v, waitsFor: v ? `${scene.id} prompt ${v}` : `${scene.id}'s first prompt` })} />;
 }
 
 /** "≈ 75 cr", the basis on hover. */

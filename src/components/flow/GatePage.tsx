@@ -3,10 +3,10 @@
 // Alma's asking cards and the picks whose round landed together, the most important first (waitList.ts
 // byImportance). What is still being made is one quiet line, no card; each step's own page shows its work.
 // A pick is the one thing a button does itself (build step 2): a candidate tile selects it to look at, "Pick X" (or
-// "Choose this one" in the full-screen view) sets it aside, and "Done picking" writes it and tells Alma. Everything that would spend credits still prefills the composer (SPEC principle 1). design/boards/Main.dc.html.
+// "Choose this one" in the full-screen view) sets it aside, and "Done picking" writes it and tells Alma. Everything that would spend credits still only puts its ask in the composer, as a chip (SPEC principle 1). design/boards/Main.dc.html.
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import type { GateItem } from '@/components/lib/derive';
+import { storyWait, type GateItem, type StoryWait } from '@/components/lib/derive';
 import { CHAIN_A, CHAIN_B, ORDER, runningSummary, type Flow } from '@/components/lib/flow';
 import { Reveal } from '@/components/shell/Reveal';
 import { capital, fmtDate, repoPath, word } from '@/components/lib/format';
@@ -99,7 +99,7 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
           {state && sheetPath && <Media path={repoPath(state.film.folder, state.film.repo, sheetPath)} w={960} fit="contain" alt={`${p.id} sheet`} className="aspect-[16/9] w-full max-w-[640px] rounded-[8px] border border-edge bg-black" />}
           {state && <Who state={state} ids={[p.id]} face={false} />}
           <div className="flex flex-wrap items-center gap-2">
-            <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, p.chip)} title="Puts the words in Alma's box; press send there">Approve the sheet</Btn>
+            <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, `Approve · ${p.chip}`)} title="Puts it in Alma's box; press send there">Approve the sheet</Btn>
             <Btn onClick={() => ui.about({ id: p.key, label: p.chip }, `the ${p.id} sheet: a change to it`, `What should change in the ${p.id} sheet…`)}>Ask for a change</Btn>
             {film && <Link href={`/films/${film.slug}/character/${p.id}`} className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium text-sub no-underline hover:text-ink">Open {p.id}</Link>}
           </div>
@@ -138,11 +138,11 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
               <PickButton key={sel} film={film.slug} body={{ kind: pickKind, target, round: p.round?.id, candidate: sel, prediction: p.prediction, from }}
                 label={<>Pick <span className="font-mono text-[12.5px]">{sel}</span></>} what={`${sel} for ${target}`} />
             ) : (
-              <Btn disabled={!sel} onClick={() => sel && onPrefill(`Pick ${sel} for ${target}`, `pick:${target}`, p.chip)}>Pick <span className="font-mono text-[12.5px]">{sel ?? '…'}</span></Btn>
+              <Btn disabled={!sel} onClick={() => sel && onPrefill(`Pick ${sel} for ${target}`, `pick:${target}`, `Pick ${sel} · ${p.chip}`)}>Pick <span className="font-mono text-[12.5px]">{sel ?? '…'}</span></Btn>
             )}
             {sel && film && libKind && saveRef(sel) ? (
               <SaveButton key={`s-${sel}`} film={film.slug} kind={libKind} refPath={saveRef(sel)!} label={<>Save {sel} to the library</>} />
-            ) : sel && <Btn ghost onClick={() => onPrefill(`Save ${sel} (${target}) to the library`, `save:${target}`, `save ${sel}`)}><IconBookmark size={13} />Save {sel} to the library</Btn>}
+            ) : sel && <Btn ghost onClick={() => onPrefill(`Save ${sel} (${target}) to the library`, `save:${target}`, `Save to the library · ${sel}`)}><IconBookmark size={13} />Save {sel} to the library</Btn>}
           </div>
         </>
       )}
@@ -174,6 +174,38 @@ export function GoCard({ p, base, onChip }: { p: GateItem; base: string; onChip:
   );
 }
 
+/** The script waiting for the user's lock, or the story for their read and settle (derive.ts storyWait): what
+ *  the draft is, what goes on in it, from the files, and the way to the Story page, where "Lock vN" (or
+ *  "Settle") is. The lock is never given from here: it is the go for the first round of asset work. */
+export function StoryWaitCard({ w, base, onChip }: { w: StoryWait; base: string; onChip: (id: string, label: string) => void }) {
+  const ui = useUIActions();
+  const what = `${w.kind} ${w.version}`;
+  return (
+    <article data-story-wait={w.kind} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge bg-well px-4 py-3.5">
+      <button type="button" onClick={() => onChip(w.key, what)} aria-label={`Add ${what} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
+        <span className="flex min-w-0 items-center gap-2">
+          <Dot state="done" />
+          <span className="truncate text-[14px] font-medium">{w.title}</span>
+          <Badge>{w.kind === 'script' ? 'Your lock' : 'Your read'}</Badge>
+        </span>
+        <span className="pl-3.5 text-[12.5px] leading-normal text-sub">{w.line}</span>
+      </button>
+      {/* what goes on in the story, from the files */}
+      <div data-story-summary className="ml-3.5 flex max-w-[640px] flex-col gap-1 border-l border-line pl-3 text-[12.5px] leading-normal text-ink-3">
+        {w.summary.map((l) => <p key={l} className="m-0">{l}</p>)}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 pl-3.5">
+        <Link href={`${base}/story?tab=${w.kind}`} onClick={() => onChip(w.key, what)} data-story-open
+          className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-3 text-[13px] font-medium text-bg no-underline hover:bg-ink-3">
+          {w.kind === 'script' ? 'Open the script' : 'Open the story'}
+        </Link>
+        <button type="button" onClick={() => ui.about({ id: w.key, label: what }, `${what}: a change before ${w.kind === 'script' ? 'the lock' : 'the settle'}`, `What should change in ${what}…`)}
+          className="inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-[13px] font-medium text-sub hover:text-ink">Ask for a change</button>
+      </div>
+    </article>
+  );
+}
+
 /** The steps whose picks the gate collects, in board order. */
 const GATE_INPUTS = [...CHAIN_A, ...CHAIN_B];
 
@@ -181,6 +213,13 @@ const GATE_INPUTS = [...CHAIN_A, ...CHAIN_B];
 function idleLines(s: FilmState, flow: Flow): { title: string; sub: string } {
   const live = runningSummary(flow);
   if (live.length) return { title: `Alma is running ${word(live.length)} ${live.length === 1 ? 'job' : 'jobs'}`, sub: `${live.join(' · ')}. No pick waits for you; each lands here as soon as it is ready.` };
+  // a lock or a settle just pressed (lib/sent.ts storySent): Alma's move now, said as such until the files show it
+  const sw = storyWait(s, []);
+  if (sw?.sent) {
+    return { title: `Story · ${flow.nodes.story.status}`, sub: sw.kind === 'script'
+      ? `No pick waits for you. Alma locks script ${sw.version} and says so in the thread; the lock starts the places and the people.`
+      : `No pick waits for you. Alma writes the script from story ${sw.version}; it comes back here for your lock.` };
+  }
   if (s.film.status === 'delivered') {
     // the day the generations started is the day of the earliest take on file
     const first = s.scenes.flatMap((sc) => sc.takes.map((t) => t.date)).filter((d): d is string => !!d).sort()[0];
@@ -239,7 +278,8 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
             return (
               <Reveal key={it.key} open={here} className="min-w-0">
                 <div data-wait-item={it.key} className="pb-2.5">
-                  {it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[it.card.place]?.name}</span>} />
+                  {it.story ? <StoryWaitCard w={it.story} base={base} onChip={onChip} />
+                    : it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[it.card.place]?.name}</span>} />
                     : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={onChip} />
                     : g ? <PickCard p={g} onChip={onChip} onPrefill={onPrefill} voices={it.voiceIds} /> : null}
                 </div>

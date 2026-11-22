@@ -1,21 +1,22 @@
 'use client';
 // Films (in progress, delivered), the library with counts, Settings pinned at the bottom, studio folder and Alma status.
 // Each group lists the film that moved last first, as ChatGPT and Claude list their chats: a film moves when the user
-// writes in it or something new needs them, never for Alma working in the background. The rows slide to their new
-// places, and not while a finger or the mouse is pressed in the list.
-// Each row carries one mark (RowMark): the white dot when something needs the user, the glowing orb while Alma works.
+// writes in it or something new needs them, never for Alma working in the background. The
+// rows slide to their new places, and not while a finger or the mouse is pressed in the list.
+// Each row carries one mark (RowMark): the white dot when the film's "Waiting for you" lists anything, the glowing orb
+// while Alma works and nothing waits.
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFilms } from '@/components/data/films';
 import { useFilm } from '@/components/data/film';
 import { useThread } from '@/components/data/thread';
-import { filmSubtitle, STAGE_SHORT } from '@/components/lib/derive';
+import { filmSubtitle, STAGE_SHORT, waitingCount } from '@/components/lib/derive';
 import { fmtDate } from '@/components/lib/format';
 import { IconLogo, IconPanel, IconPlus, IconSearch, IconSettings } from './icons';
 import { cn } from '@/lib/utils';
 import { useNotify } from '@/components/notify/NotifyProvider';
-import { byRecent, holdOrder, rowMark } from './recent';
+import { byRecent, holdOrder, rowMark, rowMarkLabel } from './recent';
 import { RowMark } from './RowMark';
 
 /** Where each row was last drawn, per place the list is shown in ('side', 'drawer'). Kept outside the component: the
@@ -53,7 +54,7 @@ export function Sidebar({ current, onNavigate, onCollapse }: { current?: string;
   const onNew = usePathname() === '/films/new';
   const { state } = useFilm();
   const thread = useThread();
-  const { unread, running } = useNotify();
+  const { unread, running, waiting } = useNotify();
   const [q, setQ] = useState('');
   const [scrolled, setScrolled] = useState(false);
   // the lists fade in only when they arrive after the sidebar is drawn (the frame is drawn anew on each film)
@@ -85,12 +86,15 @@ export function Sidebar({ current, onNavigate, onCollapse }: { current?: string;
   // the film open now: Alma's working state as its page has it (the phone bar's "Alma is working": her turn, her
   // sub-agents), so its orb comes and goes with no wait; every film: the server's word on the notices' stream
   const liveWorking = thread.loaded && (thread.workingSince !== undefined || thread.tasks.some((t) => t.state === 'running' || t.state === 'queued'));
-  const markOf = (film: string, waiting: boolean) => {
+  // what waits for the user: the film open now counts its page's own list (its state with what was just sent left
+  // out), so its dot goes the moment the user answers; every film: the server's count on the notices' stream, by the
+  // same rule (derive.ts waitingKeys)
+  const liveWaiting = state && state.film.slug === current && thread.loaded ? waitingCount(state, thread.tasks) : undefined;
+  const markOf = (film: string) => {
     const u = unread[film];
-    const mark = rowMark({ unread: u?.count ?? 0, waiting, working: running.has(film) || (film === current && liveWorking) });
-    const label = mark === 'working' ? 'Alma is working'
-      : u?.count ? `${u.count} unread${u.last ? ` · ${u.last}` : ''}` : mark ? 'Waiting on you' : undefined;
-    return <RowMark mark={mark} label={label} />;
+    const n = film === current && liveWaiting !== undefined ? liveWaiting : waiting[film] ?? 0;
+    const mark = rowMark({ waiting: n, working: running.has(film) || (film === current && liveWorking) });
+    return <RowMark mark={mark} label={rowMarkLabel(mark, { waiting: n, unread: u?.count, last: u?.last })} />;
   };
 
   return (
@@ -141,13 +145,12 @@ export function Sidebar({ current, onNavigate, onCollapse }: { current?: string;
             {live.map((f) => {
               const on = f.slug === current;
               const sub = on && state ? filmSubtitle(state, thread.tasks) : f.stage ? STAGE_SHORT[f.stage] : '';
-              const waiting = on && /picks waiting/.test(sub);
               return (
                 <Link key={f.slug} data-flip={f.slug} href={`/films/${f.slug}`} onClick={onNavigate} aria-current={on ? 'page' : undefined}
                   className={cn('flex min-h-11 flex-col gap-[5px] rounded-lg px-2.5 py-[9px] text-ink no-underline', on ? 'bg-raised' : 'hover:bg-panel')}>
                   <span className="flex w-full items-center justify-between gap-2">
                     <span className="truncate text-[13.5px] font-medium" title={f.title}>{f.title}</span>
-                    {markOf(f.slug, waiting)}
+                    {markOf(f.slug)}
                   </span>
                   <span className="w-full truncate text-[12px] text-sub">{sub}</span>
                 </Link>
@@ -165,7 +168,7 @@ export function Sidebar({ current, onNavigate, onCollapse }: { current?: string;
                   className={cn('flex flex-col justify-center rounded-lg px-2.5 text-[#D4D4D8] no-underline', on ? 'bg-raised py-2 text-ink' : 'h-10 hover:bg-panel')}>
                   <span className="flex items-center justify-between gap-2">
                     <span className={cn('truncate text-[13.5px]', on && 'font-medium')} title={f.title}>{f.title}</span>
-                    <span className="flex flex-none items-center gap-2">{markOf(f.slug, false)}<span className="text-[12px] text-mute">{fmtDate(f.delivered?.[0]?.date)}</span></span>
+                    <span className="flex flex-none items-center gap-2">{markOf(f.slug)}<span className="text-[12px] text-mute">{fmtDate(f.delivered?.[0]?.date)}</span></span>
                   </span>
                   {on && f.stage && <span className="truncate text-[12px] text-sub">{STAGE_SHORT[f.stage]} · delivered {fmtDate(f.delivered?.[0]?.date)}</span>}
                 </Link>

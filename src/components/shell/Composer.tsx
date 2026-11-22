@@ -20,6 +20,7 @@ import { useUI, useDraft, useDraftRefs } from '@/components/data/ui';
 import { useThread } from '@/components/data/thread';
 import { useFilm } from '@/components/data/film';
 import { Chips } from './Chips';
+import { outgoingText } from './outgoing';
 import { IconSend, IconStop } from './icons';
 import { cn } from '@/lib/utils';
 import { isUploadChip, sendUpload, UPLOAD_PART } from '@/components/lib/uploads';
@@ -77,7 +78,7 @@ function Backdrop({ parts, at, innerRef }: { parts: DraftPart[]; at?: { start: n
 }
 
 export function Composer({ film, compact }: { film: string; compact?: boolean }) {
-  const { setDraft, setDraftRefs, prefill, undoDraft, redoDraft, hint, pinned, chips, addChip, removeChips, playhead, composerRef } = useUI();
+  const { setDraft, setDraftRefs, command, undoDraft, redoDraft, hint, pinned, chips, addChip, removeChips, playhead, composerRef } = useUI();
   const draft = useDraft();
   const refs = useDraftRefs();
   const { send, stop, workingSince } = useThread();
@@ -98,6 +99,8 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
   const picker = useRef<HTMLInputElement>(null);
   const boxH = useSize('box');
   const attached = chips.filter(isUploadChip).length;
+  // a button's whole ask in the box as a chip: Send with nothing typed sends it
+  const asks = chips.some((c) => !!c.command);
 
   // the words as parts (text and chips), what the box shows, and where the chips are in it
   const parts = useMemo(() => draftParts(draft, refs), [draft, refs]);
@@ -106,7 +109,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
   const partsNow = useRef(parts);
   const plainNow = useRef(plain);
   useLayoutEffect(() => { partsNow.current = parts; plainNow.current = plain; });
-  const has = plain.trim().length > 0 || attached > 0;
+  const has = plain.trim().length > 0 || attached > 0 || asks;
   const showAll = !compact || focus || has || uploading > 0;
   // where the cursor goes after the box's words were set by us (a chip in or out), and where it stood last
   const caretAfter = useRef<number | undefined>(undefined);
@@ -241,10 +244,10 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
   const justSentTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(justSentTimer.current), []);
   function submit() {
-    // a message can be only a file: Alma is told to look at it; a message of chips alone is their tags
-    const words = draftForAlma(parts).trim();
-    const text = words || (attached ? (attached === 1 ? 'Look at the attached file.' : 'Look at the attached files.') : '');
-    if (!text || uploading > 0) return;
+    // a message can be only a file: Alma is told to look at it; a message of chips alone is their tags; a message can be
+    // a button's ask alone (its chip carries the words Alma reads, so none are added here)
+    const text = outgoingText(draftForAlma(parts), chips);
+    if (text === undefined || uploading > 0) return;
     const selected = chips;
     // the box clears and the message shows in the thread now; if it does not go, the thread keeps it with a retry
     void send(text, { film, page, pinned, selected, playhead });
@@ -436,7 +439,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
           {showAll && (
             <div className="flex min-w-0 flex-1 flex-wrap gap-1">
               {quick.map((q) => (
-                <button key={q} type="button" onClick={() => prefill(q)} className="h-7 cursor-pointer whitespace-nowrap rounded-[7px] border border-edge px-[9px] text-[12px] font-medium text-ink-3 hover:bg-raised">{q}</button>
+                <button key={q} type="button" onClick={() => command({ id: `quick:${q}`, label: q }, q)} className="h-7 cursor-pointer whitespace-nowrap rounded-[7px] border border-edge px-[9px] text-[12px] font-medium text-ink-3 hover:bg-raised">{q}</button>
               ))}
               {/* the quiet hint, or a line about the last key (no playhead here) for a moment */}
               {!phone && (

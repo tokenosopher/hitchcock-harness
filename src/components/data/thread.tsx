@@ -9,8 +9,10 @@
 // off the user messages the thread sees arrive, and closes with as many results (or an error).
 // A message sent with `send` shows in the thread at the tap, before the server has it (pendingSends.ts): marked as
 // sending, then replaced by the thread's own copy under the same key, or kept as "Not sent" with a retry.
+// A `hide` event takes a turn out of the chat (a turn Alma started on her own schedule that changed nothing):
+// its rows on screen fade out first (`leaving`), then go; its ids never come back from a later read or the stream.
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { AlmaModel, HarnessContext, SpendLine, TaskCard, ThreadEvent, ThreadInfo } from '@/server/types';
+import { HIDEABLE_KINDS, type AlmaModel, type HarnessContext, type SpendLine, type TaskCard, type ThreadEvent, type ThreadInfo } from '@/server/types';
 import { latestTasks } from '@/components/lib/derive';
 import { cardCost, lineKey } from '@/components/shell/TaskCardCost';
 import { useFilm } from './film';
@@ -39,8 +41,11 @@ interface ThreadValue {
   turnOnReserve: () => Promise<{ ok: boolean; error?: string }>;
   /** Interrupts Alma's current turn (DELETE on the thread route); the server also drops the messages queued behind it. */
   stop: () => Promise<boolean>;
+  /** Ids of events leaving the chat now (a hidden turn's rows fade out, then go). */
+  leaving: ReadonlySet<string>;
 }
-const Ctx = createContext<ThreadValue>({ events: [], loaded: false, tasks: [], sending: false, toAlma: false, send: async () => false, stop: async () => false, model: { choice: '' }, setModel: async () => false, turnOnReserve: async () => ({ ok: false }) });
+const NONE: ReadonlySet<string> = new Set();
+const Ctx = createContext<ThreadValue>({ events: [], loaded: false, tasks: [], sending: false, toAlma: false, send: async () => false, stop: async () => false, model: { choice: '' }, setModel: async () => false, turnOnReserve: async () => ({ ok: false }), leaving: NONE });
 
 /** The messages sent from here that the thread has not got back yet, in a context of their own: a tap redraws the
  *  thread column, not every reader of the thread (the sidebar, the pages). */
@@ -62,6 +67,8 @@ const SLOW_POLL_MS = 10_000;
 const LANDING_MS = 2000;
 /** An unanswered message younger than this, found on load or arriving, counts as Alma's turn in progress. */
 const WORKING_WINDOW_MS = 5 * 60_000;
+/** How long a hidden turn's rows take to fade and fold away (ThreadColumn's Leaving) before they go from the list. */
+const LEAVE_MS = 320;
 
 function merge(list: ThreadEvent[], e: ThreadEvent): ThreadEvent[] {
   const i = list.findIndex((x) => x.id === e.id);
@@ -129,24 +136,48 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
   const endsAtSend = useRef<Set<string>>(new Set()); // result/error ids known when the first of them arrived
   const seenUsers = useRef<Set<string>>(new Set()); // user messages already looked at (almaOutbox.arrived)
   const postedAt = useRef(0); // when a POST to Alma from elsewhere in the app was last answered
+  const hiddenIds = useRef<Set<string>>(new Set()); // events taken out of the chat by a `hide` event
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(NONE);
+
+  /** Reads the `hide` events out of what came in (their rows on screen fade, then go) and drops what they hid. */
+  const take = useCallback((list: ThreadEvent[]): ThreadEvent[] => {
+    const hidden = hiddenIds.current;
+    const fresh: string[] = [];
+    const rest: ThreadEvent[] = [];
+    for (const e of list) {
+      if (e.kind === 'hide') { for (const id of e.ids) if (!hidden.has(id)) { hidden.add(id); fresh.push(id); } continue; }
+      if (hidden.size && HIDEABLE_KINDS.has(e.kind) && hidden.has(e.id)) continue;
+      rest.push(e);
+    }
+    if (fresh.length) {
+      setLeaving((s) => new Set([...s, ...fresh]));
+      setTimeout(() => {
+        const gone = new Set(fresh);
+        setEvents((l) => { const out = l.filter((e) => !(HIDEABLE_KINDS.has(e.kind) && gone.has(e.id))); return out.length === l.length ? l : out; });
+        setLeaving((s) => { const next = new Set(s); for (const id of fresh) next.delete(id); return next; });
+      }, LEAVE_MS);
+    }
+    return rest;
+  }, []);
 
   const refresh = useCallback(async () => {
     lastPoll.current = Date.now();
     try {
       const r = await fetch(`/api/films/${film}/thread`, { cache: 'no-store' });
       if (!r.ok) return;
-      const list = (await r.json()) as ThreadEvent[];
+      const list = take((await r.json()) as ThreadEvent[]);
       setEvents((l) => mergeAll(l, list));
     } catch { /* the next poll tries again */ }
-  }, [film]);
+  }, [film, take]);
 
   useEffect(() => {
     let live = true;
+    hiddenIds.current = new Set();
     fetch(`/api/films/${film}/thread`, { cache: 'no-store' })
       .then(async (r) => {
         if (!live) return;
         if (r.ok) {
-          const list = (await r.json()) as ThreadEvent[];
+          const list = take((await r.json()) as ThreadEvent[]);
           // a message sent moments ago and not answered yet (the Idea page's first message) opens her turn below
           setEvents((l) => mergeAll(list, l));
           setLoaded(true);
@@ -173,9 +204,9 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
     let flushAt: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
       flushAt = undefined;
-      const batch = queue;
+      const batch = live ? take(queue) : [];
       queue = [];
-      if (live && batch.length) setEvents((l) => mergeAll(l, batch));
+      if (batch.length) setEvents((l) => mergeAll(l, batch));
     };
     es.onmessage = (m) => {
       heard();
@@ -199,7 +230,7 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
       void refresh();
     });
     return () => { live = false; es.close(); clearInterval(timer); clearTimeout(flushAt); offPosted(); };
-  }, [film, refresh]);
+  }, [film, refresh, take]);
 
   const out = useSyncExternalStore(subscribeOutbox, () => outbound(film) > 0, () => false);
   useEffect(() => {
@@ -353,8 +384,8 @@ export function ThreadProvider({ film, children }: { film: string; children: Rea
       return { ok: false, error: 'The harness server is not answering' };
     }
   }, []);
-  const value = useMemo(() => ({ events: costed, loaded, tasks, error, sending, toAlma, workingSince, send, stop, model, setModel, reserve, turnOnReserve }),
-    [costed, loaded, tasks, error, sending, toAlma, workingSince, send, stop, model, setModel, reserve, turnOnReserve]);
+  const value = useMemo(() => ({ events: costed, loaded, tasks, error, sending, toAlma, workingSince, send, stop, model, setModel, reserve, turnOnReserve, leaving }),
+    [costed, loaded, tasks, error, sending, toAlma, workingSince, send, stop, model, setModel, reserve, turnOnReserve, leaving]);
   return <Ctx.Provider value={value}><PendingCtx.Provider value={pendingValue}>{children}</PendingCtx.Provider></Ctx.Provider>;
 }
 

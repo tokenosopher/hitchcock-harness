@@ -5,6 +5,10 @@
 // Kept in this browser, so moving between pages or a reload does not lose them.
 import { useSyncExternalStore } from 'react';
 import type { PickBody } from '@/components/library/data';
+import type { Sent } from '@/components/lib/sent';
+
+// the rule of what a batch takes out of "Waiting for you", shared with the server's count (lib/sent.ts)
+export { SENT_ALMA_MS, SENT_MS, sentItems, type Sent } from '@/components/lib/sent';
 
 export interface Choice {
   id: string;                                   // "card:<key>" or "pick:<kind>:<target>"
@@ -48,22 +52,6 @@ export const useChoice = (film: string, id: string): Choice | undefined => useCh
 // more). Now each card and pick of the batch leaves "Waiting for you" the moment "Done picking" is pressed and stays
 // gone until the film's state shows it answered (film.tsx drops it then), or for a while at most; a send that fails
 // brings them back with the error. Kept in this browser, so a reload in between does not bring them back either.
-
-export interface Sent {
-  /** The item of "Waiting for you" it answers: "card:<card key>" or "gate:<gate item key>" (waitList.ts). */
-  key: string;
-  label: string;
-  /** Sent at, and kept at most until (ms). */
-  at: number;
-  until: number;
-  /** Alma writes it, not "Done picking" itself (a location's master is made by her from the pick). */
-  alma?: boolean;
-}
-
-/** How long a sent item stays hidden at most while the state does not show it answered: a pick the harness writes
- *  itself shows within seconds; one Alma makes from the pick (a location's master) takes her a turn or more. */
-export const SENT_MS = 2 * 60_000;
-export const SENT_ALMA_MS = 30 * 60_000;
 
 const NO_SENT: Sent[] = [];
 const sentCache = new Map<string, Sent[]>();
@@ -112,30 +100,4 @@ export const unsend = (film: string, keys: string[]): void => {
 
 export function useSent(film: string): Sent[] {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => readSent(film), () => NO_SENT);
-}
-
-/** The keys of "Waiting for you" a set of choices answers. A card's answer is its card; a pick is its gate item (C04's
- *  clothing is "gate:pick:C04:clothing"); a card of sounds goes once every sound still open on it is in the batch. */
-export function sentItems(choices: Choice[], openSounds: (card: string) => string[] | undefined, now = Date.now()): Sent[] {
-  const out: Sent[] = [];
-  const add = (key: string, label: string, alma?: boolean) => out.push({ key, label, at: now, until: now + (alma ? SENT_ALMA_MS : SENT_MS), ...(alma ? { alma } : {}) });
-  for (const c of choices) {
-    if (c.answer) { add(`card:${c.answer.card}`, c.label); continue; }
-    const p = c.pick;
-    if (!p) continue;
-    const t = p.target;
-    if (p.kind === 'face' || p.kind === 'prop') add(`gate:pick:${t}`, c.label);
-    else if (p.kind === 'location') add(`gate:pick:${t}`, c.label, true);
-    else if (p.kind === 'wardrobe') add(`gate:pick:${t}:clothing`, c.label);
-    else if (p.kind === 'sheet') add(`gate:pick:${t}:sheet`, c.label);
-    else if (p.kind === 'voice') add(`gate:pick:${t}:voice`, c.label);
-  }
-  // sounds: a card leaves once all its open sounds are picked in this batch
-  const byCard = new Map<string, Set<string>>();
-  for (const c of choices) if (c.pick?.kind === 'sfx' && c.pick.card) (byCard.get(c.pick.card) ?? byCard.set(c.pick.card, new Set()).get(c.pick.card)!).add(c.pick.target);
-  for (const [card, names] of byCard) {
-    const open = openSounds(card);
-    if (open && open.every((n) => names.has(n))) add(`card:${card}`, `${names.size} ${names.size === 1 ? 'sound' : 'sounds'}`);
-  }
-  return out;
 }

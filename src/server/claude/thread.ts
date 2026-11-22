@@ -4,10 +4,12 @@ import { pokeFilm } from '../films/watcher';
 import type { HarnessContext, ThreadEvent, ThreadInfo } from '../types';
 import { findFilm } from '../films/registry';
 import { noteUserWrote } from '../films/recent';
+import { claudeHome } from './accounts';
 import { FILM_SLUG } from './config';
 import { isOwnUpload } from '../uploads';
 import { getAlma } from './process';
 import { mergeEvents, readHistory } from './transcript';
+import { hideable, quietScheduled } from './quietTurns';
 
 export function validFilm(film: string): boolean {
   return FILM_SLUG.test(film);
@@ -28,9 +30,18 @@ export async function threadHistory(film: string): Promise<{ events: ThreadEvent
   const sessionId = await alma.currentSessionId();
   const live = alma.liveEvents();
   if (!sessionId) return { events: live, warnings: [] };
-  const h = await readHistory(alma.cwd, sessionId);
+  const h = await readHistory(alma.cwd, sessionId, claudeHome(film));
   alma.learnEnded(h.tasks);
-  return { events: mergeEvents(h.events, live), warnings: h.warnings };
+  // a turn Alma started on her own schedule that changed nothing is not shown: the transcript's closed ones,
+  // the ones this server hid as they ended, and the last turn once it is over (Alma is not in a turn)
+  const lastHidden = !alma.midTurn && quietScheduled(h.open) ? new Set(h.open!.ids) : undefined;
+  const hiddenLive = alma.hiddenIds();
+  const byTranscript = (e: ThreadEvent) => hideable(e) && (h.hidden.has(e.id) || !!lastHidden?.has(e.id));
+  // one the live check missed (the transcript was slow to catch up) leaves the open pages and the replay now
+  const missed = live.filter((e) => byTranscript(e) && !hiddenLive.has(e.id)).map((e) => e.id);
+  if (missed.length) alma.hide([...new Set(missed)]);
+  const shown = (e: ThreadEvent) => !byTranscript(e) && !(hideable(e) && hiddenLive.has(e.id));
+  return { events: mergeEvents(h.events, alma.liveEvents()).filter(shown), warnings: h.warnings };
 }
 
 export async function threadInfo(film: string): Promise<ThreadInfo> {
@@ -44,10 +55,10 @@ export async function threadInfo(film: string): Promise<ThreadInfo> {
   return info;
 }
 
-function isChip(v: unknown): v is { id: string; label: string; ref?: string; about?: string } {
-  const c = v as { id?: unknown; label?: unknown; ref?: unknown; about?: unknown };
+function isChip(v: unknown): v is { id: string; label: string; ref?: string; about?: string; command?: string } {
+  const c = v as { id?: unknown; label?: unknown; ref?: unknown; about?: unknown; command?: unknown };
   return !!v && typeof v === 'object' && typeof c.id === 'string' && typeof c.label === 'string' && (c.ref === undefined || typeof c.ref === 'string')
-    && (c.about === undefined || typeof c.about === 'string');
+    && (c.about === undefined || typeof c.about === 'string') && (c.command === undefined || typeof c.command === 'string');
 }
 
 /** An attached file's chip ("upload:…", whose ref Alma is told to open) is kept only when its file really is in this
@@ -62,7 +73,7 @@ export function parseContext(film: string, v: unknown): HarnessContext | undefin
     film: typeof c.film === 'string' && c.film ? c.film : film,
     page: typeof c.page === 'string' ? c.page : '',
     pinned: typeof c.pinned === 'string' ? c.pinned : '',
-    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).filter(keptChip(film)).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}), ...(x.about ? { about: x.about } : {}) })) : [],
+    selected: Array.isArray(c.selected) ? c.selected.filter(isChip).filter(keptChip(film)).map((x) => ({ id: x.id, label: x.label, ...(x.ref ? { ref: x.ref } : {}), ...(x.about ? { about: x.about } : {}), ...(x.command ? { command: x.command } : {}) })) : [],
     ...(typeof c.playhead === 'string' && c.playhead ? { playhead: c.playhead } : {}),
   };
 }

@@ -199,7 +199,7 @@ export function ScenePage() {
         actions={<>
           {prev ? <Link href={`${base}/scenes/${prev.id}`} aria-label={`Previous scene, ${prev.id}`} className="flex size-8 items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconChevronLeft size={14} /></Link> : <span className="flex size-8 items-center justify-center rounded-lg border border-line text-faint"><IconChevronLeft size={14} /></span>}
           {next ? <Link href={`${base}/scenes/${next.id}`} aria-label={`Next scene, ${next.id}`} className="flex size-8 items-center justify-center rounded-lg border border-edge text-ink hover:bg-raised"><IconChevronRight size={14} /></Link> : <span className="flex size-8 items-center justify-center rounded-lg border border-line text-faint"><IconChevronRight size={14} /></span>}
-          <HeaderLink icon={<IconFile size={14} />} onClick={() => ui.prefill(`Show the shot plan and previz for ${sc.id}`)}>Shot plan and previz</HeaderLink>
+          <HeaderLink icon={<IconFile size={14} />} onClick={() => ui.command({ id: `plan:${sc.id}`, label: `Shot plan and previz · ${sc.id}` }, `Show the shot plan and previz for ${sc.id}`)}>Shot plan and previz</HeaderLink>
         </>} />
 
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-6 pb-5 pt-6 max-[760px]:px-4">
@@ -373,7 +373,7 @@ export function ScenePage() {
               </p>
               {state.film.status !== 'delivered' && (
                 <div className="flex gap-2">
-                  <Btn onClick={() => ui.prefill(`Duplicate ${takeLabel(take.id)} with one change: `, { id: `take:${take.id}`, label: takeLabel(take.id) })}>Duplicate with one change</Btn>
+                  <Btn onClick={() => ui.about({ id: `take:${take.id}`, label: `Duplicate · ${takeLabel(take.id)}` }, `Duplicate ${takeLabel(take.id)} with one change. The user says the change`, 'What one change…')}>Duplicate with one change</Btn>
                 </div>
               )}
               {(!take.path || take.finding) && <p className="m-0 max-w-[640px] text-[13px] leading-[1.5] text-ink-2">{takeStanding(take).detail}</p>}

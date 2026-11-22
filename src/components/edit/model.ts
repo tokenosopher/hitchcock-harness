@@ -516,7 +516,7 @@ export function moveClip(tl0: Timeline, r: ClipRef, d: number, shuffle: boolean)
 
 /** Trim the head or the tail by `d` frames (positive = later). Ripple keeps the clip's place and moves
  *  what follows; without it the cut point moves and a gap opens or the neighbour bounds it. */
-export function trimClip(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, ripple0: boolean, srcSeconds?: number): Edit | undefined {
+export function trimClip(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, ripple0: boolean, frames?: ClipFrames): Edit | undefined {
   const ripple = ripple0 && ripples(tl0, r);
   const tl = clone(tl0);
   const fps = tl.fps;
@@ -524,8 +524,16 @@ export function trimClip(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
   if (!first || !d) return undefined;
   const lock = lockedWhy(tl0, [r], ripple ? endF(first.clip, fps) : undefined);
   if (lock) return refuse(lock);
-  const dd = clampTrim(tl0, r, edge, d, ripple, srcSeconds);
+  const dd = clampTrim(tl0, r, edge, d, ripple, frames);
   if (!dd) return undefined;
+  // grown to the first or the last frame of its shot: the words say so (the drag's tag said it while it was held)
+  const shot = shotFrames(frames);
+  const grew = edge === 'head' ? dd < 0 : dd > 0;
+  // …or, a clip that showed frames of the shot beside its own, brought back in exactly to its stop: mended
+  const over = pastShot(first.clip, frames, fps)[edge];
+  const stop = shot && grew && !isLine(first.clip) && shotRoom(first.clip, shot, edge, fps) === Math.abs(dd)
+    ? ` to shot ${edge === 'head' ? `${shot.first}'s first` : `${shot.last}'s last`} frame`
+    : shot && !grew && over && over === Math.abs(dd) ? ` back to shot ${edge === 'head' ? `${shot.first}'s first` : `${shot.last}'s last`} frame` : '';
   for (const ref of withPartner(tl0, r)) {
     const f = findClip(tl, ref);
     if (!f || f.track.locked) continue;
@@ -550,7 +558,7 @@ export function trimClip(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
     const change: FilmChange | undefined = edge === 'head' ? (dd > 0 ? { kind: 'cut', from: s0, to: s0 + dd } : { kind: 'open', at: s0, d: -dd }) : undefined;
     if (was) rippleRest(tl, tl0, r, endF(was.clip, fps), edge === 'head' ? -dd : dd, change);
   }
-  return { tl, note: `trimmed ${edge} of ${clipName(first.clip)} ${signed(dd)} f${ripple ? `, what follows moved ${dd * (edge === 'head' ? -1 : 1) < 0 ? 'back' : 'on'}` : ''}` };
+  return { tl, note: `trimmed ${edge} of ${clipName(first.clip)} ${signed(dd)} f${stop}${ripple ? `, what follows moved ${dd * (edge === 'head' ? -1 : 1) < 0 ? 'back' : 'on'}` : ''}` };
 }
 
 /** A fade never lasts longer than its clip (the server refuses a version where one does): after a clip got
@@ -581,16 +589,55 @@ export function pastEnd(c: TimelineClip, srcSeconds: number | undefined, fps: nu
   return Math.max(1, Math.round(((c.out - srcSeconds) * fps) / speedOf(c)));
 }
 
+// ---- a clip's own frames. A take holds
+// its shots back to back in one file, each a different angle: past a shot's own first or last frame is another shot's
+// footage. A trim, a moved join and a picture trimmed alone stop there; a sound trimmed alone does not (the sound of a
+// take is one recording across its cuts: a sound run on under the next shot is what carrying it is for).
+
+/** The stretch of its take a clip's shot is, in source seconds: `from` its first frame, `to` the end of its last.
+ *  `first` and `last` are the numbers of the shots it starts and ends in (the same one for a clip of one shot). */
+export interface ShotFrames { from: number; to: number; first: number; last: number }
+/** What a clip may use of its file: the file's length (`seconds`; unknown, its tail does not grow) and, for a clip of a
+ *  take cut into shots, its shot's own frames (`shot`; shots.ts clipFrames). A number is the file's length alone. */
+export type ClipFrames = number | { seconds?: number; shot?: ShotFrames } | undefined;
+export const fileSeconds = (f: ClipFrames): number | undefined => (typeof f === 'number' ? f : f?.seconds);
+export const shotFrames = (f: ClipFrames): ShotFrames | undefined => (typeof f === 'object' ? f?.shot : undefined);
+
+/** How many timeline frames a clip's head can still grow back, or its tail on, inside its shot, at its speed: whole
+ *  frames of the take, 0 when the clip already reaches its shot's first (last) frame or shows frames of the shot before
+ *  (after) it. */
+export function shotRoom(c: TimelineClip, s: ShotFrames, edge: 'head' | 'tail', fps: number): number {
+  const src = edge === 'head' ? toF(c.in, fps) - toF(s.from, fps) : toF(s.to, fps) - toF(c.out, fps);
+  return Math.max(0, Math.floor(src / speedOf(c) + 1e-6));
+}
+
+/** The timeline frames a clip shows of the shots beside its own, at its head and at its tail: a shot extended past its
+ *  own frames before trims stopped there. Shown in amber; dragging that edge in to the stop mends it. */
+export function pastShot(c: TimelineClip, f: ClipFrames, fps: number): { head: number; tail: number } {
+  const s = shotFrames(f);
+  if (!s || isLine(c)) return { head: 0, tail: 0 };
+  const sp = speedOf(c);
+  const k = (n: number) => (n > 0 ? Math.max(1, Math.round(n / sp)) : 0);
+  return { head: k(toF(s.from, fps) - toF(c.in, fps)), tail: k(toF(c.out, fps) - toF(s.to, fps)) };
+}
+
+/** The words for a stop at a shot's end ("start of shot 3's frames"). */
+const shotStop = (s: ShotFrames, edge: 'head' | 'tail') => (edge === 'head' ? `start of shot ${s.first}'s frames` : `end of shot ${s.last}'s frames`);
+
 /** The trim the clip can take: at least one frame left, the source's own length, the neighbours without ripple.
  *  A tail never goes past the end of its file; when the file's length is not known it does not grow at all
  *  (a captions file has no length: its clip may). A clip already past its file's end comes back to it. */
-export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, ripple0: boolean, srcSeconds?: number, overNeighbours = false): number {
-  // overNeighbours: a sound trimmed alone may grow over the clip next to it (it then goes on the track beside)
+export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, ripple0: boolean, frames?: ClipFrames, overNeighbours = false): number {
+  // overNeighbours: a sound trimmed alone may grow over the clip next to it (it then goes on the track beside), and on
+  // into the sound of its take's next shot
   const ripple = ripple0 && ripples(tl, r) && !overNeighbours;
   const fps = tl.fps;
   const f = findClip(tl, r);
   if (!f) return 0;
   const { track, clip } = f;
+  const srcSeconds = fileSeconds(frames);
+  // a clip of a take cut into shots grows only inside its own shot (a subtitle line has no file)
+  const shot = overNeighbours || isLine(clip) ? undefined : shotFrames(frames);
   const s = startF(clip, fps), e = endF(clip, fps), len = e - s;
   // in timeline frames: a slowed clip spends more timeline frames per source second
   const sp = speedOf(clip);
@@ -599,6 +646,7 @@ export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
   const others = track.clips.filter((c) => c.id !== clip.id);
   if (edge === 'head') {
     let lo = -inF;                                   // the source's first frame
+    if (shot) lo = Math.max(lo, 0 - shotRoom(clip, shot, 'head', fps));     // …its shot's first frame
     if (overNeighbours) lo = Math.max(lo, -s);       // …and the film's
     else if (!ripple) {
       const prevEnd = Math.max(0, ...others.filter((c) => endF(c, fps) <= s).map((c) => endF(c, fps)));
@@ -609,11 +657,31 @@ export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
   // within the rounding allowed (pastEnd 0) a clip a frame over its stored length is not pulled back
   let hi = srcSeconds ? tailRoom(clip, srcSeconds, fps) : track.kind === 'captions' ? Infinity : 0;
   if (hi < 0 && !pastEnd(clip, srcSeconds, fps)) hi = 0;
+  if (shot) hi = Math.min(hi, shotRoom(clip, shot, 'tail', fps));       // its shot's last frame
   if (!ripple && !overNeighbours) {
     const nextStart = Math.min(Infinity, ...others.filter((c) => startF(c, fps) >= e).map((c) => startF(c, fps)));
     hi = Math.min(hi, nextStart - e);
   }
   return Math.min(hi, Math.max(d, -(len - 1)));
+}
+
+/** How far a trim goes of the `d` frames asked, and why it stops when it does, for the drag's tag: the shot's own
+ *  first or last frame ("start of shot 3's frames"), the file's, the clip next to it when gaps stay open, one frame
+ *  left. No `why` when it goes as far as asked. */
+export function trimLimit(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, ripple0: boolean, frames?: ClipFrames): { d: number; why?: string } {
+  const v = clampTrim(tl, r, edge, d, ripple0, frames) + 0;      // + 0: never −0
+  const f = findClip(tl, r);
+  if (v === d || !d || !f) return { d: v };
+  const fps = tl.fps, c = f.clip;
+  if (edge === 'head' ? d > 0 : d < 0) return { d: v, why: 'one frame left' };
+  const shot = isLine(c) ? undefined : shotFrames(frames);
+  if (shot && Math.abs(v) === shotRoom(c, shot, edge, fps)) return { d: v, why: shotStop(shot, edge) };
+  const ripple = ripple0 && ripples(tl, r);
+  const s = startF(c, fps), e = endF(c, fps);
+  const others = f.track.clips.filter((k) => k.id !== c.id);
+  if (!ripple && (edge === 'head' ? others.some((k) => endF(k, fps) === s + v) : others.some((k) => startF(k, fps) === e + v))) return { d: v, why: edge === 'head' ? 'the clip before' : 'the next clip' };
+  if (edge === 'head') return { d: v, why: isLine(c) ? 'start of the film' : 'start of the file' };
+  return { d: v, why: fileSeconds(frames) === undefined ? 'file length unknown' : 'end of the file' };
 }
 
 // ---- the join between two clips (the user, 13 Nov: "click in the space between two adjacent videos or two
@@ -641,21 +709,28 @@ export function rollPairs(tl: Timeline, left: ClipRef, right: ClipRef): [ClipRef
  *  clip before it can read only to the end of its file ("end of the file"; not at all when the length is not
  *  known), the clip after it only back to the start of its file, and each keeps at least one frame. Speed
  *  counts: a sped-up clip uses its file faster. */
-export function clampRoll(tl: Timeline, left: ClipRef, right: ClipRef, d: number, srcSeconds: (src: string) => number | undefined): { d: number; why?: string } {
+export function clampRoll(tl: Timeline, left: ClipRef, right: ClipRef, d: number, srcSeconds: (src: string, c?: TimelineClip) => ClipFrames): { d: number; why?: string } {
   const fps = tl.fps;
   if (!touching(tl, left, right)) return { d: 0 };
   let hi = Infinity, lo = -Infinity, hiWhy: string | undefined, loWhy: string | undefined;
   for (const [l, r] of rollPairs(tl, left, right)) {
     const L = findClip(tl, l)!, R = findClip(tl, r)!;
     if (L.track.locked) return { d: 0, why: 'track locked' };
-    const sec = L.clip.src ? srcSeconds(L.clip.src) : undefined;
+    const lf = L.clip.src ? srcSeconds(L.clip.src, L.clip) : undefined;
+    const sec = fileSeconds(lf);
     const grow = sec === undefined ? (L.track.kind === 'captions' ? Infinity : 0)
       : Math.max(0, tailRoom(L.clip, sec, fps));
     if (grow < hi) { hi = grow; hiWhy = sec === undefined ? 'file length unknown' : 'end of the file'; }
+    // the clip before the join reads on only to its shot's last frame, the one after it back only to its shot's first
+    // (21 Nov 2026: past them is another angle of the take, a second piece or a doubled shot)
+    const ls = isLine(L.clip) ? undefined : shotFrames(lf);
+    if (ls && shotRoom(L.clip, ls, 'tail', fps) < hi) { hi = shotRoom(L.clip, ls, 'tail', fps); hiWhy = shotStop(ls, 'tail'); }
     if (lenF(R.clip, fps) - 1 < hi) { hi = lenF(R.clip, fps) - 1; hiWhy = 'one frame left'; }
     // a subtitle line has no file: its start can move back as far as the line before it lets it
     const back = isLine(R.clip) ? Infinity : Math.floor((R.clip.in * fps) / speedOf(R.clip) + 1e-3);
     if (0 - back > lo) { lo = 0 - back; loWhy = 'start of the file'; }
+    const rs = isLine(R.clip) ? undefined : shotFrames(R.clip.src ? srcSeconds(R.clip.src, R.clip) : undefined);
+    if (rs && 0 - shotRoom(R.clip, rs, 'head', fps) > lo) { lo = 0 - shotRoom(R.clip, rs, 'head', fps); loWhy = shotStop(rs, 'head'); }
     if (1 - lenF(L.clip, fps) > lo) { lo = 1 - lenF(L.clip, fps); loWhy = 'one frame left'; }
   }
   if (d >= hi && d > 0) return { d: hi, why: hiWhy };
@@ -665,7 +740,7 @@ export function clampRoll(tl: Timeline, left: ClipRef, right: ClipRef, d: number
 
 /** Move the join between `left` and `right` by `d` frames (positive = later): `left`'s out and `right`'s in
  *  and start move together, kept inside both files (`clampRoll`). Linked picture and sound move together. */
-export function rollEdit(tl0: Timeline, left: ClipRef, right: ClipRef, d0: number, srcSeconds: (src: string) => number | undefined): Edit | undefined {
+export function rollEdit(tl0: Timeline, left: ClipRef, right: ClipRef, d0: number, srcSeconds: (src: string, c?: TimelineClip) => ClipFrames): Edit | undefined {
   const { d } = clampRoll(tl0, left, right, d0, srcSeconds);
   if (!d) return undefined;
   const tl = clone(tl0);
@@ -742,7 +817,7 @@ export function soundOfPicture(tl: Timeline, r: ClipRef): ClipRef | undefined {
 /** How far an edge can go trimmed alone (Option-drag), and why it stops when it does. A sound is bound only by
  *  its file, the start of the film and one frame left: it may run over its neighbour. A picture also stops at
  *  its neighbour, as a trim does when gaps do not close. */
-export function clampAlone(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, srcSeconds?: number): { d: number; why?: string } {
+export function clampAlone(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, frames?: ClipFrames): { d: number; why?: string } {
   const f = findClip(tl, r);
   if (!f) return { d: 0 };
   if (f.track.locked) return { d: 0, why: 'track locked' };
@@ -751,16 +826,21 @@ export function clampAlone(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: n
   if (p && findClip(tl, p)?.track.locked) return { d: 0, why: 'track locked' };
   const fps = tl.fps;
   const over = f.track.kind === 'audio';
-  const v = clampTrim(tl, r, edge, d, false, srcSeconds, over);
+  const v = clampTrim(tl, r, edge, d, false, frames, over);
   if (v === d || !d) return { d: v + 0 };
   const s = startF(f.clip, fps), e = endF(f.clip, fps);
   const others = f.track.clips.filter((c) => c.id !== f.clip.id);
+  // a picture alone stops at its shot's own first or last frame too (a sound runs on: clampTrim)
+  const shot = over || isLine(f.clip) ? undefined : shotFrames(frames);
+  const atShot = !!shot && (edge === 'head' ? d < 0 : d > 0) && Math.abs(v) === shotRoom(f.clip, shot, edge, fps);
   let why: string;
   if (edge === 'tail') {
     if (d < 0) why = 'one frame left';
+    else if (atShot) why = shotStop(shot!, 'tail');
     else if (!over && others.some((c) => startF(c, fps) === e + v)) why = 'the next clip';
-    else why = srcSeconds === undefined ? 'file length unknown' : 'end of the file';
+    else why = fileSeconds(frames) === undefined ? 'file length unknown' : 'end of the file';
   } else if (d > 0) why = 'one frame left';
+  else if (atShot) why = shotStop(shot!, 'head');
   else if (s + v === 0) why = 'start of the film';
   else if (!over && others.some((c) => endF(c, fps) === s + v)) why = 'the clip before';
   else why = 'start of the file';
@@ -796,10 +876,10 @@ function soundWords(c: TimelineClip, pic: TimelineClip | undefined, edge: 'head'
 /** The name a note gives a shot: the page's ("S2 shot 3") when it has one, else the clip's. */
 export type NameOf = (c: TimelineClip) => string | undefined;
 
-function alone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d0: number, srcSeconds: number | undefined, nameOf?: NameOf) {
+function alone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d0: number, frames: ClipFrames, nameOf?: NameOf) {
   const lock = lockedWhy(tl0, [r]);
   if (lock) return refuse(lock);
-  const { d } = clampAlone(tl0, r, edge, d0, srcSeconds);
+  const { d } = clampAlone(tl0, r, edge, d0, frames);
   if (!d) return undefined;
   const tl = clone(tl0);
   const fps = tl.fps;
@@ -824,8 +904,8 @@ function alone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d0: number, src
 /** Trim one edge of a clip alone (Option-drag on a trim handle; DaVinci's): its linked picture or sound is left as
  *  it is and the two are unlinked, nothing closes up. A sound may run on under the next shot or start under the
  *  one before, as far as its file has sound; over another sound it goes on the track beside. */
-export function trimAlone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, srcSeconds?: number, nameOf?: NameOf): Edit | undefined {
-  const a = alone(tl0, r, edge, d, srcSeconds, nameOf);
+export function trimAlone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: number, frames?: ClipFrames, nameOf?: NameOf): Edit | undefined {
+  const a = alone(tl0, r, edge, d, frames, nameOf);
   return a && { tl: a.tl, note: `${a.name}: ${a.words}${a.beside ? ` (now on ${a.beside})` : ''}` };
 }
 
@@ -833,7 +913,7 @@ export function trimAlone(tl0: Timeline, r: ClipRef, edge: 'head' | 'tail', d: n
  *  shot's sound runs on) or before its start ('head': the later shot's sound starts early). `now`: how far it
  *  already does; `reach`: how far it would, the file allowing; `why`: why it gives less, or nothing. */
 export interface CarryPlan { sound?: ClipRef; now: number; reach: number; why?: string }
-export function carryPlan(tl: Timeline, pic: ClipRef, edge: 'head' | 'tail', frames: number, srcSeconds: (src: string) => number | undefined): CarryPlan {
+export function carryPlan(tl: Timeline, pic: ClipRef, edge: 'head' | 'tail', frames: number, srcSeconds: (src: string, c?: TimelineClip) => ClipFrames): CarryPlan {
   const fps = tl.fps;
   const P = findClip(tl, pic);
   const sound = P ? soundOfPicture(tl, pic) : undefined;
@@ -841,7 +921,7 @@ export function carryPlan(tl: Timeline, pic: ClipRef, edge: 'head' | 'tail', fra
   if (!P || !sound || !S) return { now: 0, reach: 0, why: 'no sound of its own' };
   const now = edge === 'tail' ? endF(S.clip, fps) - endF(P.clip, fps) : startF(P.clip, fps) - startF(S.clip, fps);
   if (now >= frames) return { sound, now, reach: now, why: now === frames ? 'already so' : 'already longer' };
-  const r = clampAlone(tl, sound, edge, edge === 'tail' ? frames - now : now - frames, srcSeconds((S.clip.src ?? '')));
+  const r = clampAlone(tl, sound, edge, edge === 'tail' ? frames - now : now - frames, srcSeconds((S.clip.src ?? ''), S.clip));
   // a clip already past the end of its file (old damage) would be pulled back by the clamp: it gives nothing
   const gain = edge === 'tail' ? r.d : -r.d;
   const reach = now + Math.max(0, gain);
@@ -853,11 +933,11 @@ export function carryPlan(tl: Timeline, pic: ClipRef, edge: 'head' | 'tail', fra
  *  Option-drag of the sound's edge would do, to `frames` past the picture (less when the file has less), with a
  *  fade over the new stretch as long as it (out on a sound that runs on, in on one that starts early). The
  *  neighbour's sound is left as it is: both are heard. */
-export function carrySound(tl0: Timeline, pic: ClipRef, edge: 'head' | 'tail', frames: number, srcSeconds: (src: string) => number | undefined, nameOf?: NameOf): Edit | undefined {
+export function carrySound(tl0: Timeline, pic: ClipRef, edge: 'head' | 'tail', frames: number, srcSeconds: (src: string, c?: TimelineClip) => ClipFrames, nameOf?: NameOf): Edit | undefined {
   const plan = carryPlan(tl0, pic, edge, frames, srcSeconds);
   if (!plan.sound || plan.why && plan.reach <= plan.now) return undefined;
   const S = findClip(tl0, plan.sound)!.clip;
-  const a = alone(tl0, plan.sound, edge, edge === 'tail' ? plan.reach - plan.now : plan.now - plan.reach, srcSeconds((S.src ?? '')), nameOf);
+  const a = alone(tl0, plan.sound, edge, edge === 'tail' ? plan.reach - plan.now : plan.now - plan.reach, srcSeconds((S.src ?? ''), S), nameOf);
   if (!a) return undefined;
   const fps = tl0.fps;
   const c = a.clip;

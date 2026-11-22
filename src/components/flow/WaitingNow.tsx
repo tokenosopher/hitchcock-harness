@@ -18,7 +18,7 @@ import { PlayButton } from '@/components/media/Sound';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
-import { GoCard, PickCard } from './GatePage';
+import { GoCard, PickCard, StoryWaitCard } from './GatePage';
 import { itemHref, soundsOf, waitItemsOf, type WaitItem } from './waitList';
 import { useKept } from './useKept';
 
@@ -92,7 +92,7 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
   // opened from a step's line: brought into view
   useEffect(() => { if (open) li.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [open]);
   const chip = (id: string, label: string) => ui.addChip({ id, label });
-  const prefill = (t: string, id: string, label: string) => ui.prefill(t, { id, label });
+  const prefill = (t: string, id: string, label: string) => ui.command({ id, label }, t);
   const g = it.gate;
   return (
     <li ref={li} data-wait={it.key} data-wait-ready={it.ready || undefined}
@@ -140,7 +140,8 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
       {/* the very card of "Waiting for you", answered here the same way */}
       <Reveal open={open} className="min-w-0 px-2.5 pb-2.5">
         <div className="flex flex-col gap-3 pt-0.5">
-          {it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from={from} where={<span>{where}</span>} />
+          {it.story ? <StoryWaitCard w={it.story} base={base} onChip={chip} />
+            : it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from={from} where={<span>{where}</span>} />
             : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={chip} />
             : g ? <PickCard p={g} onChip={chip} onPrefill={prefill} from={from} voices={it.voiceIds} /> : null}
         </div>

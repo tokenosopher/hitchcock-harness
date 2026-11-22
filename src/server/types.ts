@@ -226,7 +226,9 @@ export interface FilmState {
   warnings?: string[];          // what the readers could not parse ("spend.md: 7 rows name no amount")
   updatedAt: string;            // ISO
   /** In the browser only, never from the server: the gate picks "Done picking" sent that the state does not show
-   *  answered yet (components/data/film.tsx). gateItems leaves them out, so they do not wait for the user again. */
+   *  answered yet (components/data/film.tsx). gateItems leaves them out, so they do not wait for the user again. A
+   *  "Lock vN" or "Settle vN" just pressed is here by its whole key ("story:script-v3"; lib/sent.ts storySent), and
+   *  derive.ts storyWait marks it sent. */
   sentKeys?: string[];
 }
 
@@ -387,7 +389,15 @@ export interface FeedCard {
   sounds?: FeedSound[];
   /** The debrief card: how many questions, how many answered or skipped. */
   debrief?: { questions: number; answered: number; skipped: number };
+  /** The place on the cut the card is about: the card's "See it in the cut" or "Hear it in the cut" opens
+   *  the Edit page there (components/edit/openAt.ts). */
+  cut?: FeedCut;
 }
+
+/** A card's "cut", as Alma writes it in review/cards.json: one clip of the cut, a take tried in its shot's
+ *  place (`shot` "S4:7" when the take's name does not say which), a sound's try heard in its place, or a moment
+ *  (`t` in seconds, `at` in frames). The Edit page opens there with the link `page:edit?<the same keys>`. */
+export interface FeedCut { clip?: string; take?: string; shot?: string; t?: number; at?: number; sound?: string; try?: number }
 
 /** One planned sound of the sound designer, on its pick card (Flow v3.3 - 11 Sound and music, steps 31 to 34).
  *  Read from audio/sfx/plan.json (its place) and audio/sfx/<name>/prompts.json (its tries). */
@@ -449,7 +459,12 @@ export type ThreadEvent =
   | { kind: 'system'; id: string; at: string; text: string }            // one-line system notes ("QC · voices · not run …")
   | { kind: 'compaction'; id: string; at: string; summary: string }
   | { kind: 'result'; id: string; at: string; ok: boolean; costUsd?: number; durationMs?: number; sessionId: string }
-  | { kind: 'error'; id: string; at: string; text: string };
+  | { kind: 'error'; id: string; at: string; text: string }
+  // not drawn: the events with these ids (assistant_text, tool_use, tool_result, result) leave the chat, with a fade
+  // if they are on screen, and never come back. A turn Alma started on her own schedule that changed nothing
+  | { kind: 'hide'; id: string; at: string; ids: string[] };
+/** The kinds a hidden turn loses. User, system, compaction, error and task events always stay. */
+export const HIDEABLE_KINDS: ReadonlySet<ThreadEvent['kind']> = new Set(['assistant_text', 'tool_use', 'tool_result', 'result']);
 
 export interface TaskCard {
   id: string;                   // the Agent tool_use id
@@ -490,6 +505,10 @@ export interface Chip {
   /** The chip opened the message box about its thing (a card's "Say something else", "Ask Alma about S1"): what the
    *  message is about, in words, which Alma reads ahead of the message (the box itself starts empty). */
   about?: string;
+  /** The chip is a whole ask a button wrote for the user ("Go for the video: S1 S2 …", "Render the 1080p master of v7"):
+   *  Alma reads it as the user's message, word for word, and the user's own words, if any, after it. The box stays
+   *  empty; send with the chip alone sends it. */
+  command?: string;
 }
 
 /** The models Alma can run on, as the Claude Code CLI names them (`--model`). '' leaves it to Claude Code's own setting. */

@@ -37,7 +37,7 @@ function Removable({ c, onRemove, leaving }: { c: Chip; onRemove?: () => void; l
   return (
     <span data-chip={leaving ? undefined : ''} data-leaving={leaving ? '' : undefined} aria-hidden={leaving || undefined}
       className={cn('inline-flex h-[22px] min-w-0 max-w-full flex-none items-center gap-[5px] rounded-[6px] border border-edge-strong bg-raised pl-[7px] pr-1 text-[11.5px] text-ink duration-200',
-        leaving ? 'pointer-events-none animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0')} title={c.ref ?? c.label}>
+        leaving ? 'pointer-events-none animate-out fade-out-0 fill-mode-forwards' : 'animate-in fade-in-0')} title={c.command ?? c.ref ?? c.label}>
       {uploadImage(c)
         // eslint-disable-next-line @next/next/no-img-element -- a file the user just attached, served as it is
         ? <img src={uploadImage(c)} alt="" data-zoom={uploadImage(c)} data-zoom-alt={c.label} className="-ml-[3px] size-4 flex-none cursor-zoom-in rounded-[3px] object-cover" />

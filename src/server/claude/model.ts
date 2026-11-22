@@ -1,9 +1,9 @@
 // harness/alma-model.json: which model each film's Alma runs on, chosen in the thread header.
-// No entry means Claude Code's own setting (the `model` line of ~/.claude/settings.json) decides.
+// No entry means Claude Code's own setting (the `model` line of the account's settings.json, ~/.claude's) decides.
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { ALMA_MODELS, type AlmaModel } from '../types';
+import { accountHomes } from './accounts';
 import { claudeConfig } from './config';
 
 const file = () => path.join(claudeConfig().harnessDir, 'alma-model.json');
@@ -41,10 +41,11 @@ export function setAlmaModel(film: string, model: AlmaModel): Promise<void> {
   return writeChain;
 }
 
-/** What "Default" resolves to: the model line of the user's own Claude Code settings, if there is one. */
-export async function claudeCodeDefaultModel(): Promise<string | undefined> {
+/** What "Default" resolves to: the model line of the user's own Claude Code settings (of the account `home`, the
+ *  first account by default), if there is one. */
+export async function claudeCodeDefaultModel(home: string = accountHomes()[0]): Promise<string | undefined> {
   try {
-    const s = JSON.parse(await readFile(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8')) as { model?: unknown };
+    const s = JSON.parse(await readFile(path.join(home, 'settings.json'), 'utf8')) as { model?: unknown };
     return typeof s.model === 'string' ? s.model : undefined;
   } catch {
     return undefined;

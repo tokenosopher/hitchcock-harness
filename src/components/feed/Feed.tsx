@@ -23,6 +23,8 @@ import { IconFile } from '@/components/shell/icons';
 import { refData } from '@/components/lib/refPick';
 import { cardRefOf } from '@/components/shell/refItems';
 import { SoundPicks } from './SoundPicks';
+import { CutButton, sceneInCut } from './CutButton';
+import { takeCutOf } from '@/components/edit/cutLink';
 import { CardText } from './CardText';
 import { WhyPanel } from './WhyPanel';
 import { almaFetch } from '@/components/data/almaOutbox';
@@ -192,6 +194,8 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
   const mediaOf = (o: FeedOption): FeedMedia | undefined => optionMediaOf(card, o);
   const withFile = ask.options.map((o) => ({ o, m: mediaOf(o) }));
   const tiles = withFile.filter((x) => x.m && visual(x.m));
+  const { state } = useFilm();
+  const inCut = sceneInCut(state, card.ids.find((x) => /^S\d+$/.test(x)));
   const rows = withFile.filter((x) => !x.m || !visual(x.m));
   // a card with its own yes and no words (Release, stage 3) answers at once: the card itself is the second look
   const send = async (no?: boolean) => {
@@ -216,7 +220,12 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
         <div role="radiogroup" aria-label={`Options for ${card.title}`} className="flex flex-col gap-3">
           {tiles.length > 0 && (
             <div data-zoom-set className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-2.5 gap-y-3">
-              {tiles.map(({ o, m }) => <VisualTile key={o.id} m={{ ...m!, label: o.label || m!.label || o.id, option: o.id }} toRepo={toRepo} selected={sel === o.id} onSelect={() => setSel(o.id)} />)}
+              {tiles.map(({ o, m }) => {
+                const tile = <VisualTile key={o.id} m={{ ...m!, label: o.label || m!.label || o.id, option: o.id }} toRepo={toRepo} selected={sel === o.id} onSelect={() => setSel(o.id)} />;
+                // a take of a scene that is in the cut: tried in its shot's place on the Edit page
+                const tc = inCut ? takeCutOf(m!.path) : undefined;
+                return tc ? <div key={o.id} className="flex min-w-0 flex-col gap-1.5">{tile}<CutButton film={film} cut={tc} className="h-6 px-2 text-[11.5px]" /></div> : tile;
+              })}
             </div>
           )}
           {rows.map(({ o, m }) => {
@@ -288,6 +297,8 @@ function CardBody({ card, toRepo, hideOptions }: { card: FeedCard; toRepo: ToRep
       )}
       {card.text?.length ? <CardText text={card.text} film={film} /> : null}
       {card.note && <p data-card-note className="m-0 max-w-[760px] rounded-lg bg-raised px-3 py-2 text-[12.5px] leading-[1.45] text-ink-2">{card.note}</p>}
+      {/* the place on the cut the card is about: the Edit page opens there */}
+      {card.cut && film && <CutButton film={film} cut={card.cut} />}
       {hideOptions ? <AskMediaBlock media={media} toRepo={toRepo} onChip={onChip} /> : <MediaBlock media={media} toRepo={toRepo} onChip={onChip} />}
     </>
   );

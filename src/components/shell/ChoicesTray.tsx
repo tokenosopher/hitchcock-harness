@@ -4,6 +4,8 @@
 // for a paid job is named with its quote on the bar before that press.
 // On a phone it is bottom-0 too: Shell's main has the folded thread bar's measured height (--hh-phone-bar) as its
 // bottom padding, and a sticky box stops at its scroller's padding, so it sits flush on the bar whatever the bar holds
+// It is the last child of Shell's main, after the page: sticky keeps it at the foot only while the page above it is
+// at least as tall as its content, which is why main's children never shrink (Shell.tsx).
 // The press takes every card and pick of the batch out of "Waiting for you" at once (choices.ts markSent), and the film's state is
 // read again as soon as the send is answered; a send that fails brings them back, with the error here. What Alma
 // still has to write from a pick (a location's master) says so on this bar while she does, not as a card.

@@ -11,9 +11,10 @@ import { LEFT_THREADS, leftSampleCut, leftSampleFilms, leftSampleState } from '.
 import { castSampleFilms, castSampleState } from './cast';
 import { day1SampleCut, day1SampleFilms, day1SampleState } from './day1';
 import { storySampleFilms, storySampleState } from './story';
-import { soundSampleFilms, soundSampleState } from './soundpick';
+import { soundSampleCut, soundSampleFilms, soundSampleState } from './soundpick';
 import { AFTERLOCK_THREADS, afterlockSampleCut, afterlockSampleFilms, afterlockSampleState } from './afterlock';
 import { ELEMENTS_THREADS, elementsSampleFilms, elementsSampleState } from './elements';
+import { trimSampleCut, trimSampleFilms, trimSampleState } from './trim';
 
 export const isMock = () => process.env.MOCK === 'boards';
 const set = () => FIXTURES_BOARDS;
@@ -30,13 +31,13 @@ const store = (g.__hhMock ??= {
 const open = (store.open ??= {});
 const runningListeners = (store.running ??= new Set());
 
-export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms(), ...soundSampleFilms(), ...afterlockSampleFilms(), ...elementsSampleFilms()];
+export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms(), ...soundSampleFilms(), ...afterlockSampleFilms(), ...elementsSampleFilms(), ...trimSampleFilms()];
 export const mockLibrary = () => FIXTURE_LIBRARY;
-export const mockState = (film: string) => elementsSampleState(film) ?? afterlockSampleState(film) ?? soundSampleState(film) ?? storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
+export const mockState = (film: string) => trimSampleState(film) ?? elementsSampleState(film) ?? afterlockSampleState(film) ?? soundSampleState(film) ?? storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
 /** The Edit page's hand-written timeline (the Scenes page's cut lane as of 1 Nov), for the boards comparison:
  *  GET …/cut answers it with `mock: true` and the page keeps its versions in memory (nothing is written). */
 const CUTS: Record<string, unknown> = { 'the-lighthouse': cutFilm };
-export const mockCut = (film: string) => (CUTS[film] ?? sampleCut(film) ?? leftSampleCut(film) ?? day1SampleCut(film) ?? afterlockSampleCut(film)) as { current: unknown; empty?: boolean; versions: unknown[]; timelines?: unknown[]; sourceSeconds?: Record<string, number>; problems?: Record<string, string[]> } | undefined;
+export const mockCut = (film: string) => (CUTS[film] ?? trimSampleCut(film) ?? soundSampleCut(film) ?? sampleCut(film) ?? leftSampleCut(film) ?? day1SampleCut(film) ?? afterlockSampleCut(film)) as { current: unknown; empty?: boolean; versions: unknown[]; timelines?: unknown[]; sourceSeconds?: Record<string, number>; problems?: Record<string, string[]> } | undefined;
 export const mockThread = (film: string) => store.threads[film] ?? [];
 /** The film's thread as the fixtures have it: a sample's reset clears what earlier tests sent. */
 export const resetMockThread = (film: string) => { const f = FIXTURE_THREADS[film] ?? AFTERLOCK_THREADS[film] ?? ELEMENTS_THREADS[film] ?? LEFT_THREADS[film]; if (f) store.threads[film] = [...f]; else delete store.threads[film]; };
@@ -107,4 +108,13 @@ export function mockWatch(film: string, fn: () => void): () => void {
   (pokes.get(film) ?? pokes.set(film, new Set()).get(film)!).add(fn);
   return () => { pokes.get(film)?.delete(fn); };
 }
-export function mockPoke(film: string): void { pokes.get(film)?.forEach((fn: () => void) => fn()); }
+// and every sample film's change, for the notify hub's count of "Waiting for you" (the sidebar's white dot)
+const anyPoke = ((globalThis as unknown as { __hhMockAnyPoke?: Set<(film: string) => void> }).__hhMockAnyPoke ??= new Set());
+export function mockWatchAll(fn: (film: string) => void): () => void {
+  anyPoke.add(fn);
+  return () => { anyPoke.delete(fn); };
+}
+export function mockPoke(film: string): void {
+  pokes.get(film)?.forEach((fn: () => void) => fn());
+  anyPoke.forEach((fn) => { try { fn(film); } catch { /* a listener's own trouble */ } });
+}

@@ -2,11 +2,12 @@
 // Unread per film, across the whole app. One EventSource on GET /api/notify (every film's thread at once);
 // a notice counts as unread when the user is not looking at its film (another film is open, the tab is
 // hidden, or the window is not focused). Unread counts and the last notice seen live in localStorage, so a
-// reload keeps them and asks the server only for what came after. Shown three ways: the tab title
-// "(2) Hitchcock Harness", the white dot on the sidebar's film row (RowMark), and a browser notification when the
-// user switched them on (NotifyToggle in the thread header).
-// The same stream says which films' Alma is at work (`event: running`, the sidebar's glowing orb), and when Alma's
-// reply landed or a new card came in each film (`moved`, the sidebar's order), so neither needs a poll.
+// reload keeps them and asks the server only for what came after. Shown two ways: the tab title
+// "(2) Hitchcock Harness" (and the sidebar mark's tooltip), and a browser notification when the user switched them on
+// (NotifyToggle in the thread header). Unread never makes a row's dot white: only what waits for the user does.
+// The same stream says which films' Alma is at work (`event: running`, the sidebar's glowing orb), how many items each
+// film's "Waiting for you" lists (`event: waiting`, the sidebar's white dot), and when something new came to wait in
+// each film (`moved`, the sidebar's order), so none of them needs a poll.
 //
 // TODO(web-push): a notification on a locked iPhone needs real Web Push (a VAPID key, a push subscription
 // stored on the server, a push handler in public/sw.js), and that needs a stable https origin: the quick
@@ -23,7 +24,11 @@ interface NotifyValue {
   unread: Record<string, Unread>;
   /** The films whose Alma is at work now, as the server last said (GET /api/notify, `event: running`). */
   running: ReadonlySet<string>;
-  /** When a notice that moves a film up the sidebar (her reply, a new card) last came in, per film, watched or not. */
+  /** How many items each film's "Waiting for you" lists, as the server last counted ({slug: n}, films with any;
+   *  `event: waiting`). */
+  waiting: Readonly<Record<string, number>>;
+  /** When a notice that moves a film up the sidebar (something new waits for the user) last came in, per film,
+   *  watched or not. */
   moved: Readonly<Record<string, string>>;
   total: number;
   /** Notifications switched on in this browser (and allowed by it). */
@@ -36,7 +41,8 @@ interface NotifyValue {
 }
 
 const NONE: ReadonlySet<string> = new Set();
-const Ctx = createContext<NotifyValue>({ unread: {}, running: NONE, moved: {}, total: 0, enabled: false, permission: 'unsupported', enable: async () => {}, disable: () => {}, clear: () => {} });
+const NO_COUNTS: Readonly<Record<string, number>> = {};
+const Ctx = createContext<NotifyValue>({ unread: {}, running: NONE, waiting: NO_COUNTS, moved: {}, total: 0, enabled: false, permission: 'unsupported', enable: async () => {}, disable: () => {}, clear: () => {} });
 
 const UNREAD_KEY = 'hh:unread';
 const SEQ_KEY = 'hh:notify:seq';
@@ -76,6 +82,7 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
   const current = threadOf(params?.film, pathname);
   const [unread, setUnread] = useState<Record<string, Unread>>({});
   const [running, setRunning] = useState<ReadonlySet<string>>(NONE);
+  const [waiting, setWaiting] = useState<Readonly<Record<string, number>>>(NO_COUNTS);
   const [moved, setMoved] = useState<Record<string, string>>({});
   const [on, setOn] = useState(false);
   const [permission, setPermission] = useState<Permission>('unsupported');
@@ -164,8 +171,9 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
         let n: HarnessNotice;
         try { n = JSON.parse(m.data) as HarnessNotice; } catch { return; }
         write(SEQ_KEY, n.seq);
-        // her reply landing and a new card move the film up the sidebar, seen here or not (the server keeps the same)
-        if (n.kind === 'turn' || n.kind === 'pick') setMoved((m) => (m[n.film] && m[n.film] >= n.at ? m : { ...m, [n.film]: n.at }));
+        // something new waiting for the user moves the film up the sidebar, seen here or not (the server keeps the
+        // same); her reply alone does not
+        if (n.kind === 'pick') setMoved((m) => (m[n.film] && m[n.film] >= n.at ? m : { ...m, [n.film]: n.at }));
         const watching = lookingRef.current && currentRef.current === n.film;
         if (watching) return;
         setUnread((u) => {
@@ -182,6 +190,18 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
         if (!Array.isArray(list)) return;
         const films = list.filter((x): x is string => typeof x === 'string');
         setRunning((cur) => (films.length === cur.size && films.every((f) => cur.has(f)) ? cur : films.length ? new Set(films) : NONE));
+      });
+      // the same for the counts of "Waiting for you"
+      es.addEventListener('waiting', (m) => {
+        let raw: unknown;
+        try { raw = JSON.parse((m as MessageEvent<string>).data); } catch { return; }
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+        const next: Record<string, number> = {};
+        for (const [f, n] of Object.entries(raw)) if (typeof n === 'number' && n > 0) next[f] = n;
+        setWaiting((cur) => {
+          const a = Object.keys(cur), b = Object.keys(next);
+          return a.length === b.length && b.every((f) => cur[f] === next[f]) ? cur : b.length ? next : NO_COUNTS;
+        });
       });
     };
     open();
@@ -230,8 +250,8 @@ export function NotifyProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const disable = useCallback(() => { setOn(false); write(ON_KEY, false); }, []);
 
-  const value = useMemo<NotifyValue>(() => ({ unread, running, moved, total, enabled: on && permission === 'granted', permission, enable, disable, clear }),
-    [unread, running, moved, total, on, permission, enable, disable, clear]);
+  const value = useMemo<NotifyValue>(() => ({ unread, running, waiting, moved, total, enabled: on && permission === 'granted', permission, enable, disable, clear }),
+    [unread, running, waiting, moved, total, on, permission, enable, disable, clear]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

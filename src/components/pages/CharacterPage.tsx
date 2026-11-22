@@ -200,8 +200,8 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
                 </>
               ) : (
                 <>
-                  <Btn onClick={() => onPick(`Pick ${sel} for ${c.id}`, `${c.id} · face ${sel}`)}>Pick <span className="font-mono">{sel}</span></Btn>
-                  <Btn ghost onClick={() => onPick(`Save ${sel} (${c.id}) to the library`, `save ${sel}`)}><IconBookmark size={13} />Save <span className="font-mono">{sel}</span> to the library</Btn>
+                  <Btn onClick={() => onPick(`Pick ${sel} for ${c.id}`, `Pick · ${c.id} face ${sel}`)}>Pick <span className="font-mono">{sel}</span></Btn>
+                  <Btn ghost onClick={() => onPick(`Save ${sel} (${c.id}) to the library`, `Save to the library · ${sel}`)}><IconBookmark size={13} />Save <span className="font-mono">{sel}</span> to the library</Btn>
                 </>
               )}
             </div>
@@ -248,7 +248,7 @@ export function CharacterPage() {
   const spend = characterSpend(state, c);
   const groups = spendGroups(spend, c);
   const total = c.cost ?? { credits: sumCredits(spend.map((l) => l.cost)) };
-  const onPick = (text: string, chip: string) => ui.prefill(text, { id: `pick:${c.id}`, label: chip });
+  const onPick = (text: string, chip: string) => ui.command({ id: `pick:${c.id}`, label: chip }, text);
   const faceDone = faceDoneOf(c);
 
   return (

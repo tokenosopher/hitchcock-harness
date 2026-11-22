@@ -23,14 +23,17 @@ export function pageHref(film: string, target: string): { href: string; outside?
   if (/^https?:\/\//.test(target)) return { href: target, outside: true };
   if (target.startsWith('/films/') || target === '/library' || target === '/settings') return { href: target };
   // page:scenes/S2#tests keeps its #part: the place on that page to jump to
-  const [t, hash] = target.replace(/^page:/, '').replace(/^\/+/, '').split('#');
+  const [tq, hash] = target.replace(/^page:/, '').replace(/^\/+/, '').split('#');
   const frag = hash ? `#${hash}` : '';
+  // page:edit?clip=s-laugh2 keeps its ?part: the place on that page to open at (components/edit/openAt.ts)
+  const [t, query] = tq.split('?');
   const [head, ...rest] = t.split('/');
   const base = PAGES[head.toLowerCase()];
   if (base === undefined) return undefined;
   const root = `/films/${film}`;
-  if (rest.length && (base === 'scenes' || base === 'character' || base === 'release')) return { href: `${root}/${base}/${rest.join('/')}${frag}` };
-  return { href: (base.startsWith('?') ? `${root}${base}` : base ? `${root}/${base}` : root) + frag };
+  const q = (path: string) => (query ? `${path}${path.includes('?') ? '&' : '?'}${query}` : path);
+  if (rest.length && (base === 'scenes' || base === 'character' || base === 'release')) return { href: q(`${root}/${base}/${rest.join('/')}`) + frag };
+  return { href: q(base.startsWith('?') ? `${root}${base}` : base ? `${root}/${base}` : root) + frag };
 }
 
 function named(film: string, text: string, key: string): ReactNode[] {

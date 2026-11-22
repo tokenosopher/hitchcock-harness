@@ -73,8 +73,9 @@ export function LayoutsBar({ scene, title, layouts, inFilm, viewing, busy, readO
           );
         })}
       </div>
-      {/* the viewed layout's storyboard: a board a shot, its length, and (another layout's) the shot it is the same as */}
-      <div key={viewing.key} data-layout-boards={viewing.n} className="grid gap-1 duration-200 animate-in fade-in-0 slide-in-from-bottom-1" style={cols}>
+      {/* the viewed layout's storyboard: a board a shot, its length, and (another layout's) the shot it is the same as.
+          Not for the layout the film uses once it has takes: the takes under it are the picture then */}
+      {(foreign || !landed.length) && <div key={viewing.key} data-layout-boards={viewing.n} className="grid gap-1 duration-200 animate-in fade-in-0 slide-in-from-bottom-1" style={cols}>
         <span className="flex flex-col justify-center pr-1.5 text-[12px] leading-tight text-sub">{viewing.storyboard ? `Storyboard ${viewing.storyboard}` : 'Its shots'}</span>
         {viewing.shots.map((s) => {
           const to = same.get(s.n);
@@ -95,7 +96,7 @@ export function LayoutsBar({ scene, title, layouts, inFilm, viewing, busy, readO
             </div>
           );
         })}
-      </div>
+      </div>}
       {foreign && inFilm && (
         <div data-layout-use={viewing.n} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
           <button type="button" disabled={busy || readOnly} onClick={() => onUse(viewing)}

@@ -11,6 +11,11 @@ import path from 'node:path';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'resumed-test-'));
 process.env.HOME = root; // the transcript reader looks under ~/.claude/projects
+// …and nowhere else: not under the caller's own account folder (a Claude Code session on account 2 sets
+// CLAUDE_CONFIG_DIR), nor under the accounts a real .env.local lists (it is read from the working folder)
+delete process.env.CLAUDE_CONFIG_DIR;
+delete process.env.HARNESS_CLAUDE_ACCOUNTS;
+process.chdir(root);
 
 let checks = 0;
 function check(what: string, ok: boolean, got?: unknown): void {
@@ -89,8 +94,8 @@ async function main(): Promise<void> {
   check('live: and ends again', running().length === 0, running());
 
   // an agent the app never saw (started before this tracker existed)
-  send('toolu_unknown1', 'a1111111111111111', 'fix the cups', JSON.stringify(resumeTur('a1111111111111111')), resumeTur('a1111111111111111'));
-  check('live: an unknown agent resumed shows under the message\'s summary', running().length === 1 && running()[0].title === 'Alma › fix the cups', running());
+  send('toolu_unknown1', 'a1111111111111111', 'fix the nets', JSON.stringify(resumeTur('a1111111111111111')), resumeTur('a1111111111111111'));
+  check('live: an unknown agent resumed shows under the message\'s summary', running().length === 1 && running()[0].title === 'Alma › fix the nets', running());
   send('toolu_unknown2', 'a2222222222222222', undefined, JSON.stringify(resumeTur('a2222222222222222')), resumeTur('a2222222222222222'));
   check('live: without a summary it is a plain sub-agent', running().some((c) => c.title === 'Alma › sub-agent'), running());
   feed({ type: 'system', subtype: 'task_notification', task_id: 'a1111111111111111', tool_use_id: 'toolu_unknown1', status: 'completed', summary: 'x', usage: { tool_uses: 3 } });
@@ -141,12 +146,12 @@ async function main(): Promise<void> {
   check('transcript: the SendMessage lines stay in the thread', h.events.filter((e) => e.kind === 'tool_result').length === 3, h.events.map((e) => e.kind));
 
   appendFileSync(file, tNote('2026-11-17T00:55:38.144Z', notification(AGENT, SEND, 8))
-    + tUse('2026-11-17T01:00:00.000Z', 'toolu_unknownT', 'SendMessage', sendInput('a3333333333333333', 'fix the cups'))
+    + tUse('2026-11-17T01:00:00.000Z', 'toolu_unknownT', 'SendMessage', sendInput('a3333333333333333', 'fix the nets'))
     + tRes('2026-11-17T01:00:00.050Z', 'toolu_unknownT', JSON.stringify(resumeTur('a3333333333333333')), resumeTur('a3333333333333333')));
   h = await readHistory(cwd, SID);
   const c = h.tasks.get(LAUNCH)!;
   check('transcript: the resumed run\'s end ends the card as the first time', c.state === 'done' && c.liveLine === firstEnd && c.result?.text === 'the report', c);
-  check('transcript: an unknown agent resumed shows under the summary', h.tasks.running().length === 1 && h.tasks.running()[0].title === 'Alma › fix the cups', h.tasks.running());
+  check('transcript: an unknown agent resumed shows under the summary', h.tasks.running().length === 1 && h.tasks.running()[0].title === 'Alma › fix the nets', h.tasks.running());
   appendFileSync(file, tNote('2026-11-17T01:05:00.000Z', notification('a3333333333333333', 'toolu_unknownT', 4, 'whatever')));
   h = await readHistory(cwd, SID);
   check('transcript: and it ends on its notification', h.tasks.running().length === 0, h.tasks.running());

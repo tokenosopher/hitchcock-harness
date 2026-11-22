@@ -3,22 +3,25 @@
 // for you" shows (GatePage reads it from here): only what asks the user to choose, the most important first
 // (byImportance), so the two lists, their order and their counts cannot disagree.
 import type { FeedCard, FilmState } from '@/server/types';
-import type { GateItem } from '@/components/lib/derive';
+import type { GateItem, StoryWait } from '@/components/lib/derive';
 import { gateChoices, voiceParts } from '@/components/lib/derive';
 import { ORDER, type Flow } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
 import type { LeftStep, StepId } from '@/components/edit/left';
 
-/** One thing waiting for the user: a card of Alma's that asks, or a pick at the gate. */
+/** One thing waiting for the user: the story or the script waiting on them, a card of Alma's that asks, or a pick at
+ *  the gate. */
 export interface WaitItem {
   key: string;
   card?: FeedCard;
   gate?: GateItem;
+  /** The script waiting for the user's lock, or the story for their read and settle (derive.ts storyWait). */
+  story?: StoryWait;
   /** The flow step it belongs to (a card's page, a pick's step). */
   place: FlowKey;
   /** The question, in its own words. */
   title: string;
-  /** What it asks for, in a word or two: "Pick one", "Yes or no", "Your go". */
+  /** What it asks for, in a word or two: "Pick one", "Yes or no", "Your go", "Your lock", "Settle". */
   word: string;
   /** It can be answered now: always, since only choices are listed. */
   ready: boolean;
@@ -26,8 +29,8 @@ export interface WaitItem {
   cost?: string;
   /** One more line: the card's own line under its title, or the pick's round and count. */
   line?: string;
-  /** What the answer is, for the steps' line: "your yes", "your go", "your pick". */
-  answer: 'your yes' | 'your go' | 'your pick' | 'your answer';
+  /** What the answer is, for the steps' line: "your yes", "your go", "your pick", "your lock", "your read". */
+  answer: 'your yes' | 'your go' | 'your pick' | 'your answer' | 'your lock' | 'your read';
   /** A character's voice pick at the gate: its character (one card per character). */
   voiceIds?: string[];
 }
@@ -55,10 +58,15 @@ export function byImportance<T extends Pick<WaitItem, 'place' | 'gate'>>(items: 
   return items.map((it, i) => ({ it, i, r: waitRank(it) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.it);
 }
 
-/** Every item of "Waiting for you", in its order: only what asks the user to choose now (Alma's cards that ask, and
- *  the gate's picks whose round landed: gateChoices), each question once (a character's voice pick goes where Alma's
- *  card at Voices asks it), ordered by importance (byImportance). The page and What's next list exactly these. */
+/** Every item of "Waiting for you", in its order: only what asks the user to choose now (the script waiting for
+ *  their lock or the story for their read, Alma's cards that ask, and the gate's picks whose round landed:
+ *  gateChoices), each question once (a character's voice pick goes where Alma's card at Voices asks it), ordered by
+ *  importance (byImportance; the story first). The page and What's next list exactly these; their keys are derive.ts
+ *  waitingKeys, which the sidebar's white dot and the server's count of every film go by. */
 export function waitItemsOf(flow: Flow): WaitItem[] {
+  const st = flow.story;
+  const story: WaitItem[] = st ? [{ key: st.key, story: st, place: 'story', title: st.title, line: st.line, ready: true,
+    ...(st.kind === 'script' ? { word: 'Your lock', answer: 'your lock' as const } : { word: 'Settle', answer: 'your read' as const }) }] : [];
   const cards: WaitItem[] = flow.asks.map((c) => {
     const k = c.ask?.kind ?? 'yes';
     return { key: `card:${c.key}`, card: c, place: c.place, title: c.title, word: c.sounds?.length ? 'Pick each' : ASK_WORD[k], ready: true,
@@ -71,7 +79,7 @@ export function waitItemsOf(flow: Flow): WaitItem[] {
     answer: g.kind === 'go' ? 'your go' : g.kind === 'sheet' ? 'your yes' : 'your pick',
     ...(g.kind === 'voices' ? { voiceIds: [g.id] } : {}),
   }));
-  return byImportance([...cards, ...picks]);
+  return byImportance([...story, ...cards, ...picks]);
 }
 
 /** The gate's picks still being made (a round running or queued) and Alma's questions being worked on: no choice yet,
@@ -119,6 +127,8 @@ export function waitsLine(items: WaitItem[]): string {
 /** Where a waiting item lives in the app, relative to the film's address (`/films/<film>`): its page, else its step on
  *  the film's board. */
 export function itemHref(it: WaitItem, flow: Flow): string {
+  // the Story page at the script, where "Lock vN" is, or at the story, where "Settle" is
+  if (it.story) return `/story?tab=${it.story.kind}`;
   const g = it.gate;
   if (g) {
     if (g.kind === 'go') return '/go';

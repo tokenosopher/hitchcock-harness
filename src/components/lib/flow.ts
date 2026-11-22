@@ -3,8 +3,9 @@
 // Every node's state is read off the FilmState; "running" also comes from the thread's live task cards.
 import type { FeedCard, FilmState, TaskCard } from '@/server/types';
 import {
-  clothingParts, elementParts, faceParts, gateChoices, gateItems, goScenes, liveAims, locationParts, locationSettled,
-  partsStatus, roundNo, sheetParts, voiceParts, type FlowKey, type GateItem, type Part, type TaskAim,
+  atStoryStage, clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
+  partsStatus, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
+  type StoryWait, type TaskAim,
 } from './derive';
 import { fmtDate } from './format';
 import { editWork, type EditWork } from './editWork';
@@ -36,8 +37,13 @@ export interface Flow {
   asks: FeedCard[];
   /** Cards that ask and are being worked on instead of answered: shown as in progress, options locked. */
   working: FeedCard[];
-  /** Everything waiting for the user to choose now: the open asks plus the gate's picks that can be made (gateChoices). */
+  /** Everything waiting for the user to choose now: the story or the script waiting on them, the open asks, and the
+   *  gate's picks that can be made (derive.ts waitingKeys). */
   waiting: number;
+  /** The same in a few words (derive.ts waitingWords): "2 picks waiting", "waits for your lock"; empty when nothing waits. */
+  waitWords: string;
+  /** The story or the script waiting on the user, as "Waiting for you" lists it (derive.ts storyWait). */
+  story?: StoryWait;
   faceGate: number;       // face picks still open (the small gate in chain B)
   masterGate: number;     // master picks still open (the small gate in chain A)
   /** The film went out: the board reads as a record. `deliveredOn` is the day, as shown ("9 Nov"). */
@@ -95,9 +101,15 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const delivered = s.film.status === 'delivered';
   const gate = gateItems(s, tasks);
   const asks = s.feed?.asks ?? [];
-  // what the user can choose now, as "Waiting for you" lists it: each card that asks, and each pick whose round landed
-  const waiting = gateChoices(gate, asks).length + asks.length;
-  const node = (key: FlowKey, num: string, name: string, o: Partial<FlowNode> & { state: NodeState; status: string }): FlowNode => {
+  // what the user can choose now, as "Waiting for you" lists it: the story or the script waiting on them, each card that
+  // asks, and each pick whose round landed
+  const keys = waitingKeys(s, tasks, gate);
+  const waiting = keys.length;
+  // the story or the script waiting on the user (derive.ts storyWait); once "Lock" or "Settle" is pressed it is Alma's
+  // move until the files show it (lib/sent.ts)
+  const sw = storyWait(s, tasks);
+  const storyWaits = sw && !sw.sent ? sw : undefined;
+  const node = (key: FlowKey, num: string, name: string, { also = 0, ...o }: Partial<FlowNode> & { state: NodeState; status: string; also?: number }): FlowNode => {
     const aims = o.aims ?? allAims(o.parts ?? []);
     // a live sub-agent makes a node run; a delivered film has nothing left waiting
     let state = o.state;
@@ -107,7 +119,9 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     if (live && state !== 'locked') state = 'running';
     if (delivered && (state === 'waiting' || state === 'pick')) state = 'done';
     // a card that asks about this work waits for the user, on a delivered film too
-    const here = key === 'gate' ? 0 : asks.filter((c) => c.place === key).length;
+    // (`also`: what else waits on this step besides the cards, counted with them: the script waiting for the lock)
+    const cards = key === 'gate' ? 0 : asks.filter((c) => c.place === key).length;
+    const here = cards ? cards + also : 0;
     if (here) {
       if (!live) state = 'pick';
       status = [here === 1 ? 'waits for you' : `${here} wait for you`, status].filter(Boolean).join(' · ');
@@ -119,9 +133,19 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // 1 Story
   const versions = s.script?.versions ?? [];
   const locked = versions.find((v) => v.version === s.script?.current && v.locked) ?? versions.find((v) => v.locked);
+  const draft = s.script ? `${s.script.current ?? 'draft'} draft` : s.story ? `story ${s.story.current}${s.story.settled?.version === s.story.current ? ' settled' : ''}` : 'no story yet';
+  const storyCards = asks.filter((c) => c.place === 'story').length;
   const story = node('story', '1', 'Story', {
-    state: locked ? 'locked' : s.script || s.story ? 'running' : 'waiting',
-    status: locked ? `${locked.version} locked` : s.script ? `${s.script.current ?? 'draft'} draft` : s.story ? `story ${s.story.current}${s.story.settled?.version === s.story.current ? ' settled' : ''}` : 'no story yet',
+    // the draft or the story waiting on the user is theirs to look at, not Alma running: it runs only while
+    // a story sub-agent is live (node above), or while Alma has the next move (a settled story to write the script from,
+    // a lock or a settle just sent); a film past the story whose script has no lock flag (made before the harness had
+    // one) is done
+    state: locked ? 'locked' : storyWaits ? 'pick' : !(s.script || s.story) ? 'waiting' : atStoryStage(s) ? 'running' : 'done',
+    status: locked ? `${locked.version} locked`
+      : storyWaits ? (storyCards ? draft : storyWaits.status)
+      : sw?.sent ? (sw.kind === 'script' ? `${sw.version} draft · lock sent` : `story ${sw.version} · settle sent`)
+      : draft,
+    also: storyWaits ? 1 : 0,
     aims: liveAims(tasks, 'story'), href: 'story', kicker: locked ? 'Stage 1 · locked' : 'Stage 1 · Setup and story',
     body: locked
       ? `Script ${locked.version} is locked: ${plural(s.scenes.length, 'scene')}, ${plural(s.script?.lines.filter((l) => l.speaker).length ?? 0, 'line')}. Both chains started from it.`
@@ -331,6 +355,8 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     asks,
     working: s.feed?.working ?? [],
     waiting,
+    waitWords: waiting ? waitingWords(keys) : '',
+    ...(storyWaits ? { story: storyWaits } : {}),
     faceGate: faceP.filter((p) => p.state !== 'done').length,
     masterGate: open.length,
     done: delivered,

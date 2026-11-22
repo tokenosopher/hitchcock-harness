@@ -2,8 +2,8 @@
 // Edit (stage 9): the harness's own track view, which replaces Resolve for basic editing. The user is the editor here: every change is one step of the
 // working cut's history, kept at once and never numbered (14 Nov, stage 2 of "saving apart from history"); ⌘S or Save
 // keeps it as a version, and a render saves one by itself first (useCut.ts ensureSaved). Nothing is rendered by itself
-// (ASKS 44: the player plays the cut live, the 480p is made when asked for in Renders); nothing is prefilled except
-// "Ask Alma" and the phone's note at a timecode.
+// (the player plays the cut live, the 480p is made when asked for in Renders); nothing is put in Alma's box except
+// "Ask Alma" (as a chip) and the phone's note at a timecode.
 // The page's identity for a state is the working cut's `w<rev>` (tl.version); a version's name is `cut.newest`,
 // `cut.equals` (a version with the same content) or `cut.ref` (equals, else newest): those, never `w<rev>`, go to
 // anything that reads version numbers.
@@ -26,6 +26,8 @@ import { cn } from '@/lib/utils';
 import { Inspector } from './Inspector';
 import { Tracks, type Tool } from './Tracks';
 import { Viewer } from './Viewer';
+import { ViewerEdge } from './ViewerEdge';
+import { colWidthCss, stageWidthCss } from './viewerWidth';
 import { MasterSwitch, useFullView } from './MasterSwitch';
 import { clipMarks, picturePieces, pictureMade, scaledUpWords, type FullInfo } from './fullsize';
 import { checkTakes, FullBar, SeedanceMarksLink, seedanceAsk, upscaleAsk, UpscaleCheck, useSeedanceMarks, type CheckShot } from './UpscaleCheck';
@@ -46,7 +48,8 @@ import { RenderPlayer } from './RenderPlayer';
 import { playTag, type RenderRow } from './renderList';
 import { useDrawCount } from './drawCount';
 import { fileFrames, placeFile, replaceFile, trackForFile } from './placeFile';
-import { inFilm, mainTracks, picksWords, putShot, sceneAnchor, sceneOrder, sceneOf, sceneRuns, shotClips, shotNo, shotOf, shotsOf, shotTimeline, takeNames, takeOutScene, takeOutShot, withPicks, type SceneRun, type TakeShots } from './shots';
+import { clipFrames, clipTag, inFilm, mainTracks, ownShotOf, pickKey, picksWords, putShot, samePlace, sceneAnchor, sceneOrder, sceneOf, sceneRuns, shotClips, shotNo, shotOf, shotsOf, shotTimeline, subTag, takeNames, takeOutScene, takeOutShot, withPicks, type SceneRun, type TakeShots } from './shots';
+import { cellP, fromCellP } from './shotCols';
 import {
   addMarker, clipName, deleteClip, deleteTrack, deleteEmptyTracks, emptyTracks, moveTrack, renameTrack, whyNotDeleteTrack, whyNotMoveTrack, deleteClips, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, optionWindow, swapSound, endF, findClip, lenF, partnerOf, pictureAt, retimeClips, sameEdit, setLinked, speedOf, splitClip, startF, tidyOverlaps, toF, totalF, trimClip,
   carryPlan, carrySound, relinkSound, takeRefusal, lockedWhy, pasteClips, type ClipRef, type Copied, type Edit,
@@ -70,6 +73,7 @@ import { useSendAsUser } from '@/components/release/AskAlma';
 import { usePhoneFull } from './phoneFull';
 import { useEditRefSource } from './refSource';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -120,7 +124,7 @@ let kSeq = 0;
 const nextK = () => ++kSeq;
 
 export function EditPage() {
-  // Not useFilmPage: this page only writes to the UI state (the pinned chip, the playhead, a prefill) and does not read
+  // Not useFilmPage: this page only writes to the UI state (the pinned chip, the playhead, a chip in her box) and does not read
   // Alma's thread, so it reads neither. Each change of the pinned chip (it names the version) used to draw the whole
   // page again, the timeline included, right after every edit and every undo (F15).
   const film = useParams<{ film: string }>().film;
@@ -133,7 +137,7 @@ export function EditPage() {
   const plan = usePlan(film, state?.updatedAt);
   // the go for the first takes, sent as the user's words by a component mounted only while it sends (reading "Alma
   // sees" here would draw the whole page again on every change of the pinned chip, F15)
-  const [sending, setSending] = useState<string>();
+  const [sending, setSending] = useState<{ text: string; chip?: { id: string; label: string; ref?: string }; said: string }>();
   const keyName = useKeyName();
   const phone = useIsPhone();
   const params = useSearchParams();
@@ -196,7 +200,7 @@ export function EditPage() {
   // the floating box of the selection folded to a chip
   const [boxFolded, setBoxFolded] = useState(false);
   // the Takes view's right-click menu (ASKS 51): where, and the take and shot (no shot: the take's name)
-  const [takeMenu, setTakeMenu] = useState<{ x: number; y: number; src: string; n?: number }>();
+  const [takeMenu, setTakeMenu] = useState<{ x: number; y: number; src: string; n?: number; tag?: string }>();
   const closeTakeMenu = useCallback(() => setTakeMenu(undefined), []);
   // a shot of a take played from the take's own file (a click in the grid): the film itself is left alone
   const [watching, setWatching] = useState<Trying>();
@@ -218,6 +222,8 @@ export function EditPage() {
   // the player full screen (13 Nov: "see the video that is composed from all of the bits full screen"): the
   // picture's own box goes full screen, so the same player keeps playing; its controls show while the pointer moves
   const stage = useRef<HTMLDivElement>(null);
+  // the viewer's column, as wide as its edge was dragged (ViewerEdge.tsx, the user)
+  const viewerCol = useRef<HTMLElement>(null);
   // the 1080p view's shot starts, for the up and down keys (set from the check list below)
   const checkStarts = useRef<number[]>([]);
   const [full, setFull] = useState(false);
@@ -437,6 +443,9 @@ export function EditPage() {
   // a file placed by hand has its length from the list until the server's own measure of the cut comes back
   const fileSecs = useMemo(() => new Map((filmFiles.files ?? []).filter((f) => f.seconds).map((f) => [f.src, f.seconds!])), [filmFiles.files]);
   const srcSeconds = useCallback((src?: string) => srcSeconds0(src) ?? (src === undefined ? undefined : fileSecs.get(src)), [srcSeconds0, fileSecs]);
+  /** What a clip may use of its file: its shot's own frames for a take cut into shots (a trim stops at them, 21 Nov
+   *  2026), else the file's ends. */
+  const framesOf = useCallback((c: TimelineClip) => clipFrames(c, shots.by, srcSeconds(c.src), fps), [shots.by, srcSeconds, fps]);
   const readOnly = !!viewing || cut.mode === 'none' || !!cut.saving;
   const tc = smpte(frame / fps, fps);
 
@@ -453,6 +462,87 @@ export function EditPage() {
     tl: shown ?? undefined, fps, frame, version: viewing?.version ?? cut.equals ?? cut.ref, edited: !viewing && !!cut.edited && !cut.equals,
     rev: viewing ? undefined : cut.working?.rev, by: shots.by, names, setFrame, select: (r) => { setSel(r); setExtra(undefined); },
   });
+
+  // ---- a card or Alma's link opens the page at what a decision is about (openAt.ts): `?clip=`, `?t=`, `?at=`,
+  // `?take=` (with `&shot=`), `?sound=` (with `&try=`). Read once and taken out of the address at once (a reload does
+  // not apply it over the user's later moves); applied when what it needs has loaded (the takes and the options come
+  // after the cut), or after 6 s with what was not found said in the toolbar's line. Nothing is saved or played.
+  const openQ = hasOpenAt(params) ? params.toString() : '';
+  const [opening, setOpening] = useState<{ o: OpenAt; t0: number }>();
+  const [openTick, setOpenTick] = useState(0);
+  useEffect(() => {
+    if (!openQ) return;
+    const o = readOpenAt(new URLSearchParams(openQ));
+    const u = withoutOpenAt(window.location.href);
+    if (u !== window.location.href) window.history.replaceState(window.history.state, '', u);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is read once, when it changes
+    if (o) setOpening({ o, t0: Date.now() });
+  }, [openQ]);
+  const sceneIds = useMemo(() => state?.scenes.map((x) => x.id), [state?.scenes]);
+  useEffect(() => {
+    if (!opening) return;
+    const final = Date.now() - opening.t0 > 6000;
+    const r: Opened = tl && cut.mode !== 'loading' ? resolveOpenAt(opening.o, { tl, by: shots.by, takes: shots.takes, names, order: sceneIds, options, layouts, final }) : final ? { kind: 'none', say: 'The timeline could not be read, so the link could not open its place.' } : { kind: 'wait' };
+    if (r.kind === 'wait') { const t = setTimeout(() => setOpenTick((n) => n + 1), 400); return () => clearTimeout(t); }
+    /* eslint-disable react-hooks/set-state-in-effect -- applies the place once, when what it needs has loaded */
+    setOpening(undefined);
+    setRenderOn(undefined); setRate(0); setWatching(undefined); stopAt.current = undefined;
+    if (r.kind === 'sound') { setPicks([]); setHearing(r.hear ? { ref: r.ref, src: r.hear } : undefined); }
+    if (r.kind === 'take') { setHearing(undefined); setSel(undefined); setBoxFolded(false); setLowerTab('takes'); setPicks((cur) => [...cur.filter((p) => !r.picks.some((q) => samePlace(p, q))), ...r.picks]); }
+    if (r.kind === 'clip' || r.kind === 'sound') { setSel(r.ref); setExtra(undefined); }
+    if (r.kind !== 'none' || r.frame !== undefined) setFrameRaw(Math.max(0, r.kind === 'none' ? r.frame! : r.frame));
+    /* eslint-enable react-hooks/set-state-in-effect */
+    if (r.kind === 'clip' || r.kind === 'sound' || r.kind === 'take') {
+      // the place eases into view (the film strip's scene zoom, Tracks focus), with some film either side
+      const fps0 = tl!.fps, from = Math.max(0, r.span[0] - 2 * fps0);
+      setFocus((f) => ({ n: (f?.n ?? 0) + 1, from, to: Math.max(r.span[1] + 2 * fps0, from + 20 * fps0) }));
+      // and the clip's track scrolls into view once the zoom has eased (a scroll started during it would be cut short)
+      const track = r.kind === 'take' ? mainTracks(tl!).v?.id : r.ref.trackId;
+      if (track) setTimeout(() => {
+        const sc = document.querySelector<HTMLElement>('[aria-label="Timeline"]');
+        const row = sc?.querySelector<HTMLElement>(`[data-track="${CSS.escape(track)}"]`);
+        if (!sc || !row) return;
+        const a = sc.getBoundingClientRect(), b = row.getBoundingClientRect();
+        if (b.top < a.top + 28 || b.bottom > a.bottom) sc.scrollTo({ top: sc.scrollTop + (b.top - a.top) - Math.max(28, (a.height - b.height) / 2), behavior: 'smooth' });
+      }, 260);
+    }
+    if (r.kind !== 'frame' && r.say) say(r.say, { ms: 9000 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when a place waits and when what it needs changes
+  }, [opening, openTick, tl, cut.mode, shots.by, shots.takes, names, sceneIds, options, layouts]);
+  // the takes newer than the one a shot of the cut uses, never tried in this browser (openAt.ts newTakes): the clip's quiet
+  // "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does. A shot selected once
+  // is remembered here (localStorage), so its mark goes.
+  const [seenTakes, setSeenTakes] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(`hh:takes-seen:${film}`) ?? '[]') as unknown;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from this browser's storage, which the server render cannot see
+      if (Array.isArray(v)) setSeenTakes(new Set(v.filter((x): x is string => typeof x === 'string')));
+    } catch { /* nothing kept */ }
+  }, [film]);
+  useEffect(() => {
+    if (!picks.length) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a shot selected is a take looked at
+    setSeenTakes((cur) => {
+      const add = picks.map(pickKey).filter((k) => !cur.has(k));
+      if (!add.length) return cur;
+      const next = new Set([...cur, ...add]);
+      try { localStorage.setItem(`hh:takes-seen:${film}`, JSON.stringify([...next].slice(-2000))); } catch { /* this tab only */ }
+      return next;
+    });
+  }, [picks, film]);
+  const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, seenTakes) : undefined), [tl, viewing, shots.by, shots.takes, seenTakes]);
+  const tryNew = useCallback((x: NewTake) => {
+    if (!tl) return;
+    const t = shots.by.get(x.pick.src);
+    const into = t ? intoOf(tl, layouts, t, x.pick.n, x.pick.tag) : undefined;
+    const one = { ...x.pick, ...(into ? { into } : {}) };
+    setRate(0); setWatching(undefined); setHearing(undefined); setRenderOn(undefined); setSel(undefined); setBoxFolded(false);
+    setPicks((cur) => [...cur.filter((p) => !samePlace(p, one)), one]);
+    const c = mainTracks(tl).v?.clips.find((k) => k.id === x.clipId);
+    if (c) setFrameRaw(Math.max(0, startF(c, tl.fps) - tl.fps));
+    say(`${x.pick.scene} shot ${x.pick.tag ?? x.pick.n} of ${names.get(x.pick.src) ?? x.name} is in place, not in the film yet. Press play to see it; Use in the film keeps it, Back to the film drops it.`, { ms: 9000 });
+  }, [tl, shots.by, layouts, names, say]);
 
   const selFound = tl && sel ? findClip(tl, sel) : undefined;
   // the shots selected in the Takes view (ASKS 52): Alma reads them, and that the film is shown with them, not changed
@@ -669,13 +759,15 @@ export function EditPage() {
   const [editRecipe, setEditRecipe] = useState('recipes/edit.md');
   useEffect(() => { let live = true; void editRecipePath().then((p) => { if (live) setEditRecipe(p); }); return () => { live = false; }; }, []);
   const askAlma = () => {
-    const lead = `Edit the cut with the recipe at ${editRecipe}. `;
+    // the box opens empty with the place as its chip; the words Alma reads name the recipe and the place
+    const lead = `an edit to the cut with the recipe at ${editRecipe}`;
     const f = selClip();
-    if (!f) { ui.prefill(`${lead}At ${tc}: `); return; }
+    if (!f) { ui.about({ id: `tc:${tc}`, label: `Edit · ${tc}` }, `${lead}, at ${tc}`, 'What should change here…'); return; }
     const inside = frame >= startF(f.clip, fps) && frame < endF(f.clip, fps);
     const at = inside ? tc : smpte(f.clip.at, fps);
     const p = tl && sel ? partnerOf(tl, sel) : undefined;
-    ui.prefill(`${lead}At ${at} on ${f.track.id}${p ? `+${p.trackId}` : ''}, ${clipName(f.clip)}: `, clipChip(f.track, f.clip));
+    ui.about({ ...clipChip(f.track, f.clip), label: `Edit · ${f.track.id} · ${clipName(f.clip)} · ${at}` },
+      `${lead}, at ${at} on ${f.track.id}${p ? `+${p.trackId}` : ''}, ${clipName(f.clip)}`, 'What should change here…');
   };
   const splitHere = () => {
     if (!tl) return;
@@ -729,11 +821,26 @@ export function EditPage() {
     await apply(e);
   };
   const effectName = (c: TimelineClip) => ((c.label ?? '').includes(' · ') ? (c.label ?? '').replace(/\s*·[^·]*$/, '') : clipName(c));
-  const askAnother = (f = selAt, opts = selOptions) => {
-    if (!f) return;
+  /** The options of an effect so far, in words: "The options so far: a, b (b is in the film). They stay." */
+  const optionsSoFar = (f: { clip: TimelineClip }, opts?: SoundOption[]) => {
     const list = opts ?? [];
     const now = list.find((o) => o.src === f.clip.src || o.files.includes((f.clip.src ?? '')));
-    ui.prefill(`Another option for the effect “${effectName(f.clip)}” at ${smpte(f.clip.at, fps)} on ${f.track.id} ${f.track.name} in cut ${almaCut}. ${list.length ? `The options so far: ${list.map((o) => o.name).join(', ')}${now ? ` (${now.name} is in the film)` : ''}. They stay. ` : ''}What should be different: `, clipChip(f.track, f.clip));
+    return list.length ? ` The options so far: ${list.map((o) => o.name).join(', ')}${now ? ` (${now.name} is in the film)` : ''}. They stay.` : '';
+  };
+  // "Another option for this effect…" (the menu and the Takes panel): the effect as the chip, the box empty for what
+  // should be different
+  const askAnother = (f = selAt, opts = selOptions) => {
+    if (!f) return;
+    ui.about({ ...clipChip(f.track, f.clip), label: `Another option · ${effectName(f.clip)}` },
+      `another option for the effect “${effectName(f.clip)}” at ${smpte(f.clip.at, fps)} on ${f.track.id} ${f.track.name} in cut ${almaCut}.${optionsSoFar(f, opts)} The user says what should be different`,
+      'What should be different…');
+  };
+  // "Say something about it…" on an effect: the effect as the chip, with its track, time, length, the cut and its options so far
+  const sayAboutEffect = (f: { track: TimelineTrack; clip: TimelineClip }, opts?: SoundOption[]) => {
+    const at = smpte(f.clip.at, fps);
+    ui.about({ ...clipChip(f.track, f.clip), label: `Effect · ${effectName(f.clip)} · ${at}` },
+      `the effect “${effectName(f.clip)}” at ${at} on ${f.track.id} ${f.track.name}, ${secsOf(lenF(f.clip, fps))} long, in cut ${almaCut}.${optionsSoFar(f, opts)}`,
+      'What should change…');
   };
   // ---- copy and paste (the user, 13 Nov). The copied clip is kept for the tab, so a reload does not lose it.
   const trackOfKind = (kind: Copied['kind'], prefer?: string) => {
@@ -776,7 +883,7 @@ export function EditPage() {
     const f = selClip();
     if (!f || !tl || !sel) return;
     const d = edge === 'head' ? frame - startF(f.clip, fps) : frame - endF(f.clip, fps);
-    void apply(trimClip(tl, sel, edge, d, ripple, srcSeconds(f.clip.src)));
+    void apply(trimClip(tl, sel, edge, d, ripple, framesOf(f.clip)));
   };
   // ---- a file put on the timeline by hand (14 Nov: until now only Alma could lay music, an effect, a title card or
   // a file attached in the chat). The lane the menu was opened on, else the track marked for pasting, else the
@@ -1011,12 +1118,12 @@ export function EditPage() {
   // the request for Alma's box: the marked takes, their shots and timecodes in the cut, the version; nothing is sent
   const askSeedance = () => {
     const takes = (check?.takes ?? []).filter((t) => seedance.marks.has(t.src));
-    if (takes.length) ui.prefill(seedanceAsk(takes, almaCut, (s) => smpte(s, fps), fps), { id: `seedance:${almaCut}`, label: `Seedance · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` });
+    if (takes.length) ui.command({ id: `seedance:${almaCut}`, label: `Redo in Seedance · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` }, seedanceAsk(takes, almaCut, (s) => smpte(s, fps), fps));
   };
   // the cheap step first: the takes of the shots that play at 480p (or of the one shot asked about), whole, on Higgsfield
   const askUpscale = (src?: string) => {
     const takes = (check?.takes ?? []).filter((t) => (src ? t.src === src : t.shots.some((s) => s.kind === 'small')));
-    if (takes.length) ui.prefill(upscaleAsk(takes, almaCut, (s) => smpte(s, fps), fps), { id: `upscaled:${almaCut}`, label: `Upscale · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` });
+    if (takes.length) ui.command({ id: `upscaled:${almaCut}`, label: `Upscale · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` }, upscaleAsk(takes, almaCut, (s) => smpte(s, fps), fps));
   };
   const playShot = (s: CheckShot) => { setWatching(undefined); setFrameRaw(Math.max(0, s.from - Math.round(fps / 2))); setRate(1); };
   // a rendered file in the player (RendersTab, RenderPlayer), from the playhead's time; a second click plays or pauses.
@@ -1080,8 +1187,8 @@ export function EditPage() {
   const aheadFigures = ahead ? `timeline ${ahead.timeline}${ahead.timelineDate ? ` · ${fmtDate(ahead.timelineDate)}` : ''} / record: ${ahead.file.split('/').pop()} · ${fmtDate(ahead.date)}` : '';
   const askCatchUp = () => {
     if (!ahead) return;
-    ui.prefill(`Bring the timeline up to ${ahead.label} with the recipe at ${editRecipe} ("From the record"): the record has ${ahead.file} (${fmtDate(ahead.date)}), newer than cut/${ahead.timeline}.json${ahead.timelineDate ? ` (${fmtDate(ahead.timelineDate)})` : ''}. The cut to read is cut/working.json. Change the cut with a drop, as recipes/edit.md says, from the list or pieces ${ahead.label} was built from, so the timeline catches up.`,
-      { id: `record:${ahead.file}`, label: `record · ${ahead.label}`, ref: ahead.file });
+    ui.command({ id: `record:${ahead.file}`, label: `Bring the timeline up to · ${aheadName}`, ref: ahead.file },
+      `Bring the timeline up to ${ahead.label} with the recipe at ${editRecipe} ("From the record"): the record has ${ahead.file} (${fmtDate(ahead.date)}), newer than cut/${ahead.timeline}.json${ahead.timelineDate ? ` (${fmtDate(ahead.timelineDate)})` : ''}. The cut to read is cut/working.json. Change the cut with a drop, as recipes/edit.md says, from the list or pieces ${ahead.label} was built from, so the timeline catches up.`);
   };
   const recordPath = ahead ? repoPath(state.film.folder, state.film.repo, ahead.file) : undefined;
   // QC of the cut reads the 480p of the version (recipes/qc-critic.md): when it is missing, starting the check asks for
@@ -1117,7 +1224,7 @@ export function EditPage() {
   );
   const viewer = (
     <>
-    <Viewer key={`${tryEdit ? `try:${picks.map((x) => `${x.src}#${x.n}`).join(',')}` : hearEdit ? 'hear' : fullView ? 'full' : soloed.size ? 'solo' : pressOn ? 'cut' : phoneFile ?? 'cut'}`} tl={shown ?? tl} frame={frame} rate={rate} total={total} file={phoneFile} solo={soloed}
+    <Viewer key={`${tryEdit ? `try:${picks.map(pickKey).join(',')}` : hearEdit ? 'hear' : fullView ? 'full' : soloed.size ? 'solo' : pressOn ? 'cut' : phoneFile ?? 'cut'}`} tl={shown ?? tl} frame={frame} rate={rate} total={total} file={phoneFile} solo={soloed}
       full={fullView} onLoading={sw.setLoading} onFail={fullView ? sw.fail : undefined}
       onFrame={(f) => { setFrameRaw(f); if (stopAt.current !== undefined && f >= stopAt.current) { stopAt.current = undefined; setRate(0); } }} onEnd={() => setRate(0)}
       className={cn('absolute inset-0 size-full bg-black object-contain', phoneFile && 'duration-200 animate-in fade-in-0')} />
@@ -1182,11 +1289,13 @@ export function EditPage() {
   ) : undefined;
 
   const kbd = 'ml-1 rounded-[4px] border border-edge-strong px-1 text-[11px] text-sub';
-  // "Create subtitles" (ASKS 40): the request goes in Alma's box, named and listed, as the other asks here; not sent
+  // "Create subtitles" sends the request to Alma at the press, as the user's message with its chip; "Create subtitles again…" puts it
+  // in her box first, since it replaces lines that are there
   const askSubtitles = (again = false) => {
     const r = subtitlesAsk({ tl: { ...tl, version: almaName }, recipe: editRecipe, state, again, sceneOf: (c) => sceneOf(c, shots.by),
       takeOf: (c) => { const sc = sceneOf(c, shots.by), n = shotNo(c, shots.by); return `${sc ? `${sc} · ` : ''}${names.get(c.src ?? '') ?? c.takeRef?.take ?? clipName(c)}${n ? ` · shot ${n}` : ''}`; } });
-    ui.prefill(r.text, r.chip);
+    if (again) ui.command(r.chip, r.text);
+    else if (!sending) setSending({ text: r.text, chip: r.chip, said: 'Sent to Alma: create subtitles. The lines come into the cut when she is done.' });
   };
   const noSubs = !hasSubtitles(tl) && !planned && !empty;
   const unread = unreadableSplit(cut.unreadable, versionList, viewing?.version ?? cut.ref ?? '');
@@ -1212,7 +1321,7 @@ export function EditPage() {
         const src = sw.sources;
         if (!src || !masterNow) return;
         const takes = checkTakes(tl, masterNow.pieces, shots.by, names, src.info).takes;
-        if (takes.length) ui.prefill(seedanceAsk(takes, almaCut, (s) => smpte(s, fps), fps), { id: `upscaled:${almaCut}`, label: `Seedance 2.5 · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` });
+        if (takes.length) ui.command({ id: `upscaled:${almaCut}`, label: `Seedance 2.5 · ${takes.length} ${takes.length === 1 ? 'take' : 'takes'}` }, seedanceAsk(takes, almaCut, (s) => smpte(s, fps), fps));
         return;
       }
       case 'sound': showClip(soundCounts(tl).first, 0); return;
@@ -1233,7 +1342,7 @@ export function EditPage() {
         return;
       }
       case 'takes-tab': setLowerTab('takes'); return;
-      case 'go-takes': setSending(goTakesAsk(d.n, d.scenes)); return;
+      case 'go-takes': setSending({ text: goTakesAsk(d.n, d.scenes), said: 'Sent to Alma: the go for the first takes.' }); return;
     }
   };
   const untick = (s: LeftStep) => { if (s.ticked) void left.tick({ untick: s.ticked }); };
@@ -1278,7 +1387,7 @@ export function EditPage() {
         {/* the button sits at the right of its fold, so folded it never reaches past the bar */}
         <span className="flex min-w-0 justify-end overflow-hidden">
           <button type="button" onClick={() => askSubtitles()} data-create-subs=""
-            title="Puts the request in Alma's box: the cut and its dialogue. She writes the lines into the cut, one step you can undo"
+            title="Asks Alma now, with the cut and its dialogue. She writes the lines into the cut, one step you can undo"
             className="inline-flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-edge px-2.5 text-[12px] text-sub transition-colors duration-150 hover:bg-raised hover:text-ink">
             <svg width="12" height="11" viewBox="0 0 12 11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true"><rect x="0.7" y="0.7" width="10.6" height="9.6" rx="1.8" /><path d="M3 6.3h3.4M3 8h6M7.8 6.3H9" /></svg>
             Create subtitles
@@ -1317,15 +1426,16 @@ export function EditPage() {
   const relinkOf = (r: ClipRef) => setLinked(tl, r, true) ?? relinkSound(tl, r, noteName);
   const openRun = (r: SceneRun) => { setRate(0); setSel(undefined); setWatching(undefined); setFrameRaw(r.from); setFocus((f) => ({ n: (f?.n ?? 0) + 1, from: r.from, to: r.to })); };
   const watched = watching ? by.get(watching.src) : undefined;
-  const watchedShot = watching ? shotOf(watched, watching.n) : undefined;
-  /** The film's own clip of the watched shot, when the film uses exactly that take's shot. */
-  const watchedInFilm = watching ? mainTracks(tl).v?.clips.find((x) => x.src === watching.src && shotNo(x, by) === watching.n) : undefined;
+  const watchedShot = watching ? shotOf(watched, watching.n, watching.tag) : undefined;
+  /** The film's own clip of the watched shot, when the film uses exactly that take's shot (of its id, "7b"). */
+  const watchedInFilm = watching ? mainTracks(tl).v?.clips.find((x) => x.src === watching.src && shotNo(x, by) === watching.n && (!watching.tag || clipTag(x, by) === watching.tag)) : undefined;
+  /** "shot 3", "shot 7b": a shot of a take as the page names it. */
+  const shotSaid = (n: number, tag?: string) => `shot ${tag ?? n}`;
   // ---- several shots selected (ASKS 52, the user, 14 Nov: "click through them, press play, and it would play basically
   // the ones that you've selected"). A click on a shot plays it from its take, as before, and selects it: one a shot
   // column of a scene, in any scenes. The film is then shown, scrubbed and played with every one of them in place.
   const order = state.scenes.map((x) => x.id);
-  const pickKey = (p: { src: string; n: number }) => `${p.src}#${p.n}`;
-  // ---- a scene's layouts: the open scene's layouts, the one the cut uses, the one whose takes
+  // ---- a scene's layouts : the open scene's layouts, the one the cut uses, the one whose takes
   // the Takes view shows. A shot of another layout's take goes into a place of the layout the cut uses: its safe swap
   // (the same framing and line) when it has one, else the place with its number; the warnings are said, never a refusal.
   const sceneLays: Layout[] = gridScene ? layouts.get(gridScene.id) ?? [] : [];
@@ -1336,11 +1446,11 @@ export function EditPage() {
   const layForeign = !!layView && !!layIn && layView.key !== layIn.key;
   /** Where shot `n` of take `t` goes when the take is of another layout than the one its scene uses in the cut (place
    *  `to` when given), and what that swap means; undefined for a take of the layout in use. */
-  const swapOf = (t: TakeShots, n: number, to?: number) => {
+  const swapOf = (t: TakeShots, n: number, to?: number, tag?: string) => {
     const ls = layouts.get(t.scene);
     const into = ls ? layoutInCut(tl, t.scene, ls) : undefined;
     const from = ls ? layoutOfTake(ls, t.src) : undefined;
-    const sh = shotOf(t, n);
+    const sh = shotOf(t, n, tag);
     if (!into || !from || !sh || (from.key === into.key && to === undefined)) return undefined;
     const ls1 = layoutShotOfTake(from, shotsOf(t), sh.i);
     const same = ls1 ? sameShotIn(ls1, into) : undefined;
@@ -1350,34 +1460,36 @@ export function EditPage() {
   };
   /** A step's note for shots of another layout: which layout, and safe or what warns, in a few words. */
   const layNote = (ps: Trying[]) => {
-    const sw = ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to) : undefined; return x ? [x] : []; });
+    const sw = ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to, p.tag) : undefined; return x ? [x] : []; });
     if (!sw.length) return '';
     if (sw.length === 1) return ` (from Layout ${sw[0].from.n} into Layout ${sw[0].into.n}: ${sw[0].safe && !sw[0].short.length ? 'a safe swap' : `${sw[0].safe ? 'a safe swap, ' : ''}${sw[0].short.join(', ')}`})`;
     const safe = sw.filter((x) => x.safe).length, warned = sw.filter((x) => x.short.length).length;
     return `; ${sw.length} from another layout (${safe} safe ${safe === 1 ? 'swap' : 'swaps'}${warned ? `, ${warned} with warnings` : ''})`;
   };
   /** The warnings of shots of another layout, said back once they are in the film. */
-  const layWarnings = (ps: Trying[]) => ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to) : undefined; return x?.warnings.length ? [`${p.scene} shot ${x.to}: ${x.warnings.join(' ')}`] : []; });
+  const layWarnings = (ps: Trying[]) => ps.flatMap((p) => { const t = by.get(p.src); const x = t && p.into ? swapOf(t, p.n, p.into.to, p.tag) : undefined; return x?.warnings.length ? [`${p.scene} shot ${x.to}: ${x.warnings.join(' ')}`] : []; });
   /** A click on a shot of a take: watch it; and, when the film does not use it already, select it (a click on a
    *  selected shot unselects it). The playhead goes to where it plays in the film with the shots selected. */
-  const clickShot = (t: TakeShots, n: number) => {
+  const clickShot = (t: TakeShots, n: number, tag?: string) => {
     setRate(0); setSel(undefined); setRenderOn(undefined);
-    const key = `${t.src}#${n}`;
-    if (picks.some((p) => pickKey(p) === key)) { unpick(t, n); return; }
-    setWatching({ scene: t.scene, n, src: t.src, k: nextK() });
+    const key = pickKey({ src: t.src, n, tag });
+    if (picks.some((p) => pickKey(p) === key)) { unpick(t, n, tag); return; }
+    setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) });
     if (inFilm(tl, by).has(key)) return;
     // a shot of another layout's take goes into a place of the layout the cut uses: one shot a place
-    const sw = swapOf(t, n);
+    const sw = swapOf(t, n, undefined, tag);
     const into = sw ? { to: sw.to, layout: sw.layout } : undefined;
-    const next = [...picks.filter((p) => !(p.scene === t.scene && (p.into?.to ?? p.n) === (into?.to ?? n))), { scene: t.scene, n, src: t.src, ...(into ? { into } : {}) }];
+    const one: Trying = { scene: t.scene, n, src: t.src, ...(into ? { into } : {}), ...(tag ? { tag } : {}) };
+    // one shot a place: a shot with a letter ("7b") shares its column with the other letters
+    const next = [...picks.filter((p) => !samePlace(p, one)), one];
     setPicks(next);
-    const at = withPicks(tl, next, by, names, 'try', order)?.placed.find((x) => x.src === t.src && x.n === n)?.at;
+    const at = withPicks(tl, next, by, names, 'try', order)?.placed.find((x) => x.src === t.src && x.n === n && x.tag === tag)?.at;
     if (at !== undefined) setFrameRaw(at);
   };
-  const unpick = (t: TakeShots, n: number) => {
+  const unpick = (t: TakeShots, n: number, tag?: string) => {
     setRate(0);
-    setPicks((cur) => cur.filter((p) => !(p.src === t.src && p.n === n)));
-    if (watching?.src === t.src && watching.n === n) setWatching(undefined);
+    setPicks((cur) => cur.filter((p) => !(p.src === t.src && p.n === n && p.tag === tag)));
+    if (watching?.src === t.src && watching.n === n && watching.tag === tag) setWatching(undefined);
   };
   const backToFilm = () => { setRate(0); setWatching(undefined); setPicks([]); };
   /** "Use in the film": every selected shot in its place, one step of the history; one Undo takes them all out. */
@@ -1393,14 +1505,14 @@ export function EditPage() {
     if (warned.length) say(`In the film, with what does not match: ${warned.join(' ')} ⌘Z takes it back.`);
   };
   /** One shot put in the film at once (the Takes view's menu): one step, as "Use in the film" with that one alone. */
-  const putOne = async (t: TakeShots, n: number, to?: number) => {
+  const putOne = async (t: TakeShots, n: number, to?: number, tag?: string) => {
     if (readOnly) return;
-    const sw = swapOf(t, n, to);
-    const one: Trying = { scene: t.scene, n, src: t.src, ...(sw ? { into: { to: sw.to, layout: sw.layout } } : {}) };
+    const sw = swapOf(t, n, to, tag);
+    const one: Trying = { scene: t.scene, n, src: t.src, ...(sw ? { into: { to: sw.to, layout: sw.layout } } : {}), ...(tag ? { tag } : {}) };
     const e = withPicks(tl, [one], by, names, undefined, order);
     const warned = layWarnings([one]), note = layNote([one]);
     setRate(0); setWatching(undefined);
-    setPicks((cur) => cur.filter((p) => !(p.scene === t.scene && (p.into?.to ?? p.n) === (sw?.to ?? n))));
+    setPicks((cur) => cur.filter((p) => !samePlace(p, one)));
     if (!e) { sayRefused(); return; }
     await apply({ ...e, note: `${e.note}${note}` });
     if (mainV) { setSel({ trackId: mainV, clipId: e.placed[0].clipId }); setFrameRaw(e.placed[0].at); }
@@ -1428,8 +1540,8 @@ export function EditPage() {
   })();
   // ---- "Edit this video" (ASKS 51): the shot (or the whole take) in front of Alma as one chip; the cursor in her box.
   // Nothing is sent or made until the user sends; a second one replaces the first.
-  const editVideo = (t: TakeShots, n?: number) => {
-    const sh = n ? shotOf(t, n) : undefined;
+  const editVideo = (t: TakeShots, n?: number, tag?: string) => {
+    const sh = n ? shotOf(t, n, tag) : undefined;
     const all = shotsOf(t);
     const take = cap1(names.get(t.src) ?? t.name);
     const mid = sh ? (sh.in + sh.out) / 2 : (t.seconds ?? 0) / 2;
@@ -1437,13 +1549,14 @@ export function EditPage() {
       'Edit this video: the user wants a variation of it, made as their message says.',
       `Scene: ${t.scene}.`,
       `Take: ${take}, file ${t.src}.`,
-      sh ? `Shot ${n}${sh.i !== sh.n ? ` of the scene (the take's shot ${sh.i})` : ' of the take'}: in ${sh.in.toFixed(2)} s, out ${sh.out.toFixed(2)} s (${(sh.out - sh.in).toFixed(1)} s).`
+      sh ? `Shot ${tag ?? n}${sh.i !== sh.n || tag ? ` of the scene (the take's shot ${sh.i})` : ' of the take'}: in ${sh.in.toFixed(2)} s, out ${sh.out.toFixed(2)} s (${(sh.out - sh.in).toFixed(1)} s).`
         : `The whole take: ${(t.seconds ?? 0).toFixed(2)} s${all.length ? `, ${all.length} ${all.length === 1 ? 'shot' : 'shots'}` : ''}.`,
       `Where the variation goes and how the Takes view shows it: ${editRecipe}, "A variation of a take".`,
     ].join('\n');
-    ui.addChip({ id: 'edit-video', label: `Edit: ${t.scene} · ${take}${n ? ` · shot ${n}` : ''}`, ref, image: mediaUrl(t.src, { w: 160, t: Math.round(mid * 100) / 100 }), placeholder: 'What should change in this video?' });
+    ui.addChip({ id: 'edit-video', label: `Edit: ${t.scene} · ${take}${n ? ` · ${shotSaid(n, tag)}` : ''}`, ref, image: mediaUrl(t.src, { w: 160, t: Math.round(mid * 100) / 100 }), placeholder: 'What should change in this video?' });
     ui.focusBox();
-    if (t.state === 'ready' && all.length) { setRate(0); setSel(undefined); setRenderOn(undefined); setWatching({ scene: t.scene, n: n ?? all[0].n, src: t.src, k: nextK() }); }
+    const first = sh ?? all[0];
+    if (t.state === 'ready' && first) { setRate(0); setSel(undefined); setRenderOn(undefined); setWatching({ scene: t.scene, n: first.n, src: t.src, k: nextK(), ...(subTag(first) ? { tag: subTag(first) } : {}) }); }
   };
   const copyPath = (t: TakeShots) => {
     const done = () => say(`Copied the path of ${t.scene} · ${cap1(names.get(t.src) ?? t.name)}: ${t.src}`);
@@ -1458,16 +1571,17 @@ export function EditPage() {
   // (the shots selected stay: they belong to the selection, not to what the playhead or the timeline does)
   const leaveTries = () => { setRate(0); setWatching(undefined); setExtra(undefined); };
   const openAbsent = (sc: string, at: number) => { leaveTries(); setSel(undefined); setFrameRaw(at); setPin({ scene: sc, from: at, to: at }); };
-  const shotOut = (t: TakeShots, n: number) => {
+  const shotOut = (t: TakeShots, n: number, tag?: string) => {
     if (readOnly) return;
-    const pieces = shotClips(tl, by, t.scene, n);
-    const e = takeOutShot(tl, by, t.scene, n, cap1(names.get(t.src) ?? t.name));
+    // a shot with a letter ("7b"): only its own pieces, the other shots of its column stay
+    const pieces = shotClips(tl, by, t.scene, n).filter((c) => !tag || clipTag(c, by) === tag);
+    const e = takeOutShot(tl, by, t.scene, n, cap1(names.get(t.src) ?? t.name), tag);
     if (!e || !pieces.length) { sayRefused(); return; }
     const f = Math.min(...pieces.map((c) => startF(c, fps)));
     leaveTries(); setSel(undefined);
     setFrameRaw(f); setPin({ scene: t.scene, from: f, to: f });
     void apply(e);
-    say(`${t.scene} shot ${n} is out of the film; what followed closes up. ⌘Z brings it back.`);
+    say(`${t.scene} ${shotSaid(n, tag)} is out of the film; what followed closes up. ⌘Z brings it back.`);
   };
   const sceneOut = (sc: string) => {
     if (readOnly) return;
@@ -1481,26 +1595,28 @@ export function EditPage() {
     say(`${sc} is out of the film; the scene before runs straight into the one after. Click any of its shots to bring it back, or ⌘Z.`);
   };
   /** A click on a shot whose column has nothing in the film: it goes back in its place, and plays from just before. */
-  const bringBack = async (t: TakeShots, n: number) => {
+  const bringBack = async (t: TakeShots, n: number, tag?: string) => {
     if (readOnly) return;
     const name = names.get(t.src) ?? t.name;
-    const e = putShot(tl, t.scene, n, t, name, by, undefined, order);
+    const e = putShot(tl, t.scene, n, t, name, by, undefined, order, undefined, tag);
     if (!e) { sayRefused(); return; }
     leaveTries();
-    await apply({ ...e, note: `${t.scene} shot ${n} put back in the film (${cap1(name)})` });
+    await apply({ ...e, note: `${t.scene} ${shotSaid(n, tag)} put back in the film (${cap1(name)})` });
     if (mainV) setSel({ trackId: mainV, clipId: e.clipId });
     setPin({ scene: t.scene, from: Math.max(0, e.at - 2 * fps), to: e.at + e.frames });
     setFrameRaw(Math.max(0, e.at - 2 * fps));
     setRate(1);
-    say(`${t.scene} shot ${n} is back in the film (${cap1(name)}), playing from just before it. ⌘Z takes it out again.`);
+    say(`${t.scene} ${shotSaid(n, tag)} is back in the film (${cap1(name)}), playing from just before it. ⌘Z takes it out again.`);
   };
   // a retake is of the whole shot: on a planned shot (a board panel among its others) the words, length and
   // start are the shot's, whichever panel is selected
   const retakeOf = (t: TimelineTrack, c: TimelineClip, scene: string | undefined, n: number) => {
     const planned = tl ? retakeWords(tl, c, almaCut, (s) => smpte(s, fps)) : undefined;
     const sp = planned && tl ? shotSpan(tl, c) : undefined;
-    if (planned && sp) { ui.prefill(planned, { ...clipChip(t, sp.first), label: `${t.id} · ${sp.scene} · shot ${sp.shot} · ${smpte(sp.at, fps)}` }); return; }
-    ui.prefill(`Retake ${scene ?? ''} shot ${n} (${takeLabel(c)}, ${secsOf(lenF(c, fps))}, at ${smpte(c.at, fps)} in cut ${almaCut}). What should change: `, clipChip(t, c));
+    // the shot as the chip, the box empty for what should change
+    if (planned && sp) { ui.about({ ...clipChip(t, sp.first), label: `Retake · ${sp.scene} shot ${sp.shot}` }, `${planned} The user says what should change`, 'What should change…'); return; }
+    ui.about({ ...clipChip(t, c), label: `Retake · ${scene ? `${scene} ` : ''}shot ${n}` },
+      `Retake ${scene ?? ''} shot ${n} (${takeLabel(c)}, ${secsOf(lenF(c, fps))}, at ${smpte(c.at, fps)} in cut ${almaCut}). The user says what should change`, 'What should change…');
   };
   const askRetake = () => {
     const f = selClip();
@@ -1508,16 +1624,31 @@ export function EditPage() {
     retakeOf(f.track, f.clip, selScene, selShotN);
   };
   // where the video is, for the line across the takes: the take being watched, else the film's own shot
+  /** A column's pieces in the film (unmuted, in order) and whether they show more than one shot ("7a" of one take, then
+   *  "7b" of another): the line then crosses the column with the film's time, not with one shot's. */
+  const colPieces = (t0: Timeline, scene: string, n: number) => {
+    const here = shotClips(t0, by, scene, n).filter((c) => !c.muted).sort((x, y) => x.at - y.at);
+    return { here, mixed: new Set(here.map((c) => `${c.src}#${clipTag(c, by) ?? ''}`)).size > 1 };
+  };
   const gridHead = (() => {
     if (watching && watched) {
-      const sh = shotsOf(watched).find((x) => watchT >= x.in && watchT < x.out) ?? watchedShot;
-      return sh ? { n: sh.n, p: (watchT - sh.in) / Math.max(0.04, sh.out - sh.in) } : undefined;
+      const all = shotsOf(watched);
+      const sh = all.find((x) => watchT >= x.in && watchT < x.out) ?? watchedShot;
+      // a shot sharing its cell ("7b"): the line stands over its half
+      return sh ? { n: sh.n, p: cellP(all, sh, (watchT - sh.in) / Math.max(0.04, sh.out - sh.in)) } : undefined;
     }
-    if (!pic || !picShot || picScene !== openId) return undefined;
-    const sh = shotOf(by.get((pic.clip.src ?? '')), picShot);
+    if (!pic || !picShot || !picScene || picScene !== openId) return undefined;
+    const col = colPieces(shown ?? tl, picScene, picShot);
+    if (col.mixed) {
+      const a = startF(col.here[0], fps), b = endF(col.here[col.here.length - 1], fps);
+      return { n: picShot, p: (frame - a) / Math.max(1, b - a) };
+    }
+    const all = shotsOf(by.get((pic.clip.src ?? '')));
+    const own = ownShotOf(pic.clip, by);
+    const sh = own && own.n === picShot ? own : shotOf(by.get((pic.clip.src ?? '')), picShot);
     if (!sh) return undefined;
     const t = pic.clip.in + ((frame - startF(pic.clip, fps)) * (pic.clip.speed && pic.clip.speed > 0 ? pic.clip.speed : 1)) / fps;
-    return { n: picShot, p: (t - sh.in) / Math.max(0.04, sh.out - sh.in) };
+    return { n: picShot, p: cellP(all, sh, (t - sh.in) / Math.max(0.04, sh.out - sh.in)) };
   })();
   // ---- the playhead moved from the Takes view (ASKS 53): the same playhead as the timeline's, whole frames, nothing
   // written. Shot `n` of the open scene, `p` of the way through it as the line across the takes measures it.
@@ -1525,12 +1656,16 @@ export function EditPage() {
     if (!gridScene) return;
     const sh = shown ?? tl;
     const fr = (c: TimelineClip) => ({ a: startF(c, fps), b: endF(c, fps) });
-    const here = shotClips(sh, by, gridScene.id, n).filter((c) => !c.muted).sort((x, y) => x.at - y.at);
+    const { here, mixed } = colPieces(sh, gridScene.id, n);
     let f: number | undefined;
     if (here.length) {
-      const s = shotOf(by.get(here[0].src ?? ''), n);
+      // the column shows one shot of one take: through its own frames (its half of a shared cell, "7b"); else (pieces of
+      // several shots) through the column's stretch of the film, below
+      const take = by.get(here[0].src ?? '');
+      const own = ownShotOf(here[0], by);
+      const s = mixed ? undefined : own && own.n === n ? own : shotOf(take, n);
       if (s) {
-        const t = s.in + p * (s.out - s.in);
+        const t = s.in + fromCellP(shotsOf(take), s, p) * (s.out - s.in);
         const c = here.find((x) => t >= x.in && t <= x.out) ?? (t < here[0].in ? here[0] : here[here.length - 1]);
         const { a, b } = fr(c);
         f = Math.max(a, Math.min(b - 1, a + Math.round(((Math.max(c.in, Math.min(c.out, t)) - c.in) * fps) / speedOf(c))));
@@ -1564,28 +1699,28 @@ export function EditPage() {
     if (!takeMenu || !t) return undefined;
     const take = cap1(names.get(t.src) ?? t.name);
     const canEdit = t.state === 'ready';
-    const edit: MenuItem = { label: 'Edit this video…', hint: 'with Alma', disabled: !canEdit, onPick: () => editVideo(t, takeMenu.n) };
+    const n = takeMenu.n, tag = takeMenu.tag;
+    const edit: MenuItem = { label: 'Edit this video…', hint: 'with Alma', disabled: !canEdit, onPick: () => editVideo(t, n, tag) };
     const copy: MenuItem = { label: 'Copy its path', sepBefore: true, onPick: () => copyPath(t) };
-    const n = takeMenu.n;
-    const sh = n ? shotOf(t, n) : undefined;
+    const sh = n ? shotOf(t, n, tag) : undefined;
     if (!n || !sh) return { title: `${t.scene} · ${take}`, items: [edit, copy] };
-    const key = `${t.src}#${n}`;
+    const key = pickKey({ src: t.src, n, tag });
     const isIn = inFilm(tl, by).has(key);
     const colOut = !shotClips(tl, by, t.scene, n).length;
     const ro = readOnly || !!hearEdit;
     // a shot of another layout's take: any place of the layout the cut uses, each saying safe or what warns
-    const sw = isIn ? undefined : swapOf(t, n);
+    const sw = isIn ? undefined : swapOf(t, n, undefined, tag);
     const put: MenuItem = isIn
-      ? { label: 'Take it out of the film', hint: picks.length ? 'not while shots are selected' : '⌘Z brings it back', disabled: ro || picks.length > 0, onPick: () => shotOut(t, n) }
-      : sw ? { label: 'Use in the film', hint: `in place of shot ${sw.to}${sw.safe ? ', safe' : ''}`, disabled: ro, onPick: () => void putOne(t, n) }
-      : { label: 'Use in the film', hint: colOut ? 'puts it back' : undefined, disabled: ro, onPick: () => void (colOut ? bringBack(t, n) : putOne(t, n)) };
+      ? { label: 'Take it out of the film', hint: picks.length ? 'not while shots are selected' : '⌘Z brings it back', disabled: ro || picks.length > 0, onPick: () => shotOut(t, n, tag) }
+      : sw ? { label: 'Use in the film', hint: `in place of shot ${sw.to}${sw.safe ? ', safe' : ''}`, disabled: ro, onPick: () => void putOne(t, n, undefined, tag) }
+      : { label: 'Use in the film', hint: colOut ? 'puts it back' : undefined, disabled: ro, onPick: () => void (colOut ? bringBack(t, n, tag) : putOne(t, n, undefined, tag)) };
     const places: MenuItem[] = sw ? sw.into.shots.map((x, i) => {
-      const c = swapOf(t, n, x.n)!;
-      return { label: `In place of shot ${x.n} of Layout ${sw.into.n}`, hint: c.safe && !c.short.length ? 'safe swap' : c.safe ? `safe, ${c.short.join(', ')}` : c.short.join(', ') || 'no warning', disabled: ro, sepBefore: i === 0, onPick: () => void putOne(t, n, x.n) };
+      const c = swapOf(t, n, x.n, tag)!;
+      return { label: `In place of shot ${x.n} of Layout ${sw.into.n}`, hint: c.safe && !c.short.length ? 'safe swap' : c.safe ? `safe, ${c.short.join(', ')}` : c.short.join(', ') || 'no warning', disabled: ro, sepBefore: i === 0, onPick: () => void putOne(t, n, x.n, tag) };
     }) : [];
     return {
-      title: `${t.scene} · ${take} · shot ${n} · ${secsOf(Math.round((sh.out - sh.in) * fps))}${sw ? ` · Layout ${sw.from.n}` : ''}`,
-      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK() })) : clickShot(t, n)) }, put, ...places, copy],
+      title: `${t.scene} · ${take} · ${shotSaid(n, tag)} · ${secsOf(Math.round((sh.out - sh.in) * fps))}${sw ? ` · Layout ${sw.from.n}` : ''}`,
+      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) })) : clickShot(t, n, tag)) }, put, ...places, copy],
     };
   })();
   // ---- the right-click menu: every entry that goes to Alma carries the point it was opened at
@@ -1658,7 +1793,8 @@ export function EditPage() {
     const ref = hit ? { trackId: hit.track.id, clipId: hit.clip.id } : undefined;
     const hitShot = hit ? shotNo(hit.clip, by) : undefined;
     const items: MenuItem[] = [
-      { label: 'Add an effect here…', hint: 'Alma makes it', onPick: () => ui.prefill(`Add an effect at ${where}. Its own clip ${onTrack}, nothing else changed. The effect: `, chip) },
+      { label: 'Add an effect here…', hint: 'Alma makes it', onPick: () => ui.about({ id: `add-effect:${almaCut}:${f}`, label: `Add an effect · ${track?.kind === 'audio' && track.id !== mainTracks(tl).a?.id ? track.id : 'effects'} · ${at}` },
+        `Add an effect at ${where}. Its own clip ${onTrack}, nothing else changed. The user says what the effect is`, 'What effect…') },
       { label: 'Add a file here…', hint: 'one you have', disabled: readOnly, onPick: () => openFiles('add', track && (track.kind === 'audio' || track.kind === 'video') ? track.id : undefined) },
       ...(join ? [{ label: 'About the sound across this join…', onPick: () => ui.about({ id: `join:${almaCut}:${join.at}`, label: `join · ${smpte(join.at / fps, fps)}` }, `the sound across the join at ${smpte(join.at / fps, fps)} in cut ${almaCut}, where ${describeClip(join.left)} ends and ${describeClip(join.right)} begins`, 'What do you hear across this join…') }] : []),
       // carrying the sound and the dissolve act on the cut: only on a join where the two shots touch, as the drag of a
@@ -1721,7 +1857,10 @@ export function EditPage() {
       })() : []),
       ...(ref && hit && hit.track.kind === 'audio' && isSoundFile(hit.clip.src) ? (() => {
         const opts = options.get(dirOf(hit.clip.src));
-        return [{ label: 'Another option for this effect…', hint: opts?.length ? `${opts.length} so far` : undefined, sepBefore: true, onPick: () => askAnother(hit, opts) }];
+        return [
+          { label: 'Say something about it…', sepBefore: true, onPick: () => sayAboutEffect(hit, opts) },
+          { label: 'Another option for this effect…', hint: opts?.length ? `${opts.length} so far` : undefined, onPick: () => askAnother(hit, opts) },
+        ];
       })() : []),
       ...(ref && hit && hit.track.kind === 'audio' ? [{ label: 'Replace with another file…', hint: 'keeps its place', sepBefore: !isSoundFile(hit.clip.src), disabled: readOnly || hit.track.locked, onPick: () => openFiles('replace', undefined, ref) }] : []),
       ...(ref && hit && tl.tracks.filter((t) => t.kind === hit.track.kind && t.id !== hit.track.id).length ? [{
@@ -1970,12 +2109,13 @@ export function EditPage() {
       )}
 
       <div className="flex items-start max-[1100px]:flex-col">
-        {/* the films are 9:16, so the picture stands tall at the left and stays put while the takes scroll */}
-        <section aria-label="Viewer" className="scroll sticky top-14 flex max-h-[calc(100dvh-56px)] w-[252px] flex-none flex-col gap-3 self-start overflow-y-auto py-4 pl-4 pr-2.5 [scrollbar-gutter:stable] max-[1100px]:static max-[1100px]:max-h-none max-[1100px]:w-full max-[1100px]:items-center">
+        {/* the films are 9:16, so the picture stands tall at the left and stays put while the takes scroll; the edge at
+            its right makes it wider or narrower, the picture growing with it (ViewerEdge.tsx, viewerWidth.ts) */}
+        <section ref={viewerCol} aria-label="Viewer" style={{ '--viewer-col': colWidthCss(tl.width, tl.height) } as React.CSSProperties} className="scroll sticky top-14 flex max-h-[calc(100dvh-56px)] w-[var(--viewer-col)] flex-none flex-col gap-3 self-start overflow-y-auto py-4 pl-4 pr-2.5 [scrollbar-gutter:stable] max-[1100px]:static max-[1100px]:max-h-none max-[1100px]:w-full max-[1100px]:items-center">
           <div ref={stage} onPointerMove={full ? wake : undefined}
             onClick={full && !watching ? () => { wake(); setRate((r) => (r ? 0 : (frame >= total ? (setFrame(0), 1) : 1))); } : undefined}
-            className={cn('group/stage relative w-full max-w-[240px] flex-none overflow-hidden rounded-[10px] border border-edge-strong bg-black [&:fullscreen]:rounded-none [&:fullscreen]:border-0', full && !ctl && 'cursor-none')}
-            style={{ aspectRatio: `${tl.width} / ${tl.height}` }}>
+            className={cn('group/stage relative mx-auto flex-none overflow-hidden rounded-[10px] border border-edge-strong bg-black max-[1100px]:max-w-[240px] [&:fullscreen]:rounded-none [&:fullscreen]:border-0', full && !ctl && 'cursor-none')}
+            style={{ width: stageWidthCss(tl.width, tl.height), aspectRatio: `${tl.width} / ${tl.height}` }}>
             {peek480 && <span className="pointer-events-none absolute bottom-2 left-2 z-[6] rounded-[4px] bg-black/85 px-1.5 py-px font-mono text-[10px] text-ink duration-150 animate-in fade-in-0">480p · while C is held</span>}
             {!(watching && watchedShot) && !playRecord && !renderOn && <MasterSwitch sw={sw} className={cn('absolute right-2 top-2 z-[6] transition-opacity duration-300', full && !ctl ? 'pointer-events-none opacity-0' : 'opacity-100')} />}
             <button type="button" onClick={(e) => { e.stopPropagation(); toggleFull(); }} aria-label={full ? 'Leave full screen' : 'Full screen'} title={full ? 'Leave full screen (F or Esc)' : 'Full screen (F)'}
@@ -2003,7 +2143,7 @@ export function EditPage() {
                 ? <video key={recordPath} src={mediaUrl(recordPath)} controls playsInline preload="metadata" className="absolute inset-0 size-full bg-black object-contain" />
                 : renderOn?.path ? renderPlayer(renderOn.path) : viewer}
             {watching && watchedShot
-              ? <span className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-16px)] truncate rounded-[5px] border border-white/25 bg-black/75 px-1.5 py-px text-[11px] text-ink">{cap1(names.get(watching.src) ?? '')} · shot {watching.n}</span>
+              ? <span className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-16px)] truncate rounded-[5px] border border-white/25 bg-black/75 px-1.5 py-px text-[11px] text-ink">{cap1(names.get(watching.src) ?? '')} · {shotSaid(watching.n, watching.tag)}</span>
               : playRecord && ahead
               ? <span className="pointer-events-none absolute left-2 top-2 rounded-[5px] bg-black/70 px-1.5 py-px font-mono text-[10px] text-warn">record · {ahead.label}</span>
               : renderOn ? renderTag
@@ -2043,7 +2183,7 @@ export function EditPage() {
             <span className="lbl">{watching && watchedShot ? 'Watching a take' : 'At the playhead'}</span>
             {watching && watched && watchedShot ? (
               <>
-                <span className="text-[14px] font-medium">{watching.scene} · shot {watching.n}</span>
+                <span className="text-[14px] font-medium">{watching.scene} · {shotSaid(watching.n, watching.tag)}</span>
                 <span className="line-clamp-3 text-[12.5px] leading-snug text-sub">From <span className="text-ink">{cap1(names.get(watching.src) ?? watched.name)}</span>, {secsOf(Math.round((watchedShot.out - watchedShot.in) * fps))}. {watchedInFilm ? 'In the film now.' : 'Not in the film.'}</span>
                 <span className="truncate font-mono text-[10.5px] text-mute" title={watching.src}>{watching.src.replace(/^assets\/films\/[^/]+\//, '')}</span>
               </>
@@ -2115,6 +2255,7 @@ export function EditPage() {
             )}
           </div>
         </section>
+        <ViewerEdge colRef={viewerCol} aspect={tl.width / tl.height} className="max-[1100px]:hidden" />
 
         <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch border-l border-line px-4 py-3 max-[1100px]:border-l-0 max-[1100px]:border-t">
           <FilmStrip runs={runs} total={total} frame={frame} open={openId} shots={(mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => shotNo(c, by) && !(c.panel && c.panel.k > 1)).length}
@@ -2140,9 +2281,10 @@ export function EditPage() {
                 selectMany(mode === 'add' ? [...group, ...refs] : refs, mode === 'add' ? sel : undefined);
               }}
               pasteTo={pasteSet} onPasteTo={(id) => { const t = tl.tracks.find((x) => x.id === id); if (t && (t.kind === 'video' || t.kind === 'audio')) markPasteTo(id, t.kind); }}
-              tool={tool} ripple={ripple} snap={snap} readOnly={readOnly || picks.length > 0 || !!hearEdit} srcSeconds={srcSeconds} toolbar={toolbar} notice={viewing ? notice : undefined} zoomCmd={zoomCmd}
+              tool={tool} ripple={ripple} snap={snap} readOnly={readOnly || picks.length > 0 || !!hearEdit} srcSeconds={srcSeconds} framesOf={framesOf} toolbar={toolbar} notice={viewing ? notice : undefined} zoomCmd={zoomCmd}
               focus={focus} scenes={runs.map((r) => { const wait = !!r.scene && planned && making.has(r.scene) && plannedScene(r.scene); return { ...r, title: r.scene ? (wait ? 'take being made' : state.scenes.find((x) => x.id === r.scene)?.title) : undefined, ...(wait ? { making: true } : {}) }; })} openScene={openId}
               tryIds={tryIds} solo={soloed} onSolo={toggleSolo} onMenu={openMenu}
+              clipNote={fresh?.size ? (c) => { const x = fresh.get(c.id); return x ? { text: `${x.count} new ${x.count === 1 ? 'take' : 'takes'}`, title: `${x.count === 1 ? 'A take' : `${x.count} takes`} of this shot landed after the one in the cut and ${x.count === 1 ? 'has' : 'have'} not been looked at. Click to see the newest (${names.get(x.pick.src) ?? x.name}) in place, not in the film yet.`, onPress: () => tryNew(x) } : undefined; } : undefined}
               clipMark={fullMarks && !tryEdit ? (c) => { const m = fullMarks.get(c.id); return m ? { kind: m.kind === 'take' ? 'seedance' : m.kind === 'small' ? 'small' : 'upscaled', marked: seedance.marks.has((c.src ?? '')) } : undefined; } : undefined}
               fileDrag={dragFile && dragFile.seconds ? { kind: dragFile.kind === 'sound' ? 'audio' : dragFile.kind === 'subtitles' ? 'captions' : 'video', frames: fileFrames(dragFile.seconds, fps) } : undefined} retype={retypeCmd}
               onDropFile={(trackId, f) => { const e = dragFile; setDragFile(undefined); if (e) void placeEntry(e, { trackId, f }); }}
@@ -2220,8 +2362,8 @@ export function EditPage() {
                   <LayoutsBar scene={gridScene.id} title={'title' in gridScene ? gridScene.title : undefined} layouts={sceneLays} inFilm={layIn} viewing={layView} busy={planBusy || !!cut.saving} readOnly={readOnly}
                     onView={(l) => { setViewLay({ scene: gridScene.id, key: l.key }); setWatching(undefined); }} onUse={(l) => void chooseLay(gridScene.id, l)}
                     picksWarn={picks.filter((p) => p.scene === gridScene.id && p.into).flatMap((p) => {
-                      const t = by.get(p.src); const x = t ? swapOf(t, p.n, p.into!.to) : undefined;
-                      return x ? [{ label: `${cap1(names.get(p.src) ?? t!.name)} shot ${p.n} of Layout ${x.from.n}, in place of shot ${x.to} of Layout ${x.into.n}`, safe: x.safe, warnings: x.warnings }] : [];
+                      const t = by.get(p.src); const x = t ? swapOf(t, p.n, p.into!.to, p.tag) : undefined;
+                      return x ? [{ label: `${cap1(names.get(p.src) ?? t!.name)} ${shotSaid(p.n, p.tag)} of Layout ${x.from.n}, in place of shot ${x.to} of Layout ${x.into.n}`, safe: x.safe, warnings: x.warnings }] : [];
                     })} />
                 </div>
               )}
@@ -2231,10 +2373,10 @@ export function EditPage() {
               <ShotGrid scene={gridScene} takes={layView && sceneLays.length > 1 ? shots.takes.filter((t) => t.scene !== gridScene.id || !layoutOfTake(sceneLays, t.src) || layView.takes.some((x) => x.src === t.src)) : shots.takes}
                 by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} seenKey={`hh:takes-seen:${film}`}
                 selShot={layForeign ? undefined : watching ? gridHead?.n ?? watching.n : selShotN ?? (picScene === openId ? picShot : undefined)} base={base} onShot={clickShot} onUnpick={unpick} head={layForeign ? undefined : gridHead}
-                onMenu={(at, t, n) => { setMenu(undefined); setHeadMenu(undefined); setTakeMenu({ ...at, src: t.src, n }); }}
+                onMenu={(at, t, n, tag) => { setMenu(undefined); setHeadMenu(undefined); setTakeMenu({ ...at, src: t.src, n, ...(tag ? { tag } : {}) }); }}
                 onSeek={layForeign ? undefined : seekTakes} onSeekEdge={seekEdge}
-                foreign={layForeign && layView && layIn ? { from: layView.n, into: layIn.n } : undefined} markOf={layForeign ? (t, n) => swapOf(t, n) : undefined}
-                onBring={readOnly ? undefined : (t, n) => void bringBack(t, n)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)}
+                foreign={layForeign && layView && layIn ? { from: layView.n, into: layIn.n } : undefined} markOf={layForeign ? (t, n, tag) => swapOf(t, n, undefined, tag) : undefined}
+                onBring={readOnly ? undefined : (t, n, tag) => void bringBack(t, n, tag)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)}
                 views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} />
               )}
               <PicksBox count={picksCount} hover={picksHover} open={picks.length > 0} folded={boxFolded} onFold={setBoxFolded} disabled={readOnly}
@@ -2244,11 +2386,11 @@ export function EditPage() {
               )}
             </div>
           )}
-          {sending && <SendOnce film={film} text={sending} onDone={(ok) => { setSending(undefined); say(ok ? 'Sent to Alma: the go for the first takes.' : 'The message did not go. Try again.'); }} />}
+          {sending && <SendOnce film={film} text={sending.text} chip={sending.chip} onDone={(ok) => { const said = sending.said; setSending(undefined); say(ok ? said : 'The message did not go. Try again.'); }} />}
           {takeMenu && takeItems && <ContextMenu x={takeMenu.x} y={takeMenu.y} title={takeItems.title} items={takeItems.items} onClose={closeTakeMenu} />}
           {details && sel && (
             <aside className="rounded-[10px] border border-line" aria-label="Clip details">
-              <Inspector tl={tl} sel={sel} state={state} base={base} steps={inspectorSteps} readOnly={readOnly} srcSeconds={srcSeconds}
+              <Inspector tl={tl} sel={sel} state={state} base={base} steps={inspectorSteps} readOnly={readOnly} srcSeconds={srcSeconds} framesOf={framesOf}
                 onEdit={(e) => void apply(e)} onClose={() => setDetails(false)} onAsk={askAlma}
                 onChip={() => { const f = selClip(); if (f) ui.addChip(clipChip(f.track, f.clip)); }} />
             </aside>
@@ -2263,7 +2405,7 @@ export function EditPage() {
 /** The What's next tab's label: its name, then quietly the number of steps still to do (the user, 14 Nov: "How many
  *  things do we still have to do?"), a small tick when none is left, nothing while it is not known yet. */
 /** Sends one message to Alma as the user's own words, once, then says how it went (mounted only while it sends). */
-function SendOnce({ film, text, onDone }: { film: string; text: string; onDone: (ok: boolean) => void }) {
+function SendOnce({ film, text, chip, onDone }: { film: string; text: string; chip?: { id: string; label: string; ref?: string }; onDone: (ok: boolean) => void }) {
   const sendAs = useSendAsUser(film);
   const once = useRef(false);
   const done = useRef(onDone);
@@ -2271,8 +2413,9 @@ function SendOnce({ film, text, onDone }: { film: string; text: string; onDone: 
   useEffect(() => {
     if (once.current) return;
     once.current = true;
-    void sendAs(text).then((ok) => done.current(ok), () => done.current(false));
-  }, [sendAs, text]);
+    // with a chip, the chip carries the request (Chip.command) and the bubble shows the chip, not the words
+    void (chip ? sendAs('', [{ ...chip, command: text }]) : sendAs(text)).then((ok) => done.current(ok), () => done.current(false));
+  }, [sendAs, text, chip]);
   return null;
 }
 

@@ -593,14 +593,14 @@ export function shotSpan(tl: Pick<Timeline, 'tracks'>, c: TimelineClip): { scene
 
 const s1 = (s: number) => `${(Math.round(s * 10) / 10).toFixed(1)} s`;
 const s2 = (s: number) => `${Math.round(s * 100) / 100} s`;
-/** "Retake this shot" on a planned clip: the words for Alma's box, of the whole shot whichever of its panels is selected
+/** "Retake this shot" on a planned clip: the words Alma reads with the shot's chip, of the whole shot whichever of its panels is selected
  *  (its scene, its number, its boards, its real length and start on the cut and in the scene). Undefined for a clip
  *  that is not a planned shot. `tc` writes a time on the cut as a timecode. */
 export function retakeWords(tl: Pick<Timeline, 'tracks'>, c: TimelineClip, cut: string, tc: (s: number) => string): string | undefined {
   const sp = shotSpan(tl, c);
   if (!sp) return undefined;
   const what = sp.boards > 1 ? `no take yet, its ${sp.boards} boards` : sp.boards ? 'no take yet, its board' : 'no take yet, planned';
-  return `Retake ${sp.scene} shot ${sp.shot} (${what}, the whole shot ${s1(sp.length)}, from ${s2(sp.inScene[0])} to ${s2(sp.inScene[1])} in the scene, at ${tc(sp.at)} in cut ${cut}). What should change: `;
+  return `Retake ${sp.scene} shot ${sp.shot} (${what}, the whole shot ${s1(sp.length)}, from ${s2(sp.inScene[0])} to ${s2(sp.inScene[1])} in the scene, at ${tc(sp.at)} in cut ${cut}).`;
 }
 
 // ---- what a cut holds, for the page

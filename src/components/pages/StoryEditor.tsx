@@ -19,6 +19,8 @@ import { paraAt, storyParas, storyRef, type Para } from './storyRef';
 import { flushSync } from 'react-dom';
 import { isSaveKey, SaveBar } from './SaveBar';
 import { almaFetch } from '@/components/data/almaOutbox';
+import { markSent } from '@/components/data/choices';
+import { storySent } from '@/components/lib/sent';
 import { IconChevronLeft } from '@/components/shell/icons';
 import { settledHow } from '@/lib/story-settled';
 
@@ -346,6 +348,8 @@ export function StoryEditor({ state, film, locked, hasScript, version }: { state
     const r = await post({ settle: current });
     setBusy(undefined);
     if (!r.ok) setError({ text: r.error ?? `Not settled (${r.status})`, settle: true });
+    // the story's item leaves "Waiting for you" (and the white dot goes) at once, until the state shows it settled
+    else markSent(film, [storySent('story', current)]);
   };
   const askAbout = () => {
     const t = sel.trim();
