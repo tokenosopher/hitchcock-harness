@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react';
 import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
-import { IconCheck } from '@/components/shell/icons';
+import { IconCheck, IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { refData } from '@/components/lib/refPick';
 import { stageRefOf } from '@/components/shell/refItems';
@@ -56,9 +56,10 @@ export interface BoardLines {
   release?: { line: string; g: Glyph };
 }
 
-interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; secondG?: Glyph; className?: string }
+/** `page`: the step opens a page of its own (a chevron, as the Shots box is drawn); its line may then take two lines. */
+interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; secondG?: Glyph; className?: string; page?: boolean }
 
-function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, secondG = 'now', className }: BoxProps) {
+function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, secondG = 'now', className, page }: BoxProps) {
   const line = lineOf(n, short, tick);
   const todo = g === 'todo';
   const liveNow = n.aims.some((a) => a.task.state === 'running');
@@ -71,9 +72,13 @@ function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(
         liveNow && 'node-live', className)}>
       <span className={cn("truncate text-[12.5px] font-medium @max-[640px]/flow:whitespace-normal", todo && !on ? 'text-sub' : 'text-ink')}>
         {gate && <span className="font-normal text-mute @max-[640px]/flow:hidden">Gate · </span>}{name}
+        {page && <IconChevronRight size={11} aria-hidden="true" className="float-right mt-[3px] text-sub" />}
       </span>
-      <span key={line} className={cn('flex min-w-0 items-center gap-[5px] text-[11px]', line.startsWith('Alma ›') ? 'line-in text-ink-3' : cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub'))}>
-        <StepGlyph g={g} /><span className="truncate @max-[640px]/flow:whitespace-normal @max-[640px]/flow:[overflow-wrap:anywhere]">{line}</span>
+      <span key={line} className={cn('flex min-w-0 gap-[5px] text-[11px]', page ? 'items-start [&>svg]:mt-[3px] [&>span:first-child]:mt-[3px]' : 'items-center', line.startsWith('Alma ›') ? 'line-in text-ink-3' : cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub'))}>
+        <StepGlyph g={g} />
+        {/* a page step's words one part a line, as the Shots box is drawn ("10 scenes planned" over "103 made") */}
+        {page ? <span className="flex min-w-0 flex-col">{line.split(' · ').map((x, i) => <span key={i} className="truncate">{x}</span>)}</span>
+          : <span className="truncate @max-[640px]/flow:whitespace-normal @max-[640px]/flow:[overflow-wrap:anywhere]">{line}</span>}
       </span>
       {second && (
         <span key={second} data-box-second className={cn('flex min-w-0 items-center gap-[5px] text-[11px] duration-200 animate-in fade-in-0 motion-reduce:animate-none', secondG === 'now' ? 'text-warn' : 'text-ink-3')}>
@@ -112,7 +117,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
   const release = lines.release ?? { line: N.release.short || 'not yet', g: N.release.state === 'done' ? 'done' as const : 'todo' as const };
   // Scenes, Finish and Sound are inside Edit now: their live sub-agents make the Edit box shimmer
   const editNode: FlowNode = { ...N.edit, aims: [...N.edit.aims, ...N.scenes.aims, ...N.finish.aims, ...N.sound.aims] };
-  const box = (k: FlowKey) => <Box key={k} n={N[k]} on={open === k} tick={tick} onOpen={onOpen} short={lines.box?.[k] ?? N[k].short} />;
+  const box = (k: FlowKey) => <Box key={k} n={N[k]} on={open === k} tick={tick} onOpen={onOpen} short={lines.box?.[k] ?? N[k].short} page={k === 'shots'} />;
 
   return (
     <section aria-label="Flow" className="@container/flow border-b border-line px-6 pb-3 pt-2.5 max-[760px]:px-4 max-[760px]:pb-4 max-[760px]:pt-3.5">

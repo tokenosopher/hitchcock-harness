@@ -467,7 +467,7 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
  *  10 ms blocks, each at the level of the curve at its middle; the curve linear in dB between the points and flat
  *  outside them, written as one sum (no nesting, so a long list stays one short expression per point). `from` is
  *  the source second the stream starts at. Nothing when the clip has no points. */
-function levels(c: TimelineClip, from: number): string[] {
+export function levels(c: Pick<TimelineClip, 'gainPoints'>, from: number): string[] {
   const p = c.gainPoints;
   if (!p?.length) return [];
   const s = `(t+${f6(from + 0.005)})`;
@@ -480,7 +480,7 @@ function levels(c: TimelineClip, from: number): string[] {
 }
 
 /** atempo takes 0.5–2 per stage; chain stages for slower or faster clips. */
-function atempo(speed: number): string[] {
+export function atempo(speed: number): string[] {
   if (Math.abs(speed - 1) < 1e-6) return [];
   const out: string[] = [];
   let s = speed;

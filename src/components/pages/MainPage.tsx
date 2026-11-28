@@ -22,7 +22,8 @@ import { NodePage, NodeRight } from '@/components/flow/NodePage';
 import { StepBar } from '@/components/flow/StepBar';
 import { StepMenu } from '@/components/flow/StepMenu';
 import { placeName, placesLine, viewsLine } from '@/components/flow/Places';
-import { shotsLine } from '@/components/flow/CutSteps';
+import { useShots } from '@/components/edit/ShotViews';
+import type { TakeShots } from '@/components/edit/shots';
 import { WhatsNextReader, type WhatsNext } from '@/components/flow/useWhatsNext';
 import { waitWords } from '@/components/edit/left';
 import { waitItemsOf } from '@/components/flow/waitList';
@@ -50,7 +51,6 @@ function stepLine(s: FilmState, flow: Flow, k: FlowKey, wn: WhatsNext): string {
   if (k === 'gate') return 'Press a step on the flow to see its content here.';
   if (k === 'loc') return placesLine(s);
   if (k === 'views') return viewsLine(s);
-  if (k === 'shots') return shotsLine(s);
   // what waits for the user first, then the steps left, as What's next's tab says it
   // while pick-ups or retakes are being made it says what they are and where each stands instead
   if (k === 'edit') { const n = waitItemsOf(flow).length; return (flow.work ? [flow.work.line, n && !flow.work.go.length ? waitWords(n) : ''] : ["What's next", n ? waitWords(n) : '', wn.view?.count]).filter(Boolean).join(' · '); }
@@ -60,7 +60,7 @@ function stepLine(s: FilmState, flow: Flow, k: FlowKey, wn: WhatsNext): string {
 }
 
 export function MainPage() {
-  const { state, error, tasks, ui, base } = useFilmPage();
+  const { film, state, error, tasks, ui, base } = useFilmPage();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -81,7 +81,9 @@ export function MainPage() {
   ].slice(0, 2), ['What did this film cost?', 'What was redone, and why?']);
   const [wn, setWn] = useState<WhatsNext>({});
   const onRead = useCallback((w: WhatsNext) => setWn(w), []);
-  const lines = useMemo(() => (state && flow ? boardLines(state, flow, wn) : undefined), [state, flow, wn]);
+  // the Shots box counts the shots made, as the Shots page does
+  const shots = useShots(film);
+  const lines = useMemo(() => (state && flow ? boardLines(state, flow, wn, shots.loaded ? shots.takes : undefined) : undefined), [state, flow, wn, shots.loaded, shots.takes]);
   if (!state || !flow || toPage) return <Loading error={error} />;
 
   const onOpen = (k: FlowKey) => {
@@ -130,8 +132,12 @@ export function MainPage() {
 
 /** The board's own words where the drawn board says more than a node's short line: the people boxes from the same
  *  Characters cards, Edit's two lines and Release's posts from What's next. */
-function boardLines(s: FilmState, flow: Flow, wn: WhatsNext): BoardLines {
+function boardLines(s: FilmState, flow: Flow, wn: WhatsNext, takes?: TakeShots[]): BoardLines {
   const N = flow.nodes;
+  // Shots: "10 scenes planned · 103 made", every shot of every take of the film's scenes (the Shots page's count)
+  const ids = new Set(s.scenes.map((x) => x.id));
+  const made = takes?.filter((t) => t.state === 'ready' && !t.group && t.seconds && ids.has(t.scene)).reduce((n, t) => n + (t.cuts?.length ?? 0) + 1, 0);
+  const shotsBox = s.scenes.length && N.shots.state === 'done' ? `${N.shots.short}${made === undefined ? '' : ` · ${made ? `${made} made` : 'none made yet'}`}` : undefined;
   const withTakes = s.scenes.filter((sc) => sc.takes.some((t) => t.kind === 'take' && t.path)).length;
   const editG: Glyph = !s.scenes.length || !withTakes ? glyphOf(N.edit.state) === 'run' ? 'run' : 'todo' : withTakes === s.scenes.length ? 'done' : 'run';
   const edit0: { line: string; g: Glyph } = s.scenes.length && withTakes ? { line: `${withTakes} of ${s.scenes.length} scenes have takes`, g: editG } : { line: N.edit.short || 'not yet', g: editG };
@@ -147,5 +153,5 @@ function boardLines(s: FilmState, flow: Flow, wn: WhatsNext): BoardLines {
   const release: BoardLines['release'] = p
     ? { line: `${p.n} of ${p.of} posted`, g: p.n >= p.of ? 'done' : wn.view?.current === 'posted' ? 'now' : 'todo' }
     : { line: N.release.short || 'not yet', g: delivered ? 'done' : 'todo' };
-  return { box: castBoxLines(s, flow), edit: editW, next: work ? work.detail : wn.next, nextG: work ? (work.go.length ? 'now' : 'run') : undefined, release };
+  return { box: { ...castBoxLines(s, flow), ...(shotsBox ? { shots: shotsBox } : {}) }, edit: editW, next: work ? work.detail : wn.next, nextG: work ? (work.go.length ? 'now' : 'run') : undefined, release };
 }

@@ -306,7 +306,10 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
       prediction: r.prediction, predictionNote: r.prediction ? predictionNote(r) : undefined,
     });
   }
+  const propsDone = new Set<string>(); // a prop used in several places is under each: one pick, not two
   for (const l of s.locations) for (const pr of l.props ?? []) {
+    if (propsDone.has(pr.id)) continue;
+    propsDone.add(pr.id);
     const r = lastRound(pr.rounds);
     if (pr.pick || !r || !roundProgress(r).landed) continue;
     items.push({ key: `pick:${pr.id}`, id: pr.id, title: pr.name, chip: `${pr.id} · ${pr.name}`, state: 'ready',

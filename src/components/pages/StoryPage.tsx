@@ -130,7 +130,7 @@ function IdsCard({ state }: { state: NonNullable<ReturnType<typeof useFilmPage>[
         {[
           ['character', state.characters.map((c) => `${c.id} ${c.name}`).join(', ')],
           ['location', state.locations.map((l) => `${l.id} ${l.name}`).join(', ')],
-          ['prop', state.locations.flatMap((l) => l.props ?? []).map((p) => `${p.id} ${p.name}`).join(', ')],
+          ['prop', [...new Set(state.locations.flatMap((l) => l.props ?? []).map((p) => `${p.id} ${p.name}`))].join(', ')],
           ['generation', state.scenes.length ? `${state.scenes[0].id}–${state.scenes[state.scenes.length - 1].id}` : ''],
           ['spoken line', (state.script?.lines ?? []).filter((l) => l.speaker).map((l) => l.id).filter((x, i, a) => i === 0 || i === a.length - 1).join(' to ')],
         ].filter(([, v]) => v).map(([k, v]) => (

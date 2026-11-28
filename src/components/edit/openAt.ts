@@ -219,12 +219,13 @@ export function resolveOpenAt(o: OpenAt, x: OpenCtx): Opened {
 // ---- a take newer than the cut's, never looked at
 
 /** A shot of the cut with takes that landed after the one it uses and were never looked at: the newest of them. */
-export interface NewTake { trackId: string; clipId: string; count: number; pick: Pick; name: string }
+export interface NewTake { trackId: string; clipId: string; count: number; pick: Pick; name: string; /** every take counted, newest first */ srcs: string[] }
 
 /** Per picture clip of the cut, by clip id: the takes of its scene that have its shot, landed after its own take (their
  *  `made`), are not in the film and were never tried here (`seen`, pickKeys). One clip a shot (a shot cut in two is
- *  marked on its first piece). Takes with no `made` are never counted. */
-export function newTakes(tl: Timeline, by: BySrc, takes: TakeShots[], seen: Set<string>): Map<string, NewTake> {
+ *  marked on its first piece). Takes with no `made` are never counted. `seen` holds pickKeys or whole takes' srcs;
+ *  `old`, when given, the takes that are not new for another reason (seenTakes.ts: landed before the list began). */
+export function newTakes(tl: Timeline, by: BySrc, takes: TakeShots[], seen: Set<string>, old?: (t: TakeShots) => boolean): Map<string, NewTake> {
   const out = new Map<string, NewTake>();
   const v = mainTracks(tl).v;
   if (!v) return out;
@@ -240,7 +241,7 @@ export function newTakes(tl: Timeline, by: BySrc, takes: TakeShots[], seen: Set<
     done.add(place);
     const found: { t: TakeShots; p: Pick }[] = [];
     for (const t of takes) {
-      if (t.state !== 'ready' || t.scene !== scene || t.src === c.src || !t.made || t.made <= cur.made) continue;
+      if (t.state !== 'ready' || t.scene !== scene || t.src === c.src || !t.made || t.made <= cur.made || seen.has(t.src) || old?.(t)) continue;
       const sh = shotsOf(t).find((x) => { const tag = subTag(x); return samePlace({ scene, n: x.n, src: t.src, ...(tag ? { tag } : {}) }, here); });
       if (!sh) continue;
       const p: Pick = { scene, n: sh.n, src: t.src, ...(subTag(sh) ? { tag: subTag(sh) } : {}) };
@@ -249,7 +250,7 @@ export function newTakes(tl: Timeline, by: BySrc, takes: TakeShots[], seen: Set<
     }
     if (!found.length) continue;
     found.sort((a, b) => (b.t.made ?? 0) - (a.t.made ?? 0));
-    out.set(c.id, { trackId: v.id, clipId: c.id, count: found.length, pick: found[0].p, name: found[0].t.name });
+    out.set(c.id, { trackId: v.id, clipId: c.id, count: found.length, pick: found[0].p, name: found[0].t.name, srcs: found.map((x) => x.t.src) });
   }
   return out;
 }

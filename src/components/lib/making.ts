@@ -45,10 +45,13 @@ export function makingOf(s: FilmState, tasks: TaskCard[]): Making[] {
   };
 
   // the places: each location's newest round, then each prop's
+  const propsDone = new Set<string>(); // a prop used in several places is under each: once
   for (const l of s.locations) {
     const r = lastRound(l.styleImages);
     if (!l.master?.picked && filling(r)) round('loc', l.id, r!, (n) => `Painting ${plural(n, 'look')} for ${nameOf(l.name)}`);
     for (const pr of l.props ?? []) {
+      if (propsDone.has(pr.id)) continue;
+      propsDone.add(pr.id);
       const pr0 = lastRound(pr.rounds);
       if (!pr.pick && filling(pr0)) round('loc', pr.id, pr0!, (n) => `Making ${plural(n, 'picture')} of ${propName(pr.name)}`);
     }

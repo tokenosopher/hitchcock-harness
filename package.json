@@ -81,6 +81,10 @@
     "remove:test": "tsx scripts/remove-test.ts",
     "sheet-voice:test": "tsx scripts/sheet-voice-test.ts",
     "sheet-yes:test": "tsx scripts/sheet-yes-test.ts",
+    "hearit:test": "tsx scripts/hearit-test.ts",
+    "shot-details:test": "tsx scripts/shot-details-test.ts",
+    "shotplaces:test": "tsx scripts/shotplaces-test.ts",
+    "pickuprows:test": "tsx scripts/pickuprows-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

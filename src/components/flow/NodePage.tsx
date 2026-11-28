@@ -21,7 +21,7 @@ import { Feed } from '@/components/feed/Feed';
 import { VideoShelf, day, newestFirst } from '@/components/media/Shelf';
 import type { FlowKey } from '@/components/lib/derive';
 import { LocationsStep, PlaceDeep, ViewsStep } from './Places';
-import { EditNext, ShotsStep } from './CutSteps';
+import { EditNext } from './CutSteps';
 import { CharacterCards, type CastPart } from '@/components/characters/Cards';
 import { RunningLines } from './RunningNow';
 import { rememberBack } from '@/components/shell/BackLink';
@@ -193,7 +193,6 @@ export function NodePage({ s, n, base, onChip, at, onAt }: {
       {n.key === 'edit' && <VideoShelf s={s} title="Title cards and made pieces" note="cut/cards/ and edits/" files={s.post?.pieces ?? []} onChip={onChip} />}
       {n.key === 'loc' ? <LocationsStep s={s} onAt={open} onChip={onChip} />
         : n.key === 'views' ? <ViewsStep s={s} onAt={open} onChip={onChip} />
-        : n.key === 'shots' ? <ShotsStep s={s} base={base} fallback={<Rows parts={n.parts} onChip={onChip} />} />
         : n.key === 'edit' ? null
         : CAST_STEP[n.key] ? <CharacterCards s={s} part={CAST_STEP[n.key]!} base={base} onChip={onChip} parts={n.key === 'elements' ? n.parts : undefined} />
         : n.parts.length ? <Rows parts={n.parts} onChip={onChip} /> : null}

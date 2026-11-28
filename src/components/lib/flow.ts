@@ -70,8 +70,8 @@ export const THEN: FlowKey[] = ['gate', 'edit', 'release'];
 export const BOX_OF: Partial<Record<FlowKey, FlowKey>> = { scenes: 'edit', finish: 'edit', sound: 'edit' };
 /** The steps whose content is their own page: a press on the flow opens that page at once.
  *  Every other step shows its content under the flow on Main. */
-export const PAGE_STEPS: FlowKey[] = ['story', 'scenes', 'finish', 'sound', 'release'];
-const PAGE_OF: Partial<Record<FlowKey, string>> = { story: 'story', scenes: 'scenes', finish: 'finish', sound: 'sound', release: 'release' };
+export const PAGE_STEPS: FlowKey[] = ['story', 'shots', 'scenes', 'finish', 'sound', 'release'];
+const PAGE_OF: Partial<Record<FlowKey, string>> = { story: 'story', shots: 'shots', scenes: 'scenes', finish: 'finish', sound: 'sound', release: 'release' };
 /** Where a press on a step goes: its page, or Main with the step open under the flow. */
 export const stepHref = (base: string, k: FlowKey): string => (PAGE_OF[k] ? `${base}/${PAGE_OF[k]}` : `${base}?open=${k}`);
 
@@ -162,7 +162,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
 
   // Chain A · places
   const locs = locationParts(s, tasks);
-  const props = s.locations.flatMap((l) => l.props ?? []);
+  const props = [...new Map(s.locations.flatMap((l) => l.props ?? []).map((p) => [p.id, p])).values()];
   const propsNote = props.length ? ` · ${plural(props.length, 'prop')}` : '';
   const settled = s.locations.filter(locationSettled);
   const open = locs.filter((p) => p.state !== 'done');
@@ -198,9 +198,10 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     state: !s.scenes.length ? (shotAims.length ? 'running' : 'waiting') : written.length === s.scenes.length ? 'done' : shotAims.length ? 'running' : 'waiting',
     status: !s.scenes.length ? (locked ? 'not started' : 'after the script lock') : `${written.length} of ${plural(s.scenes.length, 'scene file')} written`,
     short: !s.scenes.length ? (locked ? 'not started' : 'after lock')
-      : written.length === s.scenes.length && s.scenes.some((sc) => sc.shots) ? `${plural(s.scenes.length, 'scene')}, ${plural(s.scenes.reduce((n, sc) => n + (sc.shots ?? 0), 0), 'shot')}`
+      : written.length === s.scenes.length ? `${plural(s.scenes.length, 'scene')} planned`
       : `${written.length} of ${s.scenes.length}`,
-    aims: shotAims, href: 'scenes', kicker: 'Stage 5 · chain A, before the Blender previz',
+    // its own page (components/shots/ShotsPage.tsx): the scenes' places and every version made
+    aims: shotAims, href: 'shots', kicker: 'Stage 5 · chain A, before the Blender previz',
     parts: s.scenes.map((sc) => ({ id: sc.id, name: sc.title, state: sc.sceneFile ? 'done' : 'waiting', line: sc.sceneFile ? [sc.shots ? plural(sc.shots, 'shot') : '', sc.seconds ? `${sc.seconds} s` : ''].filter(Boolean).join(' · ') || 'written' : 'not written', aims: liveAims(tasks, 'shots', sc.id) })),
     body: 'One scene file per scene: the shot list, the acting task of everyone in frame, any fight beats, and where everyone starts and ends. The Blender previz is built from it, and once the previz is approved the scene prompt is assembled from the same text, so the boards and the prompt cannot disagree.',
   });

@@ -17,7 +17,7 @@ export interface TakeShots {
   /** 'making': a variation being made (ASKS 51); `src` is then its folder and it has no shots yet. */
   state: 'ready' | 'waiting' | 'failed' | 'making';
   /** The take is a variation of another (its folder's `variation.json`, server/edit/shots.ts). */
-  variation?: { from: string; note: string; startedAt: string; failed?: string };
+  variation?: { from: string; note: string; startedAt: string; failed?: string; copyOf?: string };
   /** When the take's file landed (its modification time, ms): what tells a take newer than the one in the cut. */
   made?: number;
 }

@@ -35,7 +35,10 @@ export const PAGE_MIN = 400;
 // The Edit page cannot be narrower than about 660 px (its header, the player beside the timeline): under it the page
 // scrolled sideways at 1180 and 1280 with both columns open (the QC of 15 Nov 2026). There the films list folds the same way.
 export const EDIT_PAGE_MIN = 680;
-export const pageMinFor = (path: string | null | undefined): number => (/^\/films\/[^/]+\/edit\/?$/.test(path ?? '') ? EDIT_PAGE_MIN : PAGE_MIN);
+// Shot details (the player, the prompt and the inputs side by side) needs about 900 px: as drawn, the films list folds
+// to its rail there.
+export const SHOT_PAGE_MIN = 900;
+export const pageMinFor = (path: string | null | undefined): number => (/^\/films\/[^/]+\/edit\/?$/.test(path ?? '') ? EDIT_PAGE_MIN : /^\/films\/[^/]+\/shots\/[^/]+\/?$/.test(path ?? '') ? SHOT_PAGE_MIN : PAGE_MIN);
 const NAV_EVENT = 'hh:sidebar';
 const subWin = (cb: () => void) => { window.addEventListener('resize', cb); return () => window.removeEventListener('resize', cb); };
 const winWidth = () => window.innerWidth;

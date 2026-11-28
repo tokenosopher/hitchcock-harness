@@ -6,6 +6,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { SentRecord } from '@/server/types';
+import type { ShotDetailsExtra } from '@/server/films/read/previzTake';
 import { parseSent } from '@/server/films/read/sent';
 import { shotViewsOf } from '@/server/films/read/shotViews';
 
@@ -91,9 +92,20 @@ export function mockSent(film: string, rel: string): SentRecord | undefined {
   return parseSent(RAW[rel].raw, rel, RAW[rel].list);
 }
 
-/** /api/media for the files the records name: the drawings, the test video and a spoken line. */
+/** GET …/shotdetails for the samples (the Shot details page): S1's take 1 was drawn from previz take 3, whose four
+ *  shots run as its prompt times them (0 to 3.4 s, 3.4 to 7.6, 7.6 to 10.75, 10.75 to 13); its clip is the test video.
+ *  S1's storyboard has no panels file, so the page shows its page whole. S4's previz is not there: the page says so. */
+export const PREVIZ_S1 = 'previz/S1/S1-previz-take-3.json';
+export function mockShotDetails(film: string, previz: string, _board: string, from: 'take' | 'scene'): ShotDetailsExtra | undefined {
+  if (film !== SLUG) return undefined;
+  if (previz !== PREVIZ_S1 && previz !== PREVIZ_S1.replace(/\.json$/, '.mp4')) return {};
+  const cuts = [0, 3.4, 7.6, 10.75, 13];
+  return { previz: { json: PREVIZ_S1, clip: PREVIZ_S1.replace(/\.json$/, '.mp4'), take: 3, seconds: 13, shots: cuts.slice(0, -1).map((t0, i) => ({ id: String(i + 1), t0, t1: cuts[i + 1] })), from } };
+}
+
+/** /api/media for the files the records name: the drawings, the test video and a spoken line; and S1's previz clip. */
 const HERE = path.join(process.cwd(), 'src/fixtures/media');
-const FILES: Record<string, [string, string]> = Object.fromEntries(MEDIA_S1.map(([, , file]) => [file,
+const FILES: Record<string, [string, string]> = Object.fromEntries([...MEDIA_S1.map(([, , file]) => file), PREVIZ_S1.replace(/\.json$/, '.mp4')].map((file) => [file,
   /\.mp4$/.test(file) ? ['sample-render.mp4', 'video/mp4'] : /\.mp3$/.test(file) ? ['day1/voice-1.mp3', 'audio/mpeg']
     : /^cast\//.test(file) ? ['cast/sheet.png', 'image/png'] : /^props\//.test(file) ? ['cast/prop.png', 'image/png']
       : /north/.test(file) ? ['cast/place-1.png', 'image/png'] : /^locations\//.test(file) ? ['cast/view.png', 'image/png'] : ['day1/board-1.png', 'image/png']]));

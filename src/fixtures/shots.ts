@@ -28,6 +28,10 @@ interface FixtureCut { current: { tracks: { id: string; kind: string; clips: Fix
 /** The sample pick-up's `generations/FIX-cork-S2/FIX-cork-S2-shots.json`, the shape of a real film's. */
 export const PICKUP_FILE = { duration: 13.5, shots: [{ id: '2', t0: 0, t1: 13.5, in_frame: ['MAREN', 'TOBIAS'] }] };
 
+// the sample pick-up and the landed variations landed after the sample's other takes (which say no day), after the day
+// the sample list of takes looked at begins (server/edit/seenTakes.ts): they are new takes, "new" in the Takes view
+const LATE = Date.UTC(2026, 10, 12, 12);
+
 const FOLD = 1.5;                       // seconds: a gap shorter than this between two clips is a trim, not a shot
 const r3 = (s: number) => Math.round(s * 1000) / 1000;
 
@@ -72,14 +76,35 @@ function derive(film: string, cut: FixtureCut): TakeShots[] {
       const seconds = cuts.pop()!;
       out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-take${k}-480p.mp4`, scene, name: `sample take ${k}`, seconds, cuts, state: 'ready' });
     });
+    if (scene === 'S1' && film === PICKUP_ROWS_FILM) out.push(...pickupRows(film, base));
     if (scene === 'S2') {
       out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-takeC-480p.mp4`, scene, name: 'sample take C', state: 'failed' });
       const tg = shotTagsFor([readShotTags(PICKUP_FILE)], []);
-      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(tg ?? {}), state: 'ready' });
+      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(tg ?? {}), state: 'ready', made: LATE });
     }
   }
   out.sort((a, b) => a.scene.localeCompare(b.scene, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   return out;
+}
+
+// The pick-ups as rows of their scene: the-lighthouse's S1 has a one-shot pick-up of its shot 2 with two
+// takes (FIX-rock-S1), a pick-up of its shots 3 and 4 (FIX-hall-S1: take 1 cut into those two shots; take 2 cut into
+// three, which its shot list does not say, so its shots are "other shots"), and a copy of FIX-rock-S1 take 1 kept by
+// hand as a variation of the scene's take (its variation.json's copyOf), which the Takes view leaves out. They landed
+// before the sample's list of takes looked at began, so none is "new" (the copy says later: left out, it is not new
+// either). Their shot lists are in shotlist.ts (PICKUP_ROWS_GENS).
+export const PICKUP_ROWS_FILM = 'the-lighthouse';
+export const pickupRowsSrc = (film: string, g: string, k: number) => `assets/films/${film}/generations/${g}/takes/take${k}/${g}-take${k}-480p.mp4`;
+function pickupRows(film: string, base: TakeShots): TakeShots[] {
+  const copy = `assets/films/${film}/blocks/S1/takes/S1-grey-take1-variation1/S1-grey-take1-variation1-480p.mp4`;
+  return [
+    { src: pickupRowsSrc(film, 'FIX-rock-S1', 1), scene: 'S1', name: 'FIX-rock-S1 · take 1', seconds: 4.5, cuts: [], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-rock-S1', 2), scene: 'S1', name: 'FIX-rock-S1 · take 2', seconds: 5.2, cuts: [], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-hall-S1', 1), scene: 'S1', name: 'FIX-hall-S1 · take 1', seconds: 8, cuts: [3.5], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-hall-S1', 2), scene: 'S1', name: 'FIX-hall-S1 · take 2', seconds: 9, cuts: [2.5, 5.5], state: 'ready' },
+    { src: copy, scene: 'S1', name: 'grey-take1 variation 1', seconds: 4.5, cuts: [], state: 'ready', made: LATE,
+      variation: { from: base.src, note: 'A copy of FIX-rock-S1 take 1, to switch it in', startedAt: '2026-11-25T18:10:00Z', copyOf: pickupRowsSrc(film, 'FIX-rock-S1', 1) } },
+  ];
 }
 
 /** The sample variations of S3 (see the head of this file). `landed`: the second one has its video too. */
@@ -97,11 +122,11 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
     const seconds = cuts.pop()!;
     return { seconds, cuts };
   };
-  const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const,
+  const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const, made: LATE,
     variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00' } };
   const twoV = { from: a.src, note: 'Slower, and hold on her face a moment longer.', startedAt: '2026-11-14T10:58:00' };
   const two: TakeShots = landed
-    ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', variation: twoV }
+    ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', made: LATE + 3600000, variation: twoV }
     : { src: `${dir}/S3-sample-takeA-variation2`, scene: 'S3', name: 'sample take A variation 2', state: 'making', variation: twoV };
   const three: TakeShots = { src: `${dir}/S3-sample-takeB-variation1`, scene: 'S3', name: 'sample take B variation 1', state: 'making',
     variation: { from: b.src, note: 'Make the light warmer.', startedAt: '2026-11-14T10:20:00', failed: 'Seedance refused the picture of the lamp twice.' } };

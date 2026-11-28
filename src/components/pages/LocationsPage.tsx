@@ -44,7 +44,8 @@ export function LocationsPage() {
   usePage(l ? `4 Locations · ${l.id} ${st === 'picked' ? 'master picked' : r ? `round ${rn(r)}` : 'not started'}` : undefined, undefined,
     l && chosen && st !== 'picked' ? [`Pick ${chosen} as master`, `Show the ${l.props?.[0]?.name.replace(/^the /, '') ?? 'props'} alone`] : []);
   if (!state) return <Loading error={error} />;
-  const props = locs.flatMap((x) => x.props ?? []);
+  // a prop used in several places is listed under each of them: once here (two children keyed P04)
+  const props = [...new Map(locs.flatMap((x) => x.props ?? []).map((p) => [p.id, p])).values()];
 
   return (
     <>

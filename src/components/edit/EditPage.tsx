@@ -21,6 +21,8 @@ import { Badge, Btn } from '@/components/shell/atoms';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlay } from '@/components/shell/icons';
 import { ToConfirm } from '@/components/pages/postCommon';
 import { useIsPhone } from '@/components/shell/useIsPhone';
+import { rememberBack } from '@/components/shell/BackLink';
+import { shotDetailsHref } from '@/components/lib/shotHref';
 import { mediaUrl } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { Inspector } from './Inspector';
@@ -75,7 +77,9 @@ import { usePhoneFull } from './phoneFull';
 import { useEditRefSource } from './refSource';
 import { StepIntro } from '@/components/intro/StepIntro';
 import { freshCount, hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
-import { useSeenTakes } from './seenTakes';
+import { isNewTake, notNew, useBeginSeen, useSeenTakes } from './seenTakes';
+import { pickupView, type Placed } from './pickupRows';
+import type { ShotList } from '@/server/films/read/shotlist';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -124,6 +128,9 @@ function plannedSaid(tl: Timeline): string {
 /** A new number for each click that starts a shot from its take again (SourceShot replays when it changes). */
 let kSeq = 0;
 const nextK = () => ++kSeq;
+
+/** A touch-first device: the Edit page adds no Shot details entry there. */
+const coarse = (): boolean => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches;
 
 export function EditPage() {
   // Not useFilmPage: this page only writes to the UI state (the pinned chip, the playhead, a chip in her box) and does not read
@@ -191,7 +198,18 @@ export function EditPage() {
   const [playRecord, setPlayRecord] = useState(false);
 
   // the film in shots (ASKS 16): every take cut into its shots by the server, the cut's clips split to match
-  const shots = useShots(film);
+  const { all: rawTakes, waiting: rawWaiting, loaded: rawLoaded } = useShots(film);
+  // the pick-ups' takes as rows of their scene, each shot under the place it stands for: placed
+  // as the Shots page places them, from the same shot lists and the cut as saved; a copy of a listed take left out
+  const { data: shotList } = useJson<ShotList>(state ? `/api/films/${encodeURIComponent(film)}/shotlist` : undefined, state?.updatedAt);
+  const keepPlaced = useRef<Map<string, Placed> | undefined>(undefined);
+  const shotScenes = state?.scenes;
+  const savedCut = cut.current;
+  const shots = useMemo(() => {
+    const v = pickupView({ takes: rawTakes, scenes: shotScenes ?? [], gens: shotList?.gens, checks: shotList?.checks, cut: savedCut, keep: keepPlaced.current });
+    return { ...v, waiting: rawWaiting, loaded: rawLoaded };
+  }, [rawTakes, rawWaiting, rawLoaded, shotScenes, shotList, savedCut]);
+  useEffect(() => { keepPlaced.current = shots.placed; }, [shots.placed]);
   // a scene's layouts: read again when the takes change; the layout whose takes the Takes view shows
   const layouts = useLayouts(film, useMemo(() => shots.takes.map((t) => `${t.src}:${t.state}`).join('|'), [shots.takes]));
   const [viewLay, setViewLay] = useState<{ scene: string; key: number }>();
@@ -513,13 +531,18 @@ export function EditPage() {
     if (r.kind !== 'frame' && r.say) say(r.say, { ms: 9000 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when a place waits and when what it needs changes
   }, [opening, openTick, tl, cut.mode, shots.by, shots.takes, names, sceneIds, options, layouts]);
-  // the takes newer than the one a shot of the cut uses, never tried in this browser (openAt.ts newTakes): the clip's quiet
-  // "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does. A shot selected once
-  // is remembered here (localStorage), so its mark goes.
-  const [seenTakes, addSeen] = useSeenTakes(film);
-  // a shot selected is a take looked at
-  useEffect(() => { if (picks.length) addSeen(picks.map(pickKey)); }, [picks, addSeen]);
-  const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, seenTakes) : undefined), [tl, viewing, shots.by, shots.takes, seenTakes]);
+  // the takes not looked at yet (seenTakes.ts, the server's list, the same on every device): the "new" tag in the Takes
+  // view, the dot on their scene in the strip; and those newer than the one a shot of the cut uses (openAt.ts newTakes):
+  // the clip's quiet "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does
+  const seenT = useSeenTakes(film);
+  const { looked, add: addSeen } = seenT;
+  useBeginSeen(seenT, tl, shots);
+  // a take played or a shot of it selected is a take looked at
+  useEffect(() => { if (picks.length) addSeen(picks.map((p) => p.src)); }, [picks, addSeen]);
+  useEffect(() => { if (watching) addSeen([watching.src]); }, [watching, addSeen]);
+  const isNew = useCallback((t: TakeShots) => isNewTake(t, looked), [looked]);
+  const newScenes = useMemo(() => new Set(shots.takes.filter(isNew).map((t) => t.scene)), [shots.takes, isNew]);
+  const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, looked.seen, notNew(looked)) : undefined), [tl, viewing, shots.by, shots.takes, looked]);
   const tryNew = useCallback((x: NewTake) => {
     if (!tl) return;
     const t = shots.by.get(x.pick.src);
@@ -1515,6 +1538,7 @@ export function EditPage() {
   /** One shot put in the film at once (the Takes view's menu): one step, as "Use in the film" with that one alone. */
   const putOne = async (t: TakeShots, n: number, to?: number, tag?: string) => {
     if (readOnly) return;
+    addSeen([t.src]);
     const sw = swapOf(t, n, to, tag);
     const one: Trying = { scene: t.scene, n, src: t.src, ...(sw ? { into: { to: sw.to, layout: sw.layout } } : {}), ...(tag ? { tag } : {}) };
     const e = withPicks(tl, [one], by, names, undefined, order);
@@ -1605,6 +1629,7 @@ export function EditPage() {
   /** A click on a shot whose column has nothing in the film: it goes back in its place, and plays from just before. */
   const bringBack = async (t: TakeShots, n: number, tag?: string) => {
     if (readOnly) return;
+    addSeen([t.src]);
     const name = names.get(t.src) ?? t.name;
     const e = putShot(tl, t.scene, n, t, name, by, undefined, order, undefined, tag);
     if (!e) { sayRefused(); return; }
@@ -1701,6 +1726,12 @@ export function EditPage() {
     setRate(0); setWatching(undefined); setSel(undefined); setPin(undefined); setFrame(to);
     return true;
   };
+  // ---- Shot details: the page of a take at one of its shots; its Back comes here
+  const openShotDetails = (src: string, i?: number) => {
+    const href = shotDetailsHref(film, src, i);
+    rememberBack(href, 'Back to the edit');
+    router.push(href);
+  };
   // ---- the Takes view's right-click menu (ASKS 51): on a shot, or on a take's name
   const takeItems = (() => {
     const t = takeMenu ? shots.takes.find((x) => x.src === takeMenu.src) : undefined;
@@ -1711,7 +1742,9 @@ export function EditPage() {
     const edit: MenuItem = { label: 'Edit this video…', hint: 'with Alma', disabled: !canEdit, onPick: () => editVideo(t, n, tag) };
     const copy: MenuItem = { label: 'Copy its path', sepBefore: true, onPick: () => copyPath(t) };
     const sh = n ? shotOf(t, n, tag) : undefined;
-    if (!n || !sh) return { title: `${t.scene} · ${take}`, items: [edit, copy] };
+    // Shot details: everything that was fed to the model for this take, at this shot (not on touch)
+    const details: MenuItem[] = canEdit && !coarse() ? [{ label: 'Shot details…', hint: 'what went in', onPick: () => openShotDetails(t.src, sh?.i) }] : [];
+    if (!n || !sh) return { title: `${t.scene} · ${take}`, items: [edit, ...details, copy] };
     const key = pickKey({ src: t.src, n, tag });
     const isIn = inFilm(tl, by).has(key);
     const colOut = !shotClips(tl, by, t.scene, n).length;
@@ -1728,7 +1761,7 @@ export function EditPage() {
     }) : [];
     return {
       title: `${t.scene} · ${take} · ${shotSaid(n, tag)} · ${secsOf(Math.round((sh.out - sh.in) * fps))}${sw ? ` · Layout ${sw.from.n}` : ''}`,
-      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) })) : clickShot(t, n, tag)) }, put, ...places, copy],
+      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) })) : clickShot(t, n, tag)) }, put, ...places, ...details, copy],
     };
   })();
   // ---- the right-click menu: every entry that goes to Alma carries the point it was opened at
@@ -1832,6 +1865,8 @@ export function EditPage() {
       ...(hit && hit.track.kind === 'video' && fullMarks?.get(hit.clip.id)?.kind === 'small' ? [{ label: 'Upscale on Higgsfield…', hint: 'the whole take', onPick: () => askUpscale(hit.clip.src) }] : []),
       ...(hit && hit.track.kind === 'video' && fullMarks && fullMarks.get(hit.clip.id)?.kind !== 'small' && !fullFor?.info.takes[(hit.clip.src ?? '')] ? [{ label: seedance.marks.has((hit.clip.src ?? '')) ? 'Do not redo in Seedance' : 'Redo in Seedance', hint: 'the whole take', onPick: () => seedance.toggle((hit.clip.src ?? '')) }] : []),
       ...(hit && hitShot && hit.track.id === mainV ? [{ label: 'Retake this shot…', disabled: readOnly, onPick: () => retakeOf(hit.track, hit.clip, sceneOf(hit.clip, by), hitShot) }] : []),
+      // Shot details: everything that was fed to the model for the take this picture clip is cut from (not on touch)
+      ...(hit && hit.track.kind === 'video' && hit.clip.src && !hit.clip.plan && by.has(hit.clip.src) && !coarse() ? [{ label: 'Shot details…', hint: 'what went in', onPick: () => openShotDetails(hit.clip.src!, ownShotOf(hit.clip, by)?.i) }] : []),
       ...(ref && hit && isLine(hit.clip) ? [{ label: 'Retype…', hint: 'Enter', disabled: readOnly || hit.track.locked, onPick: () => retypeSel(ref) }] : []),
       ...(ref && hit && isSrtClip(hit.clip) ? [{ label: 'Split into lines to edit', hint: 'a line a cue', disabled: readOnly || hit.track.locked, onPick: () => void splitSrtClip(ref) }] : []),
       ...(ref && hit && (hit.track.kind === 'video' || hit.track.kind === 'audio') ? (() => {
@@ -2267,7 +2302,7 @@ export function EditPage() {
 
         <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch border-l border-line px-4 py-3 max-[1100px]:border-l-0 max-[1100px]:border-t">
           <FilmStrip runs={runs} total={total} frame={frame} open={openId} shots={(mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => shotNo(c, by) && !(c.panel && c.panel.k > 1)).length}
-            absent={absent} onPickAbsent={openAbsent} onPick={openRun} onZoom={(dir) => setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, dir }))} empty={empty} />
+            absent={absent} fresh={newScenes} onPickAbsent={openAbsent} onPick={openRun} onZoom={(dir) => setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, dir }))} empty={empty} />
           <div className={cn('relative flex flex-none flex-col', empty && '[&_[role=toolbar]]:pointer-events-none [&_[role=toolbar]]:opacity-45')} style={{ height: tracksH }}>
             {/* no script yet: the timeline says when it starts, and the one thing to do now (15 Nov) */}
             {empty && (
@@ -2379,7 +2414,7 @@ export function EditPage() {
                 <EmptyCard title={`No take of Layout ${layView.n} yet.`} text={layForeign ? `Its storyboard is above. “Use Layout ${layView.n} in the film” puts its boards and lines in ${gridScene.id}’s place.` : `Its boards are in the film. Shots of the other layouts’ takes can go into its places: open their layout above and click one.`} />
               ) : (
               <ShotGrid scene={gridScene} takes={layView && sceneLays.length > 1 ? shots.takes.filter((t) => t.scene !== gridScene.id || !layoutOfTake(sceneLays, t.src) || layView.takes.some((x) => x.src === t.src)) : shots.takes}
-                by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} seenKey={`hh:takes-seen:${film}`}
+                by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} isNew={isNew} other={shots.other} alias={shots.alias}
                 selShot={layForeign ? undefined : watching ? gridHead?.n ?? watching.n : selShotN ?? (picScene === openId ? picShot : undefined)} base={base} onShot={clickShot} onUnpick={unpick} head={layForeign ? undefined : gridHead}
                 onMenu={(at, t, n, tag) => { setMenu(undefined); setHeadMenu(undefined); setTakeMenu({ ...at, src: t.src, n, ...(tag ? { tag } : {}) }); }}
                 onSeek={layForeign ? undefined : seekTakes} onSeekEdge={seekEdge}

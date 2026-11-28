@@ -35,8 +35,9 @@ export interface TakeShots {
 }
 
 /** `<take folder>/variation.json`, written by Alma when she starts a variation of a take (recipes/edit.md). `from`:
- *  the source take's file as the chip gave it; `note`: the user's words; `failed`: why it could not be made. */
-export interface TakeVariation { from: string; note: string; startedAt: string; failed?: string }
+ *  the source take's file as the chip gave it; `note`: the user's words; `failed`: why it could not be made; `copyOf`:
+ *  the file of the take this one is a copy of (components/edit/pickupRows.ts). */
+export interface TakeVariation { from: string; note: string; startedAt: string; failed?: string; copyOf?: string }
 
 /** A `variation.json` read leniently: undefined unless it names a source. */
 export function readVariation(v: unknown): TakeVariation | undefined {
@@ -46,7 +47,10 @@ export function readVariation(v: unknown): TakeVariation | undefined {
   const from = str('from');
   if (!from) return undefined;
   const failed = str('failed');
-  return { from, note: str('note'), startedAt: str('startedAt'), ...(failed ? { failed } : {}) };
+  // a copy of another take put here by hand (pick-up takes copied under their scene's take 1, so they
+  // could be switched in before pick-ups were listed); the Takes view leaves it out when that take is listed itself
+  const copyOf = str('copyOf');
+  return { from, note: str('note'), startedAt: str('startedAt'), ...(failed ? { failed } : {}), ...(copyOf ? { copyOf } : {}) };
 }
 
 interface Kept { size: number; mtime: number; seconds?: number; cuts: number[] }

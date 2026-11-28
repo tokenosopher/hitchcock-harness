@@ -9,14 +9,14 @@
 // each pick. "Hear it in the cut" opens the Edit page with the try in question in the sound's place, the playhead a
 // second before it.
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FeedCard, FeedSound } from '@/server/types';
-import { PlayButton, PlayLine } from '@/components/media/Sound';
 import { choose, useChoices } from '@/components/data/choices';
 import type { PickBody } from '@/components/library/data';
 import { cn } from '@/lib/utils';
 import { kindWord, placeLine, stripOf, tryLabel } from './soundPick';
 import { CutButton } from './CutButton';
+import { FilmButton, HearInFilm, RingPlay, useHearData, Wave, type HearData, type HearHandle } from './SoundChoice';
 
 type ToRepo = (rel: string) => string;
 
@@ -32,7 +32,7 @@ function Strip({ s }: { s: FeedSound }) {
   );
 }
 
-function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: FeedCard; s: FeedSound; toRepo: ToRepo; from: string; open: boolean }) {
+function SoundRow({ film, card, s, toRepo, from, open, data }: { film: string; card: FeedCard; s: FeedSound; toRepo: ToRepo; from: string; open: boolean; data?: HearData }) {
   const cid = `pick:sfx:${s.name}`;
   const mine = useChoices(film).find((c) => c.id === cid);
   const sel = mine?.pick?.candidate;
@@ -44,6 +44,9 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
   };
   const answered = s.answer ?? (s.picked && !open ? { option: String(s.picked.n), note: s.picked.note } : undefined);
   const eff = s.effect;
+  // heard in the film at its place in the plan
+  const moment = card.hear?.moments.find((x) => x.id === s.name);
+  const hearRef = useRef<HearHandle>(null);
   return (
     <div data-sound={s.name} className="flex min-w-0 flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -68,8 +71,8 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
           const on = sel === String(t.n);
           const kept = answered?.option === String(t.n);
           return (
-            <div key={t.n} data-try={t.n} className={cn('flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on || kept ? 'border-sub bg-raised' : 'border-edge')}>
-              {t.file ? <PlayButton path={toRepo(t.file)} label={`${s.name} try ${t.n}`} className="mt-0.5" /> : <span className="size-8 flex-none" />}
+            <div key={t.n} data-try={t.n} className={cn('flex min-w-0 items-center gap-2.5 rounded-lg border py-1.5 pl-1.5 pr-2 transition-colors duration-200', on || kept ? 'border-sub bg-raised' : 'border-edge')}>
+              {t.file ? <RingPlay path={toRepo(t.file)} label={`${s.name} try ${t.n}`} /> : <span className="size-11 flex-none" />}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <button type="button" role="radio" aria-checked={on} disabled={!open || !!answered} onClick={() => set(String(t.n))}
                   className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink disabled:cursor-default">
@@ -79,8 +82,9 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
                   {open && t.n === s.prediction && <span className="flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
                 </button>
                 {t.prompt && <span className={cn('text-[12px] leading-snug text-sub', open && !answered && 'pl-6')} title={t.prompt}><span className="line-clamp-2">{t.prompt}</span></span>}
-                {t.file && <PlayLine path={toRepo(t.file)} idle seconds={t.seconds} className={cn('max-w-[420px]', open && !answered && 'pl-6')} />}
+                {t.file && <Wave path={toRepo(t.file)} label={`${s.name} try ${t.n}`} peaks={data?.peaks[t.file]} seconds={t.seconds ?? data?.seconds[t.file]} className={cn('max-w-[480px]', open && !answered && 'pl-6')} />}
               </div>
+              {moment?.places[String(t.n)] && <FilmButton label={`${s.name} try ${t.n}`} onClick={() => hearRef.current?.play(String(t.n))} />}
             </div>
           );
         })}
@@ -93,6 +97,10 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
           </button>
         )}
       </div>
+      {moment && (
+        <HearInFilm ref={hearRef} film={film} card={card.key} moments={[moment]} data={data} toRepo={toRepo} prediction={s.prediction ? String(s.prediction) : undefined}
+          chosen={sel && sel !== 'none' ? sel : answered?.option} options={s.tries.filter((t) => moment.places[String(t.n)]).map((t) => ({ id: String(t.n), label: `try ${t.n}` }))} />
+      )}
       {open && !answered && sel && (
         <div className="flex flex-col gap-1.5 duration-200 animate-in fade-in-0 slide-in-from-top-1">
           <input value={note} maxLength={500} onChange={(e) => { setNote(e.target.value); set(sel, e.target.value); }}
@@ -112,10 +120,11 @@ export function SoundPicks({ film, card, toRepo, from, open }: { film: string; c
   const all = useChoices(film);
   const mine = all.filter((c) => c.pick?.kind === 'sfx' && c.pick.card === card.key);
   const left = sounds.filter((s) => !s.answer).length;
+  const data = useHearData(sounds.length ? film : '', card.key);
   if (!sounds.length) return null;
   return (
     <div data-sound-picks className="flex flex-col gap-3">
-      {sounds.map((s) => <SoundRow key={s.name} film={film} card={card} s={s} toRepo={toRepo} from={from} open={open} />)}
+      {sounds.map((s) => <SoundRow key={s.name} film={film} card={card} s={s} toRepo={toRepo} from={from} open={open} data={data} />)}
       {open && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <span className="text-[12.5px] text-sub">{mine.length ? `${mine.length} of ${left} chosen` : `${left === 1 ? 'One sound' : `${left} sounds`} to pick`} · they go with Done picking</span>

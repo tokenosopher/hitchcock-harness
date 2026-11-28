@@ -15,7 +15,10 @@ import { chooserOf, isChosen, stepIndex, zoomList, zoomScope } from './zoomSet';
 import { useZoom } from './useZoom';
 
 // choose: the tile's own control, found when it opens (the picture itself can be redrawn while the view is open)
-interface Shot { src: string; alt: string; video?: boolean; choose?: HTMLElement | null }
+// marks: where each part of a clip runs (the whole film's previz: its scenes), named quietly beside the title as it plays
+interface Mark { from: number; to: number; label: string }
+// from/to: a clip opens at `from`; with `to` it loops from..to (one shot of a take)
+interface Shot { src: string; alt: string; video?: boolean; choose?: HTMLElement | null; marks?: Mark[]; from?: number; to?: number }
 let current: { list: Shot[]; i: number; dir?: number } | undefined;
 const listeners = new Set<() => void>();
 // focus goes back to what opened it when it closes (it fell to the page's top, so the keyboard lost its place)
@@ -37,14 +40,22 @@ export function zoom(el: Element): void {
   if (list.length) set({ list, i });
 }
 
-/** Opens one clip full screen, with the player's controls. */
-export function zoomVideo(src: string, alt: string): void {
-  set({ list: [{ src, alt, video: true }], i: 0 });
+/** Opens one clip full screen, with the player's controls. `marks`: its parts, the one playing named beside the title. */
+export function zoomVideo(src: string, alt: string, marks?: Mark[]): void {
+  set({ list: [{ src, alt, video: true, ...(marks?.length ? { marks } : {}) }], i: 0 });
+}
+
+/** Opens a set given by the page itself (pictures and clips mixed), at `i`: the arrows step through all of them. */
+export interface ZoomItem { src: string; alt: string; video?: boolean; from?: number; to?: number }
+export function zoomItems(list: ZoomItem[], i: number): void {
+  if (list.length) set({ list, i: Math.max(0, Math.min(i, list.length - 1)) });
 }
 
 export function Lightbox() {
   const state = useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => current, () => undefined);
   const [loaded, setLoaded] = useState<string>();
+  // the part of a marked clip playing now ("S2 · The ride in")
+  const [part, setPart] = useState<string>();
   // a file that does not load says so (it said "Loading the full picture…" for ever)
   const [failed, setFailed] = useState<string>();
   const step = useCallback((d: number) => { if (current && current.list.length > 1) set({ list: current.list, i: stepIndex(current.i, d, current.list.length), dir: d }); }, []);
@@ -53,6 +64,7 @@ export function Lightbox() {
   const [seen, setSeen] = useState(state);
   if (state !== seen) {
     setSeen(state);
+    if (!state || !seen || seen.list !== state.list) setPart(undefined);
     if (state && seen && state.dir && seen.list === state.list && seen.i !== state.i) setLeaving({ src: seen.list[seen.i].src, dir: state.dir, key: (leaving?.key ?? 0) + 1 });
     else if (!state || !seen) setLeaving(undefined);
   }
@@ -133,7 +145,7 @@ export function Lightbox() {
       onTransitionEnd={(e) => { if (e.target === e.currentTarget) fade.done(); }}
       className={cn('fixed inset-0 z-[80] flex flex-col bg-black/95 transition-opacity duration-200 ease-out motion-reduce:transition-none', fade.shown ? 'opacity-100' : 'pointer-events-none opacity-0')}>
       <div className="flex flex-none items-center gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))]" onClick={(e) => e.stopPropagation()}>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-white/80">{shot.alt}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-white/80">{shot.alt}{shot.marks && part && <span key={part} data-lightbox-part className="text-white/50 duration-200 animate-in fade-in-0 motion-reduce:animate-none"> · {part}</span>}</span>
         {many && <span className="flex-none text-[12px] tabular-nums text-white/50">{view.i + 1} of {view.list.length}</span>}
         {chooser && (
           // the very control of the tile behind (its pick, its tray), pressed as a tap on the tile would
@@ -156,7 +168,13 @@ export function Lightbox() {
         )}
         {!shot.video && loaded !== shot.src && <span className="absolute text-[12px] text-white/40">{failed === shot.src ? 'This picture could not be loaded: the file is missing or still syncing.' : 'Loading the full picture…'}</span>}
         {shot.video
-          ? <video key={shot.src} src={shot.src} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} className="relative max-h-full max-w-full bg-black" />
+          ? <video key={shot.src} src={shot.src} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} className="relative max-h-full max-w-full bg-black"
+            onLoadedMetadata={shot.from ? (e) => { e.currentTarget.currentTime = shot.from!; } : undefined}
+            onTimeUpdate={shot.marks || shot.to !== undefined ? (e) => {
+              const v = e.currentTarget, t = v.currentTime;
+              if (shot.to !== undefined && t >= shot.to - 0.04) { v.currentTime = shot.from ?? 0; return; }
+              if (shot.marks) setPart(shot.marks.find((m) => t >= m.from && t < m.to)?.label);
+            } : undefined} />
           : null}
         {leaving && !shot.video && (
           // eslint-disable-next-line @next/next/no-img-element -- the picture it leaves, fading out

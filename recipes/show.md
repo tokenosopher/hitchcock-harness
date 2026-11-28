@@ -167,6 +167,28 @@ When the sound designer's tries of a scene's sounds are made, write one card tha
 - **Recording the pick**: the harness runs the studio's `tools/sound/sfx.py "$FILM" <sound> --pick N [--note "<their words>"] [--predicted M]` itself, which writes the sound's `pick.json`, `prompts.json` "picked" and the `taste.md` row; do not run it again. If that tool is missing, the harness writes nothing in the film folder and its message asks you to record those three yourself. A pick reaches you as `<harness-action kind="pick" what="sfx" target="<sound>" candidate="<N>" card="<the card>"/>`; "None of these" as `candidate="none"`, with the user's words for the next prompt when they gave some.
 - The card stops asking once every sound on it has an answer. Then set `"answer"` on it yourself, as for any card.
 - More tries after "None of these" are a new round: a new card with a new id, naming only the sounds it asks about.
+- Each try plays on the card, and "In the film" plays the sound's moment of the current cut with that try laid at the plan's place, level and fades (below).
+
+## A pick among sounds: heard on the card and in the film
+
+A pick among sound files (tries of one effect, music takes) can be written with its options as words and a plain list of `"files"` beside them, **one file per option, in the options' order**; options after the last file (`"none of these"`) have none. Each option then plays on the card (a play button and the sound's shape), on the phone too.
+
+```json
+{
+  "type": "card", "id": "ASK-sfx2-surf-wash", "title": "Which surf wash?", "at": "sound", "for": "film",
+  "updated": "2026-11-25T01:06:00Z", "ask": "pick", "prediction": "7",
+  "options": ["try 1", "try 5", "try 6", "try 7", "none of these"],
+  "files": ["audio/sfx/surf-wash/surf-wash-try1.wav", "audio/sfx/surf-wash/surf-wash-try5.wav",
+            "audio/sfx/surf-wash/surf-wash-try6.wav", "audio/sfx/surf-wash/surf-wash-try7.wav"],
+  "lay": "audio/sfx/lay-v2.json"
+}
+```
+
+**"In the film"**: where the card says where its sounds sit, each option can also be heard in place: the moment of the current cut, picture and all, from 2 s before to 2 s after, with that option laid in and the sound the cut has there now taken out ("Without" plays the moment with none of them). The user taps one option, then another, to hear them on the same picture at the same instant. The harness renders these clips from the cut's newest 480p and its sound tracks, and keeps them under its own folder. Say where, in one of two ways:
+- `"lay"`: the sound designer's lay file (`audio/sfx/lay-v2.json`: `sounds`, each with `place`, `fade_in_frames`, `fade_out_frames`, `recommend`, and per try a variation with `file`, `at`, `in`, `out`, `level_db`). Every sound of it with a variation whose `file` is one of the card's files is a moment of the card. Without `"lay"` (and without `"places"`) the harness looks in the film's newest `audio/sfx/lay*.json`.
+- `"places"`: one list per option, in the options' order, of where that option is laid: `{"moment": "into S2", "at": 26.0, "in": 2.25, "out": 3.75, "gain_db": -21.5, "fade_in": 0.75, "fade_out": 0.5}` (`at` on the cut, `in` and `out` in the file, seconds; `moment` names the place, so options laid at the same one are heard against each other).
+
+An option laid nowhere still plays on the card; it has no "In the film". A card of sound picks (`"sfx"`) is heard in the film at each sound's place in the plan without either field.
 
 ## A why card: the reason for one change
 

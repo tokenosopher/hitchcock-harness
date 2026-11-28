@@ -400,7 +400,19 @@ export interface FeedCard {
   /** The place on the cut the card is about: the card's "See it in the cut" or "Hear it in the cut" opens
    *  the Edit page there (components/edit/openAt.ts). */
   cut?: FeedCut;
+  /** Where each option of a sound pick sits in the film: the moments the card's sounds are laid at, each
+   *  option's placement there. Read from the card's "places", its "lay" file, else the film's audio/sfx/lay*.json;
+   *  for a card of sound picks ("sfx"), from each sound's place in the plan. Absent when nothing places them. */
+  hear?: FeedHear;
 }
+
+/** A sound option's placement at one moment of the film: its file, where it starts on the cut (`at`, seconds),
+ *  the stretch of its file played (`in`, `out`, seconds), and its clip gain (dB). */
+export interface HearPlace { file: string; at: number; in: number; out: number; gainDb?: number; fadeIn?: number; fadeOut?: number }
+/** One moment of the film a card's sound is laid at: where it plays (`at` to `ends`, seconds on the cut), its fades
+ *  (seconds), and the placement of each option there, by option id (an option missing from it is not laid here). */
+export interface HearMoment { id: string; label: string; at: number; ends: number; fadeIn?: number; fadeOut?: number; places: Record<string, HearPlace>; recommend?: string }
+export interface FeedHear { moments: HearMoment[]; from?: string }
 
 /** A card's "cut", as Alma writes it in review/cards.json: one clip of the cut, a take tried in its shot's
  *  place (`shot` "S4:7" when the take's name does not say which), a sound's try heard in its place, or a moment

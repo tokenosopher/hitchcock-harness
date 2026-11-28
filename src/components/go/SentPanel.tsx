@@ -4,6 +4,7 @@
 // clip that plays, a sound with a play button), each with its number as the prompt names it ("Image 1"), and the
 // prompt exactly as sent, its references marked. Pointing at a reference marks it in the prompt, and the other way
 // round. Read from the take's <G>-take<N>-sent.json (GET /api/films/[film]/sent); a take without one says so.
+import Link from 'next/link';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FilmState, SentRecord, SentRef, TakeRef } from '@/server/types';
 import { useUI } from '@/components/data/ui';
@@ -11,6 +12,8 @@ import { fmtDate, repoPath } from '@/components/lib/format';
 import { IconChevronDown } from '@/components/shell/icons';
 import { Media, isVideoPath, mediaUrl } from '@/components/media/Media';
 import { useJson } from '@/components/pages/postCommon';
+import { namedCounts } from '@/components/lib/shotDetails';
+import { shotDetailsHref } from '@/components/lib/shotHref';
 import { cn } from '@/lib/utils';
 
 const MENTION = /\b(VIDEO|IMAGE|AUDIO)\s+REFERENCE\s+(\d+)\b/gi;
@@ -55,17 +58,15 @@ export function SentPanel({ state, take }: { state: FilmState; take: TakeRef }) 
       </section>
     );
   }
-  return <SentRecordView key={data.path} rec={data} state={state} />;
+  return <SentRecordView key={data.path} rec={data} state={state} take={take} />;
 }
 
-function SentRecordView({ rec, state }: { rec: SentRecord; state: FilmState }) {
+function SentRecordView({ rec, state, take }: { rec: SentRecord; state: FilmState; take: TakeRef }) {
   const [hot, setHot] = useState<string>();
   const parts = useMemo(() => promptParts(rec.prompt.text), [rec.prompt.text]);
-  const named = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const p of parts) if (p.label) n.set(p.label, (n.get(p.label) ?? 0) + 1);
-    return n;
-  }, [parts]);
+  // how often the prompt names each reference: by its number, its [TAG], a run ("IMAGE REFERENCES 12 TO 18" names
+  // each storyboard page in it) or a panel on its page (lib/shotDetails.ts)
+  const named = useMemo(() => namedCounts(rec.prompt.text, rec.refs), [rec.prompt.text, rec.refs]);
   const s = rec.settings;
   const allSettings = [
     ['model', rec.model], ['mode', s.mode], ['aspect_ratio', s.aspect], ['resolution', s.resolution], ['duration', s.duration], ['draft', s.draft],
@@ -84,7 +85,11 @@ function SentRecordView({ rec, state }: { rec: SentRecord; state: FilmState }) {
           <span className="lbl">Sent to the model</span>
           <span className="text-[12px] text-mute">{[at, rec.jobId ? `job ${rec.jobId.slice(0, 8)}` : ''].filter(Boolean).join(' · ')}</span>
         </span>
-        <span className="truncate font-mono text-[11px] text-mute" title={rec.path}>{rec.path.split('/').pop()}</span>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="truncate font-mono text-[11px] text-mute" title={rec.path}>{rec.path.split('/').pop()}</span>
+          {/* the whole page of it, at the take's first shot */}
+          {take.path && <Link href={shotDetailsHref(state.film.slug, take.path, 1)} className="flex-none whitespace-nowrap rounded-[7px] border border-edge-strong bg-raised px-2 py-[3px] text-[12.5px] text-ink no-underline transition-colors hover:border-sub">Shot details ›</Link>}
+        </span>
       </div>
       <p className="m-0 font-mono text-[12px] leading-normal text-ink-2" title={`${allSettings}${rec.settingsFrom ? `\n\nfrom ${rec.settingsFrom}` : ''}`} data-sent="settings">{settingsLine(rec)}</p>
       {rec.differences.length > 0 && (
@@ -97,7 +102,7 @@ function SentRecordView({ rec, state }: { rec: SentRecord; state: FilmState }) {
         <div className="flex min-w-0 flex-col gap-2">
           <span className="flex items-baseline gap-2"><span className="lbl">References · in the order sent</span><span className="text-[12px] text-mute">{counts}</span></span>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-2 max-[760px]:grid-cols-3 max-[420px]:grid-cols-2">
-            {rec.refs.map((r) => <SentTile key={r.order} r={r} rec={rec} state={state} hot={hot === r.label} named={named.get(r.label) ?? 0} onHot={setHot} />)}
+            {rec.refs.map((r) => <SentTile key={r.order} r={r} rec={rec} state={state} hot={hot === r.label} named={named.get(r.order) ?? 0} onHot={setHot} />)}
           </div>
         </div>
       )}

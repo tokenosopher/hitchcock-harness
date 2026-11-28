@@ -8,6 +8,7 @@ import { LIBRARY_KINDS, LibraryUnavailable, type LibraryKind } from '@/server/li
 import { isMock } from '@/fixtures/mock';
 import { notifyHub } from '@/server/claude/notify';
 import { soundMockDone } from '@/fixtures/soundpick';
+import { soundCardsDone } from '@/fixtures/soundcards';
 import { sheetMockDone } from '@/fixtures/cast';
 import { parseApprovals } from '@/components/lib/approve';
 import { parseRemovals } from '@/components/lib/remove';
@@ -46,7 +47,7 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
   if (typeof removals === 'string') return Response.json({ error: removals }, { status: 400 });
   // what was answered or removed leaves the film's count of "Waiting for you" (the sidebar's white dot) within a moment
   const acted = () => notifyHub().userAnswered(film, answers, picks, approvals, removals);
-  const mocked = isMock() ? removeMockDone(film, answers, picks, approvals, removals) ?? sheetMockDone(film, answers, picks, approvals) ?? soundMockDone(film, answers, picks) : undefined;
+  const mocked = isMock() ? removeMockDone(film, answers, picks, approvals, removals) ?? sheetMockDone(film, answers, picks, approvals) ?? soundMockDone(film, answers, picks) ?? soundCardsDone(film, answers) : undefined;
   if (mocked) { if (mocked.ok) acted(); return mocked; }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   try {
