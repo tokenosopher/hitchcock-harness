@@ -6,7 +6,7 @@ the line's exact words with the performance marks taken out, because captions sh
     acronyms (AI, UBI) look the same and must stay.
 Two sources:
   - the film's script.md, its "### S<n>" sections under "## Script", one entry per **NAME:** "words" row; "shot" is the
-    generation (S1, S2 ...), "who" the name title-cased (CHER -> Cher, AI stays);
+    generation (S1, S2 ...), "who" the name title-cased (MAREN -> Maren, AI stays);
   - a line table, audio/lines.json; "shot" is the line id (V01 ...).
     .venv/bin/python tools/release/make_script_json.py [--film "$FILM"] [--script script.md | --lines audio/lines.json]
         [--out social/script.json] [--lower MAY,NEVER] [--skip S3,S5.2,V09]

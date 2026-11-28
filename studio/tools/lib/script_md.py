@@ -2,8 +2,8 @@
 (the whole file when it has no such heading), one entry per dialogue row in film order. A dialogue row is
     **NAME:** "words"      or      **NAME** *(direction):* "words"
 and only the words in quotes are spoken; rows without quotes, action lines and "[N s]" timings are skipped.
-    lines(path) -> [{"gen": "S1", "n": 1, "who": "Cher", "name": "CHER", "line": "How much longer? I can't hold it!"}, ...]
-"who" is the name as the captions spell it: a capitalised name is title-cased (CHER -> Cher), two-letter names stay (AI).
+    lines(path) -> [{"gen": "S1", "n": 1, "who": "Maren", "name": "MAREN", "line": "Is the lamp lit?"}, ...]
+"who" is the name as the captions spell it: a capitalised name is title-cased (MAREN -> Maren), two-letter names stay (AI).
 Shared by tools/release/make_script_json.py and tools/takes/verify_clip.py."""
 import re
 

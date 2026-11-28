@@ -75,7 +75,7 @@ check('the count is the list as the page opens it', () => {
 
 // ---- the words
 check('takeTitle, placesLine, landedWords, deltaWords', () => {
-  assert.equal(takeTitle(tk('assets/films/f/generations/FIX-year-S1/takes/take2/x.mp4', 1, { name: 'FIX year S1 · take 2' })), 'FIX-year-S1 · take 2');
+  assert.equal(takeTitle(tk('assets/films/f/generations/FIX-tide-S1/takes/take2/x.mp4', 1, { name: 'FIX tide S1 · take 2' })), 'FIX-tide-S1 · take 2');
   assert.equal(takeTitle(tk('assets/films/f/generations/S19/takes/take2/x.mp4', 1, { scene: 'S19', name: 'take 2' })), 'S19 · take 2');
   assert.equal(placesLine('S1', [{ place: '5', label: '5–6' }]), 'S1 · places 5–6');
   assert.equal(placesLine('S4', [{ place: '4' }]), 'S4 · place 4');
@@ -106,7 +106,7 @@ check('modelOf reads the spend row\'s service cell and a card\'s sub line', () =
   assert.equal(modelChip(undefined), undefined);
 });
 check('Alma\'s findings record: schema 1, one take\'s entry, read leniently', () => {
-  const rec = { schema: 1, by: 'alma', at: '2026-11-26T10:00:00Z', takes: { take2: { summary: 'Good.', verdict: 'use', lines: [{ said: '2226.', heard: '2226.', ok: true }, { heard: 'x' }], findings: ['6 s', 3] } } };
+  const rec = { schema: 1, by: 'alma', at: '2026-11-26T10:00:00Z', takes: { take2: { summary: 'Good.', verdict: 'use', lines: [{ said: 'Eleven years.', heard: 'Eleven years.', ok: true }, { heard: 'x' }], findings: ['6 s', 3] } } };
   const f = readFindings(rec, 'take2')!;
   assert.equal(f.verdict, 'use');
   assert.equal(f.lines.length, 1, 'a line without what was said is dropped');
@@ -121,10 +121,10 @@ check('Alma\'s findings record: schema 1, one take\'s entry, read leniently', ()
   assert.equal(readVerdict('nice'), undefined);
 });
 check('check.json, findings.md and README.md, as the films write them', () => {
-  const c = readCheck({ transcript: '2226. Just a number difference.', missing: ['twenty two twenty six'], extra: ['2226'], words_match: false, tail_ok: true, seconds: 6.04 })!;
-  assert.equal(c.heard, '2226. Just a number difference.');
+  const c = readCheck({ transcript: 'Eleven years. Every night.', missing: ['eleven years'], extra: ['every'], words_match: false, tail_ok: true, seconds: 6.04 })!;
+  assert.equal(c.heard, 'Eleven years. Every night.');
   assert.equal(c.wordsMatch, false);
-  assert.deepEqual(c.missing, ['twenty two twenty six']);
+  assert.deepEqual(c.missing, ['eleven years']);
   assert.equal(readCheck({ gen: 'S1' }), undefined);
   const n2 = readFindingsNote('# S8 take 1: findings\n\nVerdict: good — both lines word for word.\n\n- 18.0 s, 1920x1080.\n- Lines: all word for word.\n')!;
   assert.equal(n2.verdict, 'good — both lines word for word.');

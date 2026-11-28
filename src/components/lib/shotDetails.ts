@@ -233,7 +233,7 @@ export function properNames(text: string): Set<string> {
 
 export type LineKind =
   | { kind: 'kv'; key: string; text: string }          // "Size: full shot, as framed there."
-  | { kind: 'say'; who: string; how?: string; text: string } // MAREN: "Then it will be."
+  | { kind: 'say'; who: string; how?: string; text: string } // MAREN: "Not tonight."
   | { kind: 'sub'; text: string }                      // "In shot:"
   | { kind: 'cut'; text: string }                      // "HARD CUT."
   | { kind: 'lab'; label: string; how?: string; text: string } // "BOTTLE: …", "ENDS LOCKED: …"

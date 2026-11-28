@@ -11,7 +11,7 @@ const cast = [
   ch('C01a', 'Maren Night1'),
   ch('C02', 'Tobias', { rounds } as CharacterRef['voice']),
   ch('C02a', 'Tobias Night1'),
-  ch('C03', 'Plank', { rounds: [], elementLine: { path: 'cast/C03-plank/voice/element-line-5s.mp3' } } as CharacterRef['voice']),
+  ch('C03', 'Osk', { rounds: [], elementLine: { path: 'cast/C03-osk/voice/element-line-5s.mp3' } } as CharacterRef['voice']),
 ];
 const own = sheetVoice(cast, 'C01');
 assert.equal(own?.owner.id, 'C01');
@@ -23,6 +23,6 @@ assert.equal(form?.picked?.option, '2');
 assert.equal(sheetVoice(cast, 'C02'), undefined, 'options but no pick: no voice yet');
 assert.equal(sheetVoice(cast, 'C02a'), undefined);
 assert.equal(sheetVoice(cast, 'C03')?.picked, undefined);
-assert.equal(sheetVoice(cast, 'C03')?.line?.path, 'cast/C03-plank/voice/element-line-5s.mp3');
+assert.equal(sheetVoice(cast, 'C03')?.line?.path, 'cast/C03-osk/voice/element-line-5s.mp3');
 assert.equal(sheetVoice(cast, 'C09'), undefined);
 console.log('ok: the voice beside a sheet, a form with its character\'s');

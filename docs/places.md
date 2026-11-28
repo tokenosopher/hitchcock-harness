@@ -42,11 +42,11 @@ A take that differs from the others gets its own list under `takes`. The reader 
 |---|---|---|
 | 1 | One place (FIX-door-S4) | `stands_for: "1"`. Without a record, the cut alone works: it sits before place 2, with place 1 open. |
 | 2 | Several places as one clip (FIX-boat-S1) | `stands_for: ["5","6"]`, or the cut. Listed under 5, named "5–6". |
-| 3 | An insert (FIX-close-S18) | `stands_for: "1", inside: {place:"1", from:4.75}`. Its position after place 1 fits. |
+| 3 | An insert (FIX-tight-S18) | `stands_for: "1", inside: {place:"1", from:4.75}`. Its position after place 1 fits. |
 | 4 | A place split later (shot 4 and 4-b) | Nothing to write: both clips are pieces of shot 4. A pick-up of 4 between them fits. |
 | 5 | Planned, not in the cut | The record. With no record and no list, the shot is under Other, with why. |
 | 6 | A full retake | A normal take: the scene's list fits by count. |
-| 7 | Cuts back into another take (FIX-open-S16) | `inside: {place:"1", to:4.5}`. Its position before place 1 fits. |
+| 7 | Cuts back into another take (FIX-start-S16) | `inside: {place:"1", to:4.5}`. Its position before place 1 fits. |
 | 8 | A count that differs (FIX-rope-S10) | Matched by time. With the one-shot file, both pieces go under 2 ("2 · 1/2", "2 · 2/2"), side by side. With `stands_for: ["2","3"]`, one each. The note says "the record says 1 shot, the take was cut into 2". |
 
 A ninth kind is one case in `places.ts`'s evidence order, or one field in the record. It is never a new fallback in another file.

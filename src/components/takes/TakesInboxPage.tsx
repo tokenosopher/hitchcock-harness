@@ -7,7 +7,7 @@
 // Which takes, and what a Use changes: inbox.ts. What is known of each: landed.ts (GET …/landed). Decisions:
 // harness/takes-decided.json (GET/POST …/decided), the same on every device. Played here, a take is looked at
 // (seenTakes.ts): its "new" tag clears everywhere. "Use in the film" is the Takes view's: every shot of the take at its
-// place, one step of the cut, one Undo; Alma is told by a chip in her box ("Used FIX-year-S1 take 2 in the film"), as
+// place, one step of the cut, one Undo; Alma is told by a chip in her box ("Used FIX-tide-S1 take 2 in the film"), as
 // is a reject; keeping it for later tells her nothing. On the phone (the Edit page is view-only on touch) the Use is
 // asked of Alma instead: the box opens with it, the user sends.
 import { StepIntro } from '@/components/intro/StepIntro';

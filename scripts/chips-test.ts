@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   const { buildContextBlock, prefixContext, parseContextBlock, hasCommand } = await import('../src/server/context');
   const { parseContext } = await import('../src/server/claude/thread');
   const { outgoingText } = await import('../src/components/shell/outgoing');
-  const ctx = (selected: Chip[]): HarnessContext => ({ film: 'the-lighthouse', page: '/films/the-lighthouse/edit', pinned: 'A simple video · Edit', selected });
+  const ctx = (selected: Chip[]): HarnessContext => ({ film: 'the-lighthouse', page: '/films/the-lighthouse/edit', pinned: 'The Lighthouse · Edit', selected });
 
   // ---- 1. an about chip: the box empty, Alma reads what the message is about with the chip
   const retake: Chip = {

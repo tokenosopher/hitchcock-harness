@@ -260,7 +260,7 @@ Answers to cards that ask:
 - card="ASK-L01-master-v1" ask="yes" · “L01 the shore, master v1: approve”
 
 Picks made on an asset's own page:
-- <harness-action kind="pick" what="face" target="C03" round="r1-faces" candidate="scirpalus-r1-14"/> The user picked … for C03's face on the Character page.
+- <harness-action kind="pick" what="face" target="C03" round="r1-faces" candidate="bram-r1-14"/> The user picked … for C03's face on the Character page.
   The harness already wrote: …
   Yours: …
 ```

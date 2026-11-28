@@ -30,7 +30,7 @@ const KEPT_HERE: LibraryMeta = {
 const FIXED: LibraryMeta[] = [
   KEPT_HERE,
   kept('sample-earlier-film-c03-tomas-r1-5', 'C03', 'Tomas', 'r1-5', 'face-5.png', 'Not right for Tomas; a good older face for another film.'),
-  kept('sample-earlier-film-c01-nia-r1-2', 'C01', 'Nia', 'r1-2', 'face-6.png'),
+  kept('sample-earlier-film-c01-ines-r1-2', 'C01', 'Ines', 'r1-2', 'face-6.png'),
 ];
 
 const g = globalThis as unknown as { __hhMockLib?: Map<string, LibraryMeta> };

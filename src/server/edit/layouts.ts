@@ -18,7 +18,7 @@ const readJson = async (f: string): Promise<unknown> => fs.readFile(f, 'utf8').t
 
 /** The layout a take's record of what was sent names: the previz take's number and the storyboard version. With
  *  `scene`, only a previz take of that scene's own (previz/<scene>/…): a pick-up's record names its own previz
- *  (previz/FIX-egg-S2/FIX-egg-S2-previz-take-3.json), whose number is not the scene's previz take 3 (such a
+ *  (previz/FIX-shell-S2/FIX-shell-S2-previz-take-3.json), whose number is not the scene's previz take 3 (such a
  *  pick-up was put under an older layout and left out of the Takes view). It is then placed by its date. */
 export function sentLayout(raw: unknown, scene?: string): { previzTake?: number; storyboard?: string } {
   const lay = raw && typeof raw === 'object' ? (raw as { layout?: unknown }).layout : undefined;

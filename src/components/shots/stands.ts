@@ -29,8 +29,8 @@ export function placesLabel(places: string[], all?: string[]): string {
 
 // ---------------------------------------------------------------------------------------------------- the record
 
-/** Which part of a place a shot is, in seconds of that place as the scene's take plays it: an insert (FIX-close-S18 from
- *  4.75 s of place 1), or the start of a place that cuts back to another take (FIX-open-S16 to 4.5 s). */
+/** Which part of a place a shot is, in seconds of that place as the scene's take plays it: an insert (FIX-tight-S18 from
+ *  4.75 s of place 1), or the start of a place that cuts back to another take (FIX-start-S16 to 4.5 s). */
 export interface Inside { place: string; from?: number; to?: number }
 /** One shot of a record: the places it stands for, in order (one, or several it replaces as one clip); where it lies in
  *  the take (seconds, optional); the part of a place it is (optional). */

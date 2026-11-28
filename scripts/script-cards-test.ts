@@ -78,9 +78,9 @@ roundTrip('bold, "· then:", second line', md, 0, 1, 'At the lighthouse', ['NORT
 roundTrip('"and under it the line"', S(`**Title card, before S1** (about 3 s): THE POINT, NORTH COAST · 1890, and under it the line *The lighthouse keeper*.\n\n${S1}`), 0, 1, 'The lamp room', ['THE POINT, NORTH COAST · 1890', 'The lamp room']);
 roundTrip('italic with a note after it', italic, 0, 0, 'ALEXANDRIA · 40 BC', ['ALEXANDRIA · 40 BC', 'The palace of Queen Maren']);
 // the shape of a real film's script v2: italic, the words in bold, a note after them
-const gordium = S(`${S1}\n\n*Title card, between S1 and S2, the user's words (story v3 on): **Gordium, 333 BC.** About 3 s, with the boom.*\n\n${S2}`);
-ok('the Gordium card is read', scriptCards(gordium)[0]?.lines.join('|') === 'Gordium, 333 BC.', scriptCards(gordium)[0]);
-roundTrip('italic, the words in bold (Edda\'s)', gordium, 0, 0, 'Gordium, Phrygia, 333 BC.', ['Gordium, Phrygia, 333 BC.']);
+const card1 = S(`${S1}\n\n*Title card, between S1 and S2, the user's words (story v3 on): **Lighthouse Point, 1911.** About 3 s, with the boom.*\n\n${S2}`);
+ok('the title card is read', scriptCards(card1)[0]?.lines.join('|') === 'Lighthouse Point, 1911.', scriptCards(card1)[0]);
+roundTrip('italic, the words in bold (Edda\'s)', card1, 0, 0, 'Lighthouse Point, Cornwall, 1911.', ['Lighthouse Point, Cornwall, 1911.']);
 // a card and a line in one save; both of a card's lines in one save
 {
   const both = applyEdits(md, [{ scene: 'S1', index: 0, kind: 'card', part: 1, old: 'The lighthouse keeper', new: 'the keeper\'s lamp' }, { scene: 'S1', index: 0, kind: 'card', part: 0, old: 'NORTH COAST · 1890', new: 'SOUTH COAST · 1890' }, { scene: 'S2', index: 0, kind: 'line', old: 'Is that so?', new: 'Is it so?' }], { date: '2026-11-21' });

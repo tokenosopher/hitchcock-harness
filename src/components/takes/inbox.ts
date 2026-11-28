@@ -65,7 +65,7 @@ export function countWords(takes: TakeShots[], l: Looked, decided: DecidedMap, i
   return `${n} ${n === 1 ? 'take' : 'takes'} to look at, ${later} kept for later`;
 }
 
-/** "FIX-year-S1 · take 2"; a scene's own take "S19 · take 2"; a test's "prompt length C · take 1". */
+/** "FIX-tide-S1 · take 2"; a scene's own take "S19 · take 2"; a test's "prompt length C · take 1". */
 export function takeTitle(t: TakeShots): string {
   const g = genOf(t.src);
   if (g && g !== t.scene && /^FIX-/i.test(g)) return `${g} · ${takeLabel(t.name, g).toLowerCase()}`;

@@ -46,8 +46,8 @@ const PROMPT = 'A studio portrait photograph of a real young woman, head and sho
 async function setup(): Promise<void> {
   await put('repo/taste.md', '# Taste\n\n## The record\n\n| Date | Film | Choice | Candidates | Pick | What it says | Words | Predicted | Right |\n|---|---|---|---|---|---|---|---|---|\n');
   await put(`${ONE}/brief.md`, '# Face One\n');
-  for (let i = 1; i <= 3; i++) await put(`${ONE}/cast/C01-nia/r1-faces/C01-r1-${i}.png`, `png face ${i}`);
-  await put(`${ONE}/cast/C01-nia/r1-faces/prompts.json`, JSON.stringify({ candidates: [1, 2, 3].map((i) => ({ id: `C01 r1-${i}`, prompt: `${PROMPT} ${i}` })) }, null, 1));
+  for (let i = 1; i <= 3; i++) await put(`${ONE}/cast/C01-ines/r1-faces/C01-r1-${i}.png`, `png face ${i}`);
+  await put(`${ONE}/cast/C01-ines/r1-faces/prompts.json`, JSON.stringify({ candidates: [1, 2, 3].map((i) => ({ id: `C01 r1-${i}`, prompt: `${PROMPT} ${i}` })) }, null, 1));
   await put(`${TWO}/brief.md`, '# Face Two\n');
   await mkdir(path.join(root, TWO, 'cast', 'C02-tomas'), { recursive: true });
 }
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   const before = await snapshot(one);
 
   // 1. a candidate that was not picked, saved with a note of the user's
-  const r1 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-nia/r1-faces/C01-r1-2.png', note: '  a good older face,\n for a later film ' });
+  const r1 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-ines/r1-faces/C01-r1-2.png', note: '  a good older face,\n for a later film ' });
   ok('the save answers ok and created', r1.ok && r1.created, r1);
   if (!r1.ok) throw new Error('the save failed; the rest cannot run');
   const dir = path.join(library, 'faces', r1.id);
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   ok('meta.json: the prompt that made it', meta.prompt === `${PROMPT} 2`, meta.prompt);
   ok('meta.json: saved today, status "saved"', meta.status === 'saved' && meta.dates.saved === new Date().toISOString().slice(0, 10), meta);
   ok('meta.json: the note, on one line', meta.note === 'a good older face, for a later film', meta.note);
-  ok('meta.json: the file and where it came from', meta.files.length === 1 && meta.files[0].role === 'face' && meta.files[0].source === 'assets/films/face-one/cast/C01-nia/r1-faces/C01-r1-2.png', meta.files);
+  ok('meta.json: the file and where it came from', meta.files.length === 1 && meta.files[0].role === 'face' && meta.files[0].source === 'assets/films/face-one/cast/C01-ines/r1-faces/C01-r1-2.png', meta.files);
   const copy = path.join(dir, meta.files[0].file);
   const st = await lstat(copy);
   ok('the library holds a copy, not a link', st.isFile() && !st.isSymbolicLink());
@@ -79,10 +79,10 @@ async function main(): Promise<void> {
   ok('the film is untouched: same files, same bytes, no pick', JSON.stringify(await snapshot(one)) === JSON.stringify(before));
 
   // 2. saved again: nothing copied, the note kept
-  const r2 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-nia/r1-faces/C01-r1-2.png' });
+  const r2 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-ines/r1-faces/C01-r1-2.png' });
   ok('a second save copies nothing', r2.ok && !r2.created && r2.id === r1.id, r2);
   // 3. a new note only replaces the note
-  const r3 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-nia/r1-faces/C01-r1-2.png', note: 'for a soldier' });
+  const r3 = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-ines/r1-faces/C01-r1-2.png', note: 'for a soldier' });
   const meta3 = JSON.parse(await readFile(path.join(dir, 'meta.json'), 'utf8')) as Record<string, unknown> & { files: unknown[] };
   ok('a new note replaces the note', r3.ok && !r3.created && r3.noted === true && meta3.note === 'for a soldier', meta3);
   ok('the rest of meta.json is the same', JSON.stringify({ ...meta3, note: undefined }) === JSON.stringify({ ...meta, note: undefined }));
@@ -93,8 +93,8 @@ async function main(): Promise<void> {
   ok('a path outside the film is refused', !out.ok && out.status === 400, out);
   // a symlink inside the film that leads out of it
   await put('secret.txt', 'not the film\'s');
-  await symlink(path.join(root, 'secret.txt'), path.join(root, ONE, 'cast', 'C01-nia', 'r1-faces', 'C01-r1-9.png'));
-  const linked = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-nia/r1-faces/C01-r1-9.png' });
+  await symlink(path.join(root, 'secret.txt'), path.join(root, ONE, 'cast', 'C01-ines', 'r1-faces', 'C01-r1-9.png'));
+  const linked = await saveToLibrary({ film: 'face-one', kind: 'face', ref: 'cast/C01-ines/r1-faces/C01-r1-9.png' });
   ok('a symlink in the film that leads out is refused', !linked.ok && linked.status === 400, linked);
   // a path a film's JSON names (voices/options.json, element-lines-5s.json, elements.json) that leads out of the films
   const { voiceDraft, inFilm } = await import('../src/server/library/sources');

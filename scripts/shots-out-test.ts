@@ -288,7 +288,7 @@ console.log(`ok · ${n} checks`);
   assert.equal(of('generations/FIX-S6b'), 'S6');
   assert.equal(of('generations/FIX-S5a'), 'S5');
   assert.equal(of('generations/S3A'), 'S3A');
-  assert.equal(of('generations/FIX-cut-S5'), 'S5');
+  assert.equal(of('generations/FIX-step-S5'), 'S5');
   assert.equal(of('tests/model-x/S2'), 'S2');
   assert.equal(of('generations/S6bc'), undefined);
   assert.equal(of('generations/SHOTS'), undefined);

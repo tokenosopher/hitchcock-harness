@@ -48,18 +48,18 @@ async function film(): Promise<string> {
   await put(dir, 'cast/C05-neighbour/pick-face.png', Buffer.concat([PNG, Buffer.from('n1')]));
   await put(dir, 'elements/C05/takes/take2/E-C05-take2-480p.mp4', 'mp4');
   // C03: no lines; C06-C07: a group; C08: still at the face round
-  await put(dir, 'cast/C03-scirpalus/r1-faces/C03-scirpalus-r1-1.png', Buffer.concat([PNG, Buffer.from('c')]));
-  await put(dir, 'cast/C03-scirpalus/pick-face.png', Buffer.concat([PNG, Buffer.from('c')]));
-  await put(dir, 'cast/C03-scirpalus/pick.png', Buffer.concat([PNG, Buffer.from('cs')]));
+  await put(dir, 'cast/C03-bram/r1-faces/C03-bram-r1-1.png', Buffer.concat([PNG, Buffer.from('c')]));
+  await put(dir, 'cast/C03-bram/pick-face.png', Buffer.concat([PNG, Buffer.from('c')]));
+  await put(dir, 'cast/C03-bram/pick.png', Buffer.concat([PNG, Buffer.from('cs')]));
   await put(dir, 'cast/C06-C07-sons/pick.png', Buffer.concat([PNG, Buffer.from('g')]));
   for (let i = 1; i <= 4; i++) await put(dir, `cast/C08-boy/r1-faces/C08-boy-r1-${i}.png`, Buffer.concat([PNG, Buffer.from(`b${i}`)]));
   await put(dir, 'elements.json', JSON.stringify({ elements: {
-    C03: { id: 'img-c03', source: 'cast/C03-scirpalus/pick.png' },
+    C03: { id: 'img-c03', source: 'cast/C03-bram/pick.png' },
     C04a: { id: 'img-c04a', source: 'cast/C04-edda/pick.png', video_element: { draft_file: 'elements/C04a/takes/take1/E-C04a-take1-480p.mp4', final_file: 'elements/C04a/takes/take1/E-C04a-take1-1080p.mp4' } },
     C04b: { id: 'img-c04b', source: 'cast/C04-edda/pick-C04b.png' },
     'C06-C07': { id: 'img-sons' },
   } }));
-  await put(dir, 'brief.md', '# Test\n\n## Cast\n- **C03 Scirpalus**: the auctioneer\'s man, no lines\n');
+  await put(dir, 'brief.md', '# Test\n\n## Cast\n- **C03 Bram**: the ferryman\'s boy, no lines\n');
   return dir;
 }
 

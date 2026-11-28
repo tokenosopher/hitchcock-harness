@@ -389,7 +389,7 @@ async function main(): Promise<void> {
   {
     const raw = timeline('v10', [
       { id: 'V1', kind: 'video', name: 'Picture', clips: [
-        { id: 'k1', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · Athens' },
+        { id: 'k1', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · The harbour' },
         { id: 'c1', src: M('pattern.mov'), in: 0, out: 3, at: 2 },
         { id: 'c2', src: M('red.mov'), in: 0, out: 3, at: 5 },
       ] },
@@ -398,7 +398,7 @@ async function main(): Promise<void> {
         { id: 'c2a', src: M('red.mov'), in: 0, out: 3, at: 5 },
       ] },
       { id: 'A2', kind: 'audio', name: 'Effects', clips: [
-        { id: 'k1a', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · Athens' },
+        { id: 'k1a', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · The harbour' },
         { id: 'fx', src: M('fx.wav'), in: 0, out: 2, at: 3, gain: -6 },
       ] },
       { id: 'A3', kind: 'audio', name: 'Music', clips: [{ id: 'm1', src: M('music.wav'), in: 0, out: 8, at: 0, gain: -12, fadeIn: 1, fadeOut: 1 }] },
@@ -483,7 +483,7 @@ async function main(): Promise<void> {
     const A = await import('../src/components/edit/renderAsk');
     const raw = timeline('v26', [
       { id: 'V1', kind: 'video', name: 'Picture', clips: [
-        { id: 'k1', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · Athens' },
+        { id: 'k1', src: M('card.mov'), in: 0, out: 2, at: 0, label: 'Title card · The harbour' },
         { id: 'p1', src: M('pattern.mov'), in: 0, out: 4, at: 2 },
       ] },
       { id: 'A1', kind: 'audio', name: 'Dialogue', clips: [{ id: 'q', src: M('quiet.wav'), in: 0, out: 6, at: 0 }] },
@@ -508,7 +508,7 @@ async function main(): Promise<void> {
       `${line} · measured ${m.i} LUFS ${m.tp} dBTP`);
     const outs = st?.outputs ?? [];
     check('page: every file has a path under cut/renders/ and words, and what was left out is said', outs.length === 6 && outs.every((o) => o.path.startsWith('cut/renders/v26-proxy-') && o.what.length > 5)
-      && JSON.stringify([...(st?.leftOut ?? [])].sort()) === JSON.stringify(['V1 clip k1 "Title card · Athens"', 'track A2 Music']) && !!st?.startedAt && st.seconds !== undefined,
+      && JSON.stringify([...(st?.leftOut ?? [])].sort()) === JSON.stringify(['V1 clip k1 "Title card · The harbour"', 'track A2 Music']) && !!st?.startedAt && st.seconds !== undefined,
       `${outs.map((o) => A.baseName(o.path)).join(' ')} · ${JSON.stringify(st?.leftOut)}`);
     const refused = [A.askOptions({ ...A.emptyAsk(), lufs: '-50' }).why, A.askOptions({ ...A.emptyAsk(), lufs: '-14', ceiling: '1' }).why, A.askOptions(A.emptyAsk()).why];
     check('page: out of range, or nothing chosen, nothing is posted', refused.every(Boolean), refused.join(' | '));

@@ -11,13 +11,13 @@
 //   2. the take's check (check.json) planned fewer cuts than the take has: each planned cut is matched to the nearest
 //      cut found, in order; a planned shot cut in two keeps its longest piece, and the other piece is "a cut the prompt
 //      did not ask for";
-//   2b. a pick-up's shots file of another count, with times in the take: matched by time (FIX-snatch-S10's one-shot
+//   2b. a pick-up's shots file of another count, with times in the take: matched by time (FIX-grab-S10's one-shot
 //      file for a take cut in two: both pieces under its place, said plainly);
 //   3. the cut names the shot ("S6 · FIX-S6b · take 1 · shot 3"): that clip is a version of place 3;
 //   4. otherwise the shot is listed under "other takes of this scene", with why. Nothing is placed by a guess.
 // Then the cut, for a pick-up in the film: where its clip sits among its scene's placed clips. A place said above stands
 // when it fits there; when it does not and the cut leaves places open, the cut's are shown and both are said
-// (`conflict`); a clip nothing placed takes the places open there (FIX-year-S1 take 2 after place 4: 5 and 6). Then
+// (`conflict`); a clip nothing placed takes the places open there (FIX-tide-S1 take 2 after place 4: 5 and 6). Then
 // another take of the same pick-up stands where it stands.
 // A whole-scene replan (a shots file 1 … N of another length, not a part of an earlier version) is a new version of
 // the scene: the newest version is the scene, the older ones fold under "earlier versions of this scene".
@@ -71,7 +71,7 @@ export interface Made {
   inFilm: boolean;
   /** How its place was known, or why it has none, in words. */
   note?: string;
-  /** Every place it stands for, when more than one (FIX-year-S1 take 2 replaced places 5 and 6 as one clip): it is
+  /** Every place it stands for, when more than one (FIX-tide-S1 take 2 replaced places 5 and 6 as one clip): it is
    *  listed under the first. */
   places?: string[];
   /** The places as the page names the shot: "5–6"; absent when it is the one place. */
@@ -126,7 +126,7 @@ export function takeFolder(src: string): string {
   return k >= 0 && parts.length - k > 2 ? parts.slice(0, k + 2).join('/') : src;
 }
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-/** "FIX-asia-S7 · take 5" → "Take 5"; "take 1" → "Take 1"; "FIX-burst · seedance take 2" → "Seedance take 2". */
+/** "FIX-map-S7 · take 5" → "Take 5"; "take 1" → "Take 1"; "FIX-flare · seedance take 2" → "Seedance take 2". */
 export function takeLabel(name: string, gen: string): string {
   const rest = name.split(' · ').filter((p) => p !== gen && p.replace(/[-_]+/g, ' ') !== gen.replace(/[-_]+/g, ' ')).join(' · ') || name;
   return cap(rest.trim());
@@ -215,7 +215,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
           // with no times to compare, fewer shots than the version now is a part of it
           ?? (ids.length < cur.ids.length && !g.plan!.some((p) => p.t0 !== undefined) ? cur : undefined);
         // a pick-up is never a version of the scene: one with a stands record, or a shots file of under half the scene's
-        // places (FIX-hands-S14 written as 1, 2 for a scene of 6), is a pick-up of those places of the version now
+        // places (FIX-grip-S14 written as 1, 2 for a scene of 6), is a pick-up of those places of the version now
         if (!into && (g.stands || ids.length * 2 <= cur.ids.length)) into = cur;
         if (!into) {
           const v: Version = { n: versions.length + 1, gens: [g.name], ids, timing: timingOf(g.plan), written: g.written, owner: g.name, added: new Map() };
@@ -297,7 +297,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
         continue;
       }
       // a pick-up's shots file of another count than the take's shots, with times in the take: matched by time, so a
-      // shot cut in two keeps its place for both pieces (FIX-snatch-S10's one-shot file), never neither
+      // shot cut in two keeps its place for both pieces (FIX-grab-S10's one-shot file), never neither
       if (gen !== sid && g?.plan && g.plan.every((p) => p.t1 !== undefined) && Math.abs((g.plan[0].t0 ?? 0)) < 0.5 && Math.abs(g.plan[g.plan.length - 1].t1! - t.seconds!) < 0.5) {
         const claims = matchShots(g.plan.map((p) => ({ places: [placeTag(p.id)], t0: p.t0 ?? 0, t1: p.t1 })), segs, 'its shots file');
         if (claims.some((c) => c.places.length)) {
@@ -346,7 +346,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
       unknown.push({ e, said });
     }
     // another take of the same pick-up, its shot called by the same number, stands where the one in the film stands
-    // (FIX-close-S6 take 2 beside its take 1)
+    // (FIX-tight-S6 take 2 beside its take 1)
     for (const { e, said } of unknown) {
       const p = stands.get(`${e.gen}|${e.version}|${said}`);
       if (p) { e.place = p; e.note = `Its prompt calls it shot ${said}; another take of ${e.gen} stands in place ${p} in the film, so this one does too.`; }
@@ -382,7 +382,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
         const es = [...new Set(clips.map(entryOf).filter((e): e is Entry => !!e))];
         const beside = gap.after !== undefined || gap.before !== undefined;
         // what the cut alone says: one place each when as many are open as there are shots; for one shot, the run of open
-        // places from the placed clip beside it whose planned length is nearest the clip's (FIX-year-S1 take 2, 5.6 s
+        // places from the placed clip beside it whose planned length is nearest the clip's (FIX-tide-S1 take 2, 5.6 s
         // after place 4: places 5 and 6, planned 4.6 s, rather than 5 alone, 2.6 s); with no planned times, the open
         // places when they are two at most, else none
         const runFor = (e: Entry): string[] | undefined => {
@@ -402,7 +402,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
           const cut = byCut(k);
           if (said.length && fitsGap(gap, said)) {
             // one shot alone in the gap, said for the first of the places the cut has it replacing: it stands for all of
-            // them (it replaced them as one clip: FIX-year-S1 take 2, its file "5", for 5 and 6)
+            // them (it replaced them as one clip: FIX-tide-S1 take 2, its file "5", for 5 and 6)
             if (es.length === 1 && cut && cut.length > said.length && said.every((p, j) => cut[j] === p)) {
               setPlaces(e, cut);
               e.note = `${e.note ? `${e.note} ` : ''}In the cut it sits ${gapWords(gap)}, where places ${placesLabel(cut, placesOf(e.version))} are out of the film: it stands for them.`;
@@ -428,7 +428,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
         });
       }
     }
-    // ---- another take of the same pick-up, cut into as many shots, stands where it stands (FIX-year-S1 take 1 beside
+    // ---- another take of the same pick-up, cut into as many shots, stands where it stands (FIX-tide-S1 take 1 beside
     // take 2, which the film uses): a pick-up's takes are made for the same places
     for (const e of entries) {
       if (!e.pickup || (e.place && placesOf(e.version).includes(e.place))) continue;

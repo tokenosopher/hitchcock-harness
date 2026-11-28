@@ -60,7 +60,7 @@ scene = open(os.path.join(BD, f'{B}-scene.md')).read(); S = sections(scene)
 spec = open(os.path.join(BD, f'{B}-prompt-spec.md')).read(); SP = sections(spec)
 COMMON_P = next((p for p in (os.path.join(FILM, r, 'prompt-common.md') for r in ('generations', 'blocks')) if os.path.exists(p)), None)
 COMMON = sections(open(COMMON_P).read()) if COMMON_P else {}
-def common(text):   # @KEY -> blocks/prompt-common.md's section KEY (the longest known key wins, so '@NIA SHEET' beats '@NIA')
+def common(text):   # @KEY -> blocks/prompt-common.md's section KEY (the longest known key wins, so '@MAREN SHEET' beats '@MAREN')
     for k in sorted(COMMON, key=len, reverse=True):
         text = text.replace('@' + k, COMMON[k])
     return text

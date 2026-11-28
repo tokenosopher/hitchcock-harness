@@ -48,13 +48,13 @@ const boat1 = pick('S1', 'FIX-boat-S1', 1, 6.05), boat2 = pick('S1', 'FIX-boat-S
 const S4 = own('S4', 30.16, [5.875, 11.625, 16.833333, 26.041667]);
 const wallet = pick('S4', 'FIX-door-S4', 1, 7.041667);
 const S10 = own('S10', 13.041667, [2.791667, 6.083333, 8.541667, 10.208333]);
-const snatch = pick('S10', 'FIX-rope-S10', 1, 6.041667, [2.958333]);
+const grab = pick('S10', 'FIX-rope-S10', 1, 6.041667, [2.958333]);
 const S11 = own('S11', 12.04, [2.167, 2.833, 4.042, 6.917, 8.833]);
-const face = pick('S11', 'FIX-face-S11', 1, 4.041667);
+const face = pick('S11', 'FIX-look-S11', 1, 4.041667);
 const S16 = own('S16', 18, [5.6, 9.52, 13.2]);
-const open = pick('S16', 'FIX-open-S16', 1, 8.041667);
+const open = pick('S16', 'FIX-start-S16', 1, 8.041667);
 const S18 = own('S18', 21.2, [6.56, 10.64, 14.84]);
-const close = pick('S18', 'FIX-close-S18', 1, 5.041667);
+const close = pick('S18', 'FIX-tight-S18', 1, 5.041667);
 // Alma's stopgap files, as she wrote them (ids with times from 0)
 const stop = (g: string, scene: string, ...shots: [string, number, number][]): GenPlan => ({ name: g, scene, plan: shots.map(([id, t0, t1]) => ({ id, t0, t1 })) });
 const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, scene, stands: readStands(raw)! });
@@ -105,10 +105,10 @@ const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, sce
   });
 
   // ---- kind 3: an insert inside a place
-  await ok('kind 3 · FIX-close-S18 inside S18 place 1 from 4.75 s: under Shot 1, the cut agrees, no disagreement', () => {
-    const r = rec('FIX-close-S18', 'S18', { shots: [{ stands_for: '1', inside: { place: '1', from: 4.75 } }] });
+  await ok('kind 3 · FIX-tight-S18 inside S18 place 1 from 4.75 s: under Shot 1, the cut agrees, no disagreement', () => {
+    const r = rec('FIX-tight-S18', 'S18', { shots: [{ stands_for: '1', inside: { place: '1', from: 4.75 } }] });
     at = 0;
-    const cut = cutOf([clip(S18.src, 0, 4.75, 'S18'), clip(close.src, 0, 1.83, 'S18', 'S18 · FIX-close-S18 · take 1'), clip(S18.src, 7.75, 10.667, 'S18'), clip(S18.src, 10.667, 14.875, 'S18'), clip(S18.src, 15.875, 20.708, 'S18')]);
+    const cut = cutOf([clip(S18.src, 0, 4.75, 'S18'), clip(close.src, 0, 1.83, 'S18', 'S18 · FIX-tight-S18 · take 1'), clip(S18.src, 7.75, 10.667, 'S18'), clip(S18.src, 10.667, 14.875, 'S18'), clip(S18.src, 15.875, 20.708, 'S18')]);
     assert.deepEqual(columns([S18, close], [base('S18', 4), r], cut, 'S18', 4)(close.src), ['1']);
     assert.equal(noteOf([S18, close], [base('S18', 4), r], cut, 'S18', close.src)?.conflict, undefined);
     const list = shotPlaces({ scenes: [{ id: 'S18', title: 'S18', shots: 4 }], gens: [base('S18', 4), r], takes: [S18, close], cut });
@@ -129,11 +129,11 @@ const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, sce
   });
 
   // ---- kind 5: planned for a place, not in the cut yet (the main case: how the user meets every pick-up)
-  await ok('kind 5 · FIX-face-S11, not in the cut: the record or the stopgap file put it under Shot 1; with neither, Other, with why', () => {
+  await ok('kind 5 · FIX-look-S11, not in the cut: the record or the stopgap file put it under Shot 1; with neither, Other, with why', () => {
     const takes = [S11, face];
-    assert.deepEqual(columns(takes, [base('S11', 6), rec('FIX-face-S11', 'S11', { shots: [{ stands_for: ['1'] }] })], undefined, 'S11', 6)(face.src), ['1']);
-    assert.deepEqual(columns(takes, [base('S11', 6), stop('FIX-face-S11', 'S11', ['1', 0, 4.04])], undefined, 'S11', 6)(face.src), ['1']);
-    assert.deepEqual(columns(takes, [base('S11', 6), { name: 'FIX-face-S11', scene: 'S11', plan: [{ id: '1' }] }], undefined, 'S11', 6)(face.src), ['1'], 'ids only, no times');
+    assert.deepEqual(columns(takes, [base('S11', 6), rec('FIX-look-S11', 'S11', { shots: [{ stands_for: ['1'] }] })], undefined, 'S11', 6)(face.src), ['1']);
+    assert.deepEqual(columns(takes, [base('S11', 6), stop('FIX-look-S11', 'S11', ['1', 0, 4.04])], undefined, 'S11', 6)(face.src), ['1']);
+    assert.deepEqual(columns(takes, [base('S11', 6), { name: 'FIX-look-S11', scene: 'S11', plan: [{ id: '1' }] }], undefined, 'S11', 6)(face.src), ['1'], 'ids only, no times');
     assert.deepEqual(columns(takes, [base('S11', 6)], undefined, 'S11', 6)(face.src), ['Other']);
     assert.match(noteOf(takes, [base('S11', 6)], undefined, 'S11', face.src)!.note!, /could not be matched to places: it has no shots file or prompt/);
   });
@@ -147,8 +147,8 @@ const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, sce
   });
 
   // ---- kind 7: starts from one take and cuts back into another mid-shot
-  await ok('kind 7 · FIX-open-S16 to 4.5 s, then take 1 from 4.0 s: under Shot 1, inside place 1 to 4.5 s', () => {
-    const r = rec('FIX-open-S16', 'S16', { shots: [{ stands_for: '1', inside: { place: '1', to: 4.5 } }] });
+  await ok('kind 7 · FIX-start-S16 to 4.5 s, then take 1 from 4.0 s: under Shot 1, inside place 1 to 4.5 s', () => {
+    const r = rec('FIX-start-S16', 'S16', { shots: [{ stands_for: '1', inside: { place: '1', to: 4.5 } }] });
     at = 0;
     const cut = cutOf([clip(open.src, 0, 4.5, 'S16'), clip(S16.src, 4.0, 5.625, 'S16'), clip(S16.src, 5.625, 9.542, 'S16'), clip(S16.src, 9.542, 13.208, 'S16'), clip(S16.src, 13.208, 18, 'S16')]);
     assert.deepEqual(columns([S16, open], [base('S16', 4), r], cut, 'S16', 4)(open.src), ['1']);
@@ -158,22 +158,22 @@ const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, sce
   // ---- kind 8: the record's count is not the take's (FIX-rope-S10)
   await ok('kind 8 · FIX-rope-S10 cut in 2, Alma\'s old one-shot file ("2", 0 to 6.04 s): both pieces under Shot 2, none under Other, said plainly', () => {
     const g = stop('FIX-rope-S10', 'S10', ['2', 0, 6.04]);
-    const c = columns([S10, snatch], [base('S10', 5), g], undefined, 'S10', 5);
-    assert.deepEqual(c(snatch.src), ['2 · 1/2', '2 · 2/2']);
-    assert.match(noteOf([S10, snatch], [base('S10', 5), g], undefined, 'S10', snatch.src)!.note!, /^Its shots file says 1 shot, the take was cut into 2/);
-    const v = pickupView({ takes: [S10, snatch], scenes: [{ id: 'S10', shots: 5 }], gens: [base('S10', 5), g] });
-    assert.deepEqual(shotsOf(v.takes.find((t) => t.src === snatch.src)).map((s) => [s.n, s.tag]), [[2, '2a'], [2, '2b']], 'one cell, side by side');
+    const c = columns([S10, grab], [base('S10', 5), g], undefined, 'S10', 5);
+    assert.deepEqual(c(grab.src), ['2 · 1/2', '2 · 2/2']);
+    assert.match(noteOf([S10, grab], [base('S10', 5), g], undefined, 'S10', grab.src)!.note!, /^Its shots file says 1 shot, the take was cut into 2/);
+    const v = pickupView({ takes: [S10, grab], scenes: [{ id: 'S10', shots: 5 }], gens: [base('S10', 5), g] });
+    assert.deepEqual(shotsOf(v.takes.find((t) => t.src === grab.src)).map((s) => [s.n, s.tag]), [[2, '2a'], [2, '2b']], 'one cell, side by side');
   });
   await ok('kind 8 · the same with a record of one shot for places 2 and 3 (no times): one piece each', () => {
     const r = rec('FIX-rope-S10', 'S10', { shots: [{ stands_for: ['2', '3'] }] });
-    assert.deepEqual(columns([S10, snatch], [base('S10', 5), r], undefined, 'S10', 5)(snatch.src), ['2', '3']);
+    assert.deepEqual(columns([S10, grab], [base('S10', 5), r], undefined, 'S10', 5)(grab.src), ['2', '3']);
   });
   await ok('kind 8 · Alma\'s corrected file (2: 0 to 2.958, 3: 2.958 to 6.04): 2 and 3, out of the cut and in it', () => {
     const g = stop('FIX-rope-S10', 'S10', ['2', 0, 2.958333], ['3', 2.958333, 6.04]);
-    assert.deepEqual(columns([S10, snatch], [base('S10', 5), g], undefined, 'S10', 5)(snatch.src), ['2', '3']);
+    assert.deepEqual(columns([S10, grab], [base('S10', 5), g], undefined, 'S10', 5)(grab.src), ['2', '3']);
     at = 0;
-    const cut = cutOf([clip(snatch.src, 0, 2.958, 'S10', 'S10 · FIX-rope-S10 · take 1 · shot 1'), clip(snatch.src, 2.958, 6.042, 'S10', 'S10 · FIX-rope-S10 · take 1 · shot 2'), clip(S10.src, 6.083, 8.542, 'S10'), clip(S10.src, 8.542, 10.208, 'S10'), clip(S10.src, 10.208, 11.75, 'S10')]);
-    assert.deepEqual(columns([S10, snatch], [base('S10', 5), g], cut, 'S10', 5)(snatch.src), ['2', '3'], 'before place 3 in the cut: 2 and 3 fit there');
+    const cut = cutOf([clip(grab.src, 0, 2.958, 'S10', 'S10 · FIX-rope-S10 · take 1 · shot 1'), clip(grab.src, 2.958, 6.042, 'S10', 'S10 · FIX-rope-S10 · take 1 · shot 2'), clip(S10.src, 6.083, 8.542, 'S10'), clip(S10.src, 8.542, 10.208, 'S10'), clip(S10.src, 10.208, 11.75, 'S10')]);
+    assert.deepEqual(columns([S10, grab], [base('S10', 5), g], cut, 'S10', 5)(grab.src), ['2', '3'], 'before place 3 in the cut: 2 and 3 fit there');
   });
   await ok('kind 8 · matchShots: a missed cut holds two listed shots; a listed shot outside the times says so', () => {
     const fixS6 = [['1', 0, 3], ['2', 3, 6], ['3', 6, 7.5], ['4', 7.5, 13.8], ['5', 13.8, 15.3], ['6', 15.3, 19]].map(([id, t0, t1]) => ({ places: [id as string], t0: t0 as number, t1: t1 as number }));
@@ -199,25 +199,25 @@ const rec = (g: string, scene: string, raw: unknown): GenPlan => ({ name: g, sce
   });
 
   // ---- a pick-up's plan is never a version of its scene
-  await ok('a pick-up\'s shots file of 1 and 2 with times from 0 (FIX-hands-S14 written so) is not a version of S14: under Shots 1 and 2', () => {
+  await ok('a pick-up\'s shots file of 1 and 2 with times from 0 (FIX-grip-S14 written so) is not a version of S14: under Shots 1 and 2', () => {
     const S14 = own('S14', 22.04, [3.333, 6.542, 10.708, 15.125, 19.333]);
-    const hands = pick('S14', 'FIX-hands-S14', 1, 5.041667, [2.5]);
-    const gens = [base('S14', 6), stop('FIX-hands-S14', 'S14', ['1', 0, 2.5], ['2', 2.5, 5.04])];
+    const hands = pick('S14', 'FIX-grip-S14', 1, 5.041667, [2.5]);
+    const gens = [base('S14', 6), stop('FIX-grip-S14', 'S14', ['1', 0, 2.5], ['2', 2.5, 5.04])];
     const list = shotPlaces({ scenes: [{ id: 'S14', title: 'S14', shots: 6 }], gens, takes: [S14, hands] });
     assert.equal(list.scenes[0].versions.length, 1);
     assert.deepEqual(columns([S14, hands], gens, undefined, 'S14', 6)(hands.src), ['1', '2']);
-    const recd = shotPlaces({ scenes: [{ id: 'S14', title: 'S14', shots: 6 }], gens: [base('S14', 6), rec('FIX-hands-S14', 'S14', { shots: [{ stands_for: '1' }, { stands_for: '2' }] })], takes: [S14, hands] });
+    const recd = shotPlaces({ scenes: [{ id: 'S14', title: 'S14', shots: 6 }], gens: [base('S14', 6), rec('FIX-grip-S14', 'S14', { shots: [{ stands_for: '1' }, { stands_for: '2' }] })], takes: [S14, hands] });
     assert.equal(recd.scenes[0].versions.length, 1, 'a record: never a version');
   });
 
   // ---- a film with no record (made before the record existed): what the pick-ups' lists say, as before
-  await ok('no record: a pick-up\'s own shots file of its place counts as before (FIX-egg-S2 "1", FIX-storm-S6 by its prompt "5")', () => {
+  await ok('no record: a pick-up\'s own shots file of its place counts as before (FIX-shell-S2 "1", FIX-wave-S6 by its prompt "5")', () => {
     const S2 = own('S2', 18, [4.9, 9, 11.6]);
-    const egg = pick('S2', 'FIX-egg-S2', 1, 5.04);
-    assert.deepEqual(columns([S2, egg], [base('S2', 4), { name: 'FIX-egg-S2', scene: 'S2', plan: [{ id: '1' }] }], undefined, 'S2', 4)(egg.src), ['1']);
+    const shell = pick('S2', 'FIX-shell-S2', 1, 5.04);
+    assert.deepEqual(columns([S2, shell], [base('S2', 4), { name: 'FIX-shell-S2', scene: 'S2', plan: [{ id: '1' }] }], undefined, 'S2', 4)(shell.src), ['1']);
     const S6 = own('S6', 17, [2.6, 6, 7.8, 13.4, 15.6]);
-    const storm = pick('S6', 'FIX-storm-S6', 1, 7);
-    assert.deepEqual(columns([S6, storm], [base('S6', 6), { name: 'FIX-storm-S6', scene: 'S6', prompt: ['5'] }], undefined, 'S6', 6)(storm.src), ['5']);
+    const wave = pick('S6', 'FIX-wave-S6', 1, 7);
+    assert.deepEqual(columns([S6, wave], [base('S6', 6), { name: 'FIX-wave-S6', scene: 'S6', prompt: ['5'] }], undefined, 'S6', 6)(wave.src), ['5']);
   });
 
   console.log(`\n${n} passed`);

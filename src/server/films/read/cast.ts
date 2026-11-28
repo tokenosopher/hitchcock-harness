@@ -60,7 +60,7 @@ async function readRound(ctx: FilmCtx, rel: string, name: string, cid: string): 
       }
     const looks = asRecord(pj.looks);
     if (looks) for (const [k, v] of Object.entries(looks)) if (typeof v === 'string') notes.set(k, v);
-    // a file may carry the character's name between the ID and the round ("C03-scirpalus-r1-1.png" for "C03 r1-1"):
+    // a file may carry the character's name between the ID and the round ("C03-bram-r1-1.png" for "C03 r1-1"):
     // it is that listed candidate, not a second one still to land (11 Nov: such a round read as running for ever)
     const same = (fileId: string, listedId: string) => fileId === listedId || fileId.endsWith(`-${listedId}`);
     for (const c of candidates) {

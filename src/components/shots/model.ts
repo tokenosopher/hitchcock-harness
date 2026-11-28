@@ -53,7 +53,7 @@ export interface PageShot {
 
 /** The take's shots, each with its part of the prompt when there are as many parts as shots (matched by count only).
  *  With no clip cut yet, the prompt's shot parts stand for the shots. A shot is named by the place it stands for in its
- *  scene when `placeOf` knows it (places.ts, the one rule: "5–6" for FIX-year-S1 take 2), else by its prompt part's id,
+ *  scene when `placeOf` knows it (places.ts, the one rule: "5–6" for FIX-tide-S1 take 2), else by its prompt part's id,
  *  else by its own number. */
 export function pageShots(m: Model | undefined, cut: Shot[], placeOf?: (i: number) => string | undefined): { shots: PageShot[]; matched: boolean } {
   const parts = m?.shotSecs ?? [];

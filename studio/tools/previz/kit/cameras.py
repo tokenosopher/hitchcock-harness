@@ -46,8 +46,8 @@ def frame_on(pos, pt, diag, fx=0.0, fy=0.0):
 def shot(id, t0, t1, diag, pos, pt, in_frame=(), name=None, fx=0.0, fy=0.0, focus=None, handheld=False, move=None, fstop=None,
          jolts=(), exposure=None, board=None, seed=None):
     """Declare shot `id` ('1', '5A', ...) from t0 to t1 s: camera at pos framing world point pt at (fx, fy) with lens diag (deg).
-    in_frame: what the frame shows, as the prompt names it (cast keys, props, set pieces: ['NIA', 'SWORD', 'DOOR']); it goes into
-    the generation's shots file for the pre-submit check. focus: a world point, or a figure's name ('NIA': the point between
+    in_frame: what the frame shows, as the prompt names it (cast keys, props, set pieces: ['MAREN', 'SWORD', 'DOOR']); it goes into
+    the generation's shots file for the pre-submit check. focus: a world point, or a figure's name ('MAREN': the point between
     its eyes, followed as it moves); by default the nearest face in frame turned toward the lens among the
     shot's in_frame figures (else the nearest head in frame, else pt), followed as it moves. DOF f/2 at 47 deg and under, else
     f/2.8 (fstop overrides). handheld: True or an amplitude (seed varies the breathing); jolts: times of bumps.

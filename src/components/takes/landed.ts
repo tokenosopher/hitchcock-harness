@@ -41,7 +41,7 @@ export interface TakeSpend {
 }
 
 export interface LandedTake {
-  /** The take's folder, relative to the film repo ("assets/films/<slug>/generations/FIX-oh-S4/takes/take1"). */
+  /** The take's folder, relative to the film repo ("assets/films/<slug>/generations/FIX-gasp-S4/takes/take1"). */
   folder: string;
   gen: string;
   /** "take1": the take's folder name, the key of its entry in the findings record. */

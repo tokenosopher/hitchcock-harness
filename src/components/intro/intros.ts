@@ -114,11 +114,11 @@ export const INTROS: Record<IntroKey, Intro> = {
   },
   release: {
     name: 'the release',
-    text: 'The finish line: your film gets its subtitles and lands in the final-cuts folder. I write a title, a description and a caption for each platform. The posting is yours: you post each one by hand.',
+    text: 'The finish line: your film gets its subtitles, a copy at the loudness social apps expect, and lands in the final-cuts folder. For each platform I write two or three options for every text: title, description, caption. The posting is yours: you post each one by hand.',
   },
   platform: {
     name: 'this platform',
-    text: 'One platform at a time: pick, rewrite, or ask for another draft. Here are my text and cover picture for this one. Then post it yourself with the steps below, and paste the link so I can keep the record.',
+    text: 'One platform at a time: tap one of my options for each text, rewrite it, or ask for another. Pick the cover from my frames, or any frame of the film. Then post it yourself with the steps below, and paste the link so I can keep the record.',
   },
   debrief: {
     name: 'the debrief',

@@ -1,5 +1,5 @@
 // npx tsx scripts/trimstop-test.ts
-// A clip that could not be enlarged from the left all the way to its beginning: S1 shot 6, FIX-react-S1 take 2 from 0.833 s, right after S1 take 1 shot 5, which
+// A clip that could not be enlarged from the left all the way to its beginning: S1 shot 6, FIX-turn-S1 take 2 from 0.833 s, right after S1 take 1 shot 5, which
 // ends at 14.333 s. With ripple off (the R key, no button) the head stops at the clip before and nothing said so; with
 // ripple on (the default) it grows to the file's first frame and everything after moves later, its sound with it, as one
 // step. components/edit/trimStop.ts says why a trim stops; model.ts trimClip makes the trim. The numbers are a real
@@ -14,13 +14,13 @@ const ok = (what: string, f: () => void) => { f(); n++; console.log(`ok · ${wha
 
 const G = 'assets/films/sample-pickups/generations';
 const S1 = `${G}/S1/takes/take1/S1-take1-480p.mp4`;
-const R2 = `${G}/FIX-react-S1/takes/take2/FIX-react-S1-take2-480p.mp4`;
+const R2 = `${G}/FIX-turn-S1/takes/take2/FIX-turn-S1-take2-480p.mp4`;
 const S2 = `${G}/S2/takes/take1/S2-take1-480p.mp4`;
 const c = (id: string, src: string, a: number, b: number, at: number, label: string): TimelineClip =>
   ({ id, src, in: a, out: b, at, label, takeRef: { scene: label.split(' · ')[0], take: label.split(' · ').slice(1, -1).join(' · ') } });
 const pics = [
   c('cmwxbl1fsn', S1, 14, 15.625, 12.708333, 'S1 · take 1 · shot 5'),
-  c('cmwxbkeral', R2, 0.833333, 2.291667, 14.333333, 'S1 · FIX-react-S1 · take 2 · shot 6'),
+  c('cmwxbkeral', R2, 0.833333, 2.291667, 14.333333, 'S1 · FIX-turn-S1 · take 2 · shot 6'),
   c('s2-take', S2, 0, 5.041667, 15.791667, 'S2 · take 1 · shot 1'),
 ];
 const cut = (): Timeline => ({ version: 'v35', fps: 24, width: 854, height: 480, at: '', markers: [], tracks: [

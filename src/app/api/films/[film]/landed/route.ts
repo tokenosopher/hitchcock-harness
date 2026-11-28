@@ -1,5 +1,5 @@
-// GET → {takes: {<take folder>: LandedTake}}: what the app knows of each take that came back besides its shots (ASKS
-// 131): the card and README that say what was asked, the spend row of its job, Alma's findings record, findings.md and
+// GET → {takes: {<take folder>: LandedTake}}: what the app knows of each take that came back besides its shots:
+// the card and README that say what was asked, the spend row of its job, Alma's findings record, findings.md and
 // check.json (server/films/read/landed.ts). Read only.
 import { connection } from 'next/server';
 import { isMock } from '@/fixtures/mock';

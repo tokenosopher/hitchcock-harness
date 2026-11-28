@@ -234,17 +234,17 @@ ok('the record of what was sent: its layout', () => {
   assert.deepEqual(sentLayout({ layout: null }), {});
   assert.deepEqual(sentLayout(undefined), {});
   // a pick-up's record names its own previz take, not the scene's: not read as one (placed by its date)
-  const egg = { layout: { previz_take: 'previz/FIX-egg-S2/FIX-egg-S2-previz-take-3.json', previz_take_number: 3, storyboard_version: 'v3' } };
-  assert.deepEqual(sentLayout(egg, 'S2'), {});
+  const shell = { layout: { previz_take: 'previz/FIX-shell-S2/FIX-shell-S2-previz-take-3.json', previz_take_number: 3, storyboard_version: 'v3' } };
+  assert.deepEqual(sentLayout(shell, 'S2'), {});
   assert.deepEqual(sentLayout({ layout: { previz_take: 'previz/S2/S2-previz-take-5.json', previz_take_number: 5, storyboard_version: 'v6' } }, 'S2'), { previzTake: 5, storyboard: 'v6' });
   assert.deepEqual(sentLayout({ layout: { previz_take: 'previz/S20/S20-previz-take-1.json', previz_take_number: 1 } }, 'S2'), {});
   // such a pick-up, made after the scene's newest previz take, is under the newest layout with the scene's own take
   const pv = (n: number, written: number) => ({ n, shots: [{ id: '1', t0: 0, t1: 4 }, { id: '2', t0: 4, t1: 9 + n }], lines: [], written });
   const lays = sceneLayouts([pv(3, 10), pv(5, 20)], [], [
     { src: 'S2/take1.mp4', name: 'take 1', previzTake: 5, landed: true },
-    { src: 'FIX-egg-S2/take1.mp4', name: 'FIX egg S2 · take 1', ...sentLayout(egg, 'S2'), made: 30, landed: true },
+    { src: 'FIX-shell-S2/take1.mp4', name: 'FIX shell S2 · take 1', ...sentLayout(shell, 'S2'), made: 30, landed: true },
   ]);
-  assert.deepEqual(lays.map((l) => [l.key, l.takes.map((t) => t.src)]), [[5, ['S2/take1.mp4', 'FIX-egg-S2/take1.mp4']]]);
+  assert.deepEqual(lays.map((l) => [l.key, l.takes.map((t) => t.src)]), [[5, ['S2/take1.mp4', 'FIX-shell-S2/take1.mp4']]]);
 });
 
 ok('the layouts sample: two layouts of S3, four safe swaps, the cut on Layout 1, both choices build', () => {

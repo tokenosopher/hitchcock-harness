@@ -3,11 +3,11 @@
 //
 // A pick-up's take is a row of its scene, as the scene's own takes are. Each of its shots sits in the column of the
 // place it stands for, as the Shots page places it (components/shots/places.ts, the one mapping, never a second): a
-// one-shot pick-up of place 1 in Shot 1's column, FIX-close-S6 (which calls its shot "10") in the column the cut has it
+// one-shot pick-up of place 1 in Shot 1's column, FIX-tight-S6 (which calls its shot "10") in the column the cut has it
 // in. Its numbers are the take's for the whole page, so a click tries it in that place, the cut's clip of it is "in the
 // film" there, and a drag puts it there, as with every other take. A shot whose place is not known is shown in an "Other
 // shots" column at the end, with why; a click on it still tries it where its own number says. A shot that stands for
-// several places (FIX-year-S1 take 2 for 5 and 6) sits under the first and is named "5–6" (`stands`). Where a place
+// several places (FIX-tide-S1 take 2 for 5 and 6) sits under the first and is named "5–6" (`stands`). Where a place
 // comes from, and in what order the evidence counts, is places.ts's alone (docs/places.md).
 //
 // Copies: before this, pick-up takes were copied by hand under their scene's take 1 as variations (their
@@ -60,7 +60,7 @@ export function copiesOf(takes: TakeShots[]): Map<string, string> {
   return out;
 }
 
-/** A pick-up take: a take of another generation folder than its scene's own (generations/FIX-egg-S2 for S2). Tests and
+/** A pick-up take: a take of another generation folder than its scene's own (generations/FIX-shell-S2 for S2). Tests and
  *  blocks keep their own ways (a take with a `group` is a test). */
 export const isPickup = (t: TakeShots): boolean => !t.group && !t.variation && genOf(t.src) !== t.scene && /^FIX-/i.test(genOf(t.src));
 
@@ -99,7 +99,7 @@ export function pickupView(input: {
   gens?: GenPlan[]; checks?: Record<string, number[]>; cut?: Timeline; keep?: Map<string, Placed>;
 }): PickupView {
   const alias = copiesOf(input.takes);
-  // a pick-up's take named as the cut names it: "FIX-close-S6 · take 2" (the server says "FIX close S6 · take 2")
+  // a pick-up's take named as the cut names it: "FIX-tight-S6 · take 2" (the server says "FIX tight S6 · take 2")
   const listed = input.takes.filter((t) => !alias.has(t.src)).map((t) => (isPickup(t) ? { ...t, name: `${genOf(t.src)} · ${lower(takeLabel(t.name, genOf(t.src)))}` } : t));
   const placed = new Map<string, Placed>();
   const other = new Set<string>();
