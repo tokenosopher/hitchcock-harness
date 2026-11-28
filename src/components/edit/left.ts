@@ -19,8 +19,9 @@ export const LEFT_REL = 'harness/left.json';
 export const NEXT_TAB = "What's next";
 export const LEFT_NOTE = `The user's own ticks on the Edit page's "${NEXT_TAB}" tab, each with the cut version it was made on. Only the user sets or takes back a tick.`;
 
-export type TickId = 'approved' | 'sound' | 'subs';
-export const TICK_IDS: TickId[] = ['approved', 'sound', 'subs'];
+/** `posted`: the user's word that publishing is done (posted by hand, or the platforms left skipped). */
+export type TickId = 'approved' | 'sound' | 'subs' | 'posted';
+export const TICK_IDS: TickId[] = ['approved', 'sound', 'subs', 'posted'];
 /** A tick: when, the version the cut was (its name, for the words) and, since 15 Nov (stage 3b), the state it was
  *  made on (its content's hash in the history, and the step's rev while the history holds it) and whether that state
  *  had edits since the version. */
@@ -89,6 +90,22 @@ export interface MasterFileBrief { version: string; path: string; at?: string; p
 export function releaseBrief(file: { final?: { version: string }; platforms: { send: { posted?: unknown } }[] } | undefined): LeftAnswer['release'] {
   if (!file) return undefined;
   return { ...(file.final ? { final: { version: file.final.version } } : {}), platforms: file.platforms.length, posted: file.platforms.filter((p) => !!p.send.posted).length };
+}
+/** The release in brief as the film's state carries it (PostInfo.release, the server's reader and the samples), read
+ *  from social/release.json as it is on disk and the ticks file: how many platforms have texts and how many are posted,
+ *  and the user's "Done" on publishing (the `posted` tick), so "Waiting for you" can be worked out wherever the state
+ *  is (derive.ts releaseWait). Undefined when `raw` is not a release file. */
+export function postBrief(raw: unknown, ticks?: LeftFile['ticks']): { final?: { path: string; version?: string }; platforms: number; posted: number; done?: string } | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as { final?: { path?: unknown; version?: unknown }; platforms?: unknown };
+  const fp = r.final && typeof r.final.path === 'string' ? r.final.path : undefined;
+  const plats = Array.isArray(r.platforms) ? r.platforms.filter((p): p is { send?: { posted?: unknown } } => !!p && typeof p === 'object') : [];
+  const done = ticks?.posted?.at;
+  return {
+    ...(fp ? { final: { path: fp, ...(typeof r.final!.version === 'string' ? { version: r.final!.version } : {}) } } : {}),
+    platforms: plats.length, posted: plats.filter((p) => !!p.send && typeof p.send === 'object' && !!p.send.posted).length,
+    ...(done ? { done } : {}),
+  };
 }
 /** The newest master of any version among a render listing (the plain masters that are the master of their version). */
 export function newestMasterOf(files: { kind: string; tag?: string; earlier?: boolean; version: string; path: string }[]): string | undefined {
@@ -241,6 +258,8 @@ export type LeftDo =
   | { kind: 'master'; again: boolean; retry?: boolean }   // the header's "Render master" call, then the Renders tab
   | { kind: 'renders' }                 // the Renders tab
   | { kind: 'release' }                 // the Release page
+  | { kind: 'check' }                   // the new takes, not looked at yet: the first put in its place
+  | { kind: 'on-edit'; step: StepId }   // the film page: the Edit page's What's next at that step, where it is ticked
   | EarlyDo;                            // the six early steps (early.ts, 15 Nov): Alma's box, a page, the planned shots, the takes, the go
 
 export interface LeftStep {
@@ -267,6 +286,9 @@ export interface LeftStep {
   waitFull?: string;
   /** What a press on the row does. */
   row: LeftDo;
+  /** The step's work is being made (pick-ups or retakes for the cut; the platforms' texts Alma drafts after
+   *  the final is named): no button, the being-made mark; `yours` when a go among it waits for the user. */
+  working?: { yours: boolean };
 }
 
 export interface LeftInput {
@@ -294,12 +316,27 @@ export interface LeftInput {
   master: { state?: 'queued' | 'running' | 'done' | 'failed' | 'none'; stale?: string; newest?: string; gap?: MasterGap };
   /** The release file: the final's version, how many platforms and how many posted. Undefined: no file. */
   release?: { final?: { version: string }; platforms: number; posted: number };
+  /** Alma was asked for the platforms' texts for the final and is on it (her turn or a release task of hers; textsAsked):
+   *  the last step reads as being made until the texts are in the release file. */
+  drafting?: boolean;
   /** The final's cut against the cut now, when it is of another version (`words` end on "since the final"). */
   finalGap?: CutGap;
   ticks: LeftFile['ticks'];
   /** The six early steps from the script on (early.ts, 15 Nov), put before the seven; absent: the seven alone. */
   early?: EarlyStep[];
+  /** Pick-ups or retakes being made for scenes in the cut (lib/editWork.ts `line`, and whether a go of theirs waits for
+   *  the user): the cut is not approved while its next version is being made. */
+  work?: { line: string; go: boolean };
+  /** How many takes landed after the ones the cut uses and were not looked at in this browser (openAt.ts newTakes):
+   *  the step says to go and check them before it offers the approve. */
+  fresh?: number;
+  /** The list is the one on the film page: what the user ticks is ticked on the Edit page, so a tick there is a way to
+   *  the Edit page's step, and a tick is taken back there. */
+  board?: boolean;
 }
+
+/** A step's tick, on the film page: the way to the Edit page where it is made. */
+export const ON_EDIT: Record<TickId, string> = { approved: 'Go and check', sound: 'Listen on the Edit page', subs: 'No subtitles: say so on the Edit page', posted: 'Done: say so on the Edit page' };
 
 /** The newest master's cut against the cut now (sameCut.ts cutGap, `words` ending on "since the master"). `app`: the
  *  app rendered that master (an outside master of the same content counts as the outside master of the cut does: not
@@ -414,10 +451,16 @@ export function whatIsLeft(i: LeftInput): LeftView {
   }
   else drafts.push({ id: 'final', done: false, facts: 'no final yet', row: renders, act: { label: 'Open Renders', do: renders } });
 
-  // 7. published on every platform
+  // 7. published on every platform: while Alma drafts the texts it is being made; once they are in it is the user's, with Open Release and a quiet "Done"
   const r = i.release;
   const posted = !!r && r.platforms > 0 && r.posted === r.platforms;
-  drafts.push({ id: 'posted', done: posted, facts: !r || !r.platforms ? 'no texts yet' : `${r.posted} of ${r.platforms} posted`, row: { kind: 'release' }, act: { label: 'Open Release', do: { kind: 'release' } } });
+  const rel: LeftDo = { kind: 'release' };
+  const open = { label: 'Open Release', do: rel };
+  if (posted) drafts.push({ id: 'posted', done: true, facts: `${r!.posted} of ${r!.platforms} posted`, row: rel });
+  else if (t.posted) drafts.push({ id: 'posted', done: true, ticked: 'posted', facts: `${r?.platforms ? `${r.posted} of ${r.platforms} posted · ` : ''}ticked done by you`, row: rel });
+  else if (r?.final && r.platforms > 0) drafts.push({ id: 'posted', done: false, facts: `Post to every platform · ${r.posted} of ${r.platforms} posted`, row: rel, act: open, also: { label: 'Done', do: { kind: 'tick', tick: 'posted' } } });
+  else if (r?.final && i.drafting) drafts.push({ id: 'posted', done: false, facts: 'Alma is drafting the texts for every platform', working: { yours: false }, row: rel });
+  else drafts.push({ id: 'posted', done: false, facts: !r || !r.platforms ? 'no texts yet' : `${r.posted} of ${r.platforms} posted`, row: rel, act: open });
 
   if (before) {
     // nothing to approve or upscale before the takes are in
@@ -425,6 +468,26 @@ export function whatIsLeft(i: LeftInput): LeftView {
       if (d.id === 'approved') d.facts = 'after the first takes are in';
       if (d.id === 'full') { d.facts = 'after the cut is approved'; d.done = false; }
       if (d.id === 'sound' && !t.sound && i.sound.music + i.sound.effects === 0) d.facts = 'no music yet';
+    }
+  }
+  // no approve while the cut's next version is being made; once it has landed, the new takes are checked first
+  const ap = drafts.find((d) => d.id === 'approved');
+  if (!before && ap && !ap.done) {
+    if (i.work) { ap.facts = i.work.line; ap.working = { yours: i.work.go }; delete ap.act; delete ap.also; }
+    else if (i.fresh && i.fresh > 0) {
+      ap.facts = `${plural(i.fresh, 'new take')} to check`;
+      // on the Edit page the approve stays as a quiet second way: "looked at" is kept in this browser only
+      ap.also = ap.act;
+      ap.act = { label: 'Go and check', do: { kind: 'check' } };
+    }
+  }
+  if (i.board) {
+    // the film page: a tick is made, and taken back, on the Edit page
+    const way = (x?: LeftStep['action']): LeftStep['action'] => (x?.do.kind === 'tick' ? { label: ON_EDIT[x.do.tick], do: { kind: 'on-edit', step: x.do.tick } } : x);
+    for (const d of drafts) {
+      if (d.act) d.act = way(d.act);
+      if (d.also?.do.kind === 'tick') { if (d.act?.do.kind === 'on-edit' || d.act?.do.kind === 'check') delete d.also; else d.also = way(d.also); }
+      delete d.ticked;
     }
   }
   const cur = drafts.find((d) => !d.done)?.id;
@@ -439,7 +502,7 @@ export function whatIsLeft(i: LeftInput): LeftView {
     label: NEXT_TAB,
     ...(i.ready ? { left: steps.length - done } : {}),
     count: i.ready ? leftWords(steps.length - done) : '',
-    footer: posted ? 'Published on every platform. The film is done.' : 'The film is done when it is published on every platform.',
+    footer: posted ? 'Published on every platform. The film is done.' : t.posted ? 'Publishing ticked done by you. The film is done.' : 'The film is done when it is published on every platform.',
     next: cur ? STEP_SHORT[cur] : 'nothing left',
     ...(early.length ? { early: { n: early.length, done: !before } } : {}),
   };

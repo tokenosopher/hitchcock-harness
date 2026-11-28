@@ -8,7 +8,15 @@
 // has room without touching the words beside it. What Alma receives is the same text with each chip written as a
 // <harness-ref …/> tag in its place.
 
-export type RefKind = 'moment' | 'clip' | 'panel' | 'scene' | 'shot' | 'take' | 'card' | 'character' | 'view' | 'location';
+export type RefKind = 'moment' | 'clip' | 'panel' | 'scene' | 'shot' | 'take' | 'card' | 'character' | 'view' | 'location'
+  // the Release pages: a platform, a field of it with its text in use, one of a field's options, a note
+  // of Alma's under a field, a step of the sending list, the final's file
+  | 'platform' | 'field' | 'option' | 'note' | 'step' | 'final'
+  // the other pages: a step of the flow board, a voice option, a scene's prompt for the video, a QC round, a QC miss,
+  // a line of the script
+  | 'stage' | 'voice' | 'prompt' | 'qc' | 'finding' | 'line'
+  // anything else on any page (the fallback): the block's words, the page it is on and the section above it
+  | 'text';
 
 /** One thing put into the message. Frozen when it is put in: it keeps the cut version, the step and the file of that
  *  moment, so it means the same thing later. */
@@ -45,16 +53,41 @@ export interface InlineRef {
   to?: number;
   /** A longer name: a card's question, a character's name, a shot's description. */
   title?: string;
+  /** The Release pages: the platform's id, the field's id, the option's (candidate's) id, the note's id, the step's id
+   *  in social/release.json. A voice option's id rides in `option` too. */
+  platform?: string;
+  field?: string;
+  option?: string;
+  note?: string;
+  step?: string;
+  /** A QC round's number (the qc file's r<n>); a voice round's id ("r2") is a string and rides in `item`. */
+  round?: number;
+  /** A thing's id inside its file when no field above names it: a QC miss ("m3"), a voice round ("r2"). */
+  item?: string;
+  /** A line's number in the script. */
+  line?: number;
+  /** The page it is on, under /films/<film> ("release/reddit"); a path from the root when it is outside a film. */
+  page?: string;
+  /** The heading of the section it sits in, for the fallback's context ("The text"). */
+  section?: string;
+  /** Its words: the text in use, the option's whole text, the note, the step, the prompt; for the fallback the block's
+   *  visible words or the words the user selected in it (about 600 characters at most). */
+  words?: string;
+  /** The words the user had selected inside a named thing when they picked it. */
+  quote?: string;
 }
 
-const KINDS: RefKind[] = ['moment', 'clip', 'panel', 'scene', 'shot', 'take', 'card', 'character', 'view', 'location'];
+const KINDS: RefKind[] = ['moment', 'clip', 'panel', 'scene', 'shot', 'take', 'card', 'character', 'view', 'location',
+  'platform', 'field', 'option', 'note', 'step', 'final', 'stage', 'voice', 'prompt', 'qc', 'finding', 'line', 'text'];
 export const isRefKind = (k: unknown): k is RefKind => typeof k === 'string' && (KINDS as string[]).includes(k);
 
 // ---- the tag Alma reads
 
 export const REF_TAG = 'harness-ref';
-const ORDER: (keyof InlineRef)[] = ['kind', 'label', 'scene', 'shot', 'take', 'track', 'clip', 'card', 'place', 'character', 'location', 'view', 'cut', 'edited', 'rev', 'at', 'sec', 'frame', 'length', 'from', 'to', 'file', 'title'];
-const NUMS = new Set<keyof InlineRef>(['shot', 'rev', 'sec', 'frame', 'length', 'from', 'to']);
+const ORDER: (keyof InlineRef)[] = ['kind', 'label', 'scene', 'shot', 'take', 'track', 'clip', 'card', 'place', 'character', 'location', 'view',
+  'platform', 'field', 'option', 'note', 'step', 'round', 'item', 'line', 'cut', 'edited', 'rev', 'at', 'sec', 'frame', 'length', 'from', 'to', 'file', 'title',
+  'page', 'section', 'words', 'quote'];
+const NUMS = new Set<keyof InlineRef>(['shot', 'rev', 'sec', 'frame', 'length', 'from', 'to', 'round', 'line']);
 
 function attr(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\s+/g, ' ');
@@ -277,5 +310,18 @@ export function refKindWords(r: InlineRef): string {
     case 'character': return 'A character';
     case 'view': return 'A painted view';
     case 'location': return 'A place';
+    case 'platform': return 'A release platform';
+    case 'field': return 'A text of a platform';
+    case 'option': return 'An option for a text';
+    case 'note': return 'A note of Alma’s';
+    case 'step': return 'A step of sending';
+    case 'final': return 'The final';
+    case 'stage': return 'A step of the flow';
+    case 'voice': return 'A voice option';
+    case 'prompt': return 'A prompt for the video';
+    case 'qc': return 'A QC round';
+    case 'finding': return 'A QC miss';
+    case 'line': return 'A line of the script';
+    case 'text': return 'Words on the page';
   }
 }

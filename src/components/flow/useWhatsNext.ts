@@ -106,7 +106,7 @@ export function useLeftReads(s: FilmState) {
     tl: leftTl, ref, edited, versions: versionList, data, filmMaster, masterNow, marks: seedance.marks,
     hasFull: sw.has, masterState: renders?.master?.state, masterStale, gapOf, history: cut?.history, early,
   })), [read, cur, early, leftTl, ref, edited, versionList, data, filmMaster, masterNow, seedance.marks, sw.has, renders, masterStale, gapOf, cut?.history]);
-  return { film, cut, cutError, leftTl, input, left, ref, edited };
+  return { film, cut, cutError, leftTl, input, left, ref, edited, shots };
 }
 
 /** A film with no cut yet: nothing on its tracks (the list then reads only the film's state). */

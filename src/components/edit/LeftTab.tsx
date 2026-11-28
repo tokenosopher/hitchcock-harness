@@ -13,14 +13,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Timeline, TimelineClip } from '@/server/types';
 import { cn } from '@/lib/utils';
 import { IconCheck, IconChevronRight } from '@/components/shell/icons';
-import { NEXT_TAB, STEP_SHORT, subsCounts, whatIsLeft, type LeftAnswer, type LeftDo, type LeftInput, type LeftStep, type TickOp } from './left';
+import { NEXT_TAB, STEP_SHORT, subsCounts, whatIsLeft, type LeftAnswer, type LeftDo, type LeftInput, type LeftStep, type StepId, type TickOp } from './left';
 import { EARLY_IDS, type EarlyId } from './early';
 import { parseSrt } from './subs';
 import { fetchSrt } from './Subtitles';
 import { useWaitingNow, WaitingNow } from '@/components/flow/WaitingNow';
 import { waitsByStep, waitsLine, type WaitItem } from '@/components/flow/waitList';
 import { MakingLines, useMaking } from '@/components/flow/Making';
+import { textsAsked } from '@/components/release/alma';
 import { MAKING_STEPS, makingFor, type Making } from '@/components/lib/making';
+import { useFilm } from '@/components/data/film';
+import { useThread } from '@/components/data/thread';
+import { editWork } from '@/components/lib/editWork';
+import { StepGlyph } from '@/components/flow/FlowBoard';
+
+/** Pick-ups or retakes being made for scenes in the cut (lib/editWork.ts), as What's next reads them. */
+export function useEditWork(): LeftInput['work'] {
+  const { state } = useFilm();
+  const { tasks } = useThread();
+  return useMemo(() => { const w = state ? editWork(state, tasks) : undefined; return w ? { line: w.line, go: w.go.length > 0 } : undefined; }, [state, tasks]);
+}
 
 /** The route's answer, read once and on each change of the film's folder (`changed`, the state's time); a tick shows at
  *  once and is saved, and goes back with a line saying why when the save fails. `also`: a version whose render part
@@ -48,7 +60,9 @@ export function useLeft(film: string, changed?: string, also?: string) {
     const was = data;
     if (was) {
       const ticks = { ...was.ticks };
-      if ('tick' in op) ticks[op.tick] = { at: new Date().toISOString(), cut: op.cut }; else delete ticks[op.untick];
+      // shown at once as the server will keep it: with the state it was made on and "edited", so its words do not
+      // change when the answer comes ("at v1 · 1 change since" read for a moment, then "with edits since v1")
+      if ('tick' in op) ticks[op.tick] = { at: new Date().toISOString(), cut: op.cut, ...(op.state ? { state: op.state } : {}), ...(op.step !== undefined ? { step: op.step } : {}), ...(op.edited ? { edited: true } : {}) }; else delete ticks[op.untick];
       put({ ...was, ticks });
     }
     setError(undefined);
@@ -90,29 +104,52 @@ function useSrtCues(film: string, tl: Timeline): (c: TimelineClip) => number | u
 const STATE = {
   done: { word: 'done', cls: 'text-ok' },
   current: { word: 'yours to look at', cls: 'text-warn' },
+  run: { word: 'being made', cls: 'text-ink-3' },
   later: { word: 'not yet', cls: 'text-mute' },
 } as const;
 
 function Glyph({ s }: { s: keyof typeof STATE }) {
   if (s === 'done') return <IconCheck size={13} className="flex-none text-ok" />;
+  if (s === 'run') return <span className="flex size-[13px] flex-none items-center justify-center"><StepGlyph g="run" /></span>;
   if (s === 'current') return <span aria-hidden="true" className="flex size-[13px] flex-none items-center justify-center"><span className="size-[7px] rounded-full bg-warn" /></span>;
   return <span aria-hidden="true" className="flex size-[13px] flex-none items-center justify-center"><span className="size-[8px] rounded-full border border-mute" /></span>;
 }
 
-export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: {
+export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from, fresh, board, focus }: {
   film: string;
   /** The cut on screen (for the cues of an .srt clip). */
   tl: Timeline;
   input: LeftInput;
   onDo: (d: LeftDo) => void;
-  onUntick: (s: LeftStep) => void;
+  /** Absent on the film page: a tick is taken back on the Edit page. */
+  onUntick?: (s: LeftStep) => void;
+  /** The takes landed after the cut's and not looked at in this browser. */
+  fresh?: number;
+  /** The list is the film page's (approvals are made on the Edit page). */
+  board?: boolean;
+  /** The step the address names (`?step=`, from the film page): brought into view once. */
+  focus?: StepId;
   error?: string;
   /** The page the list is on, after the film's address ("/edit"), and its name said to Alma with an answer given here. */
   here?: string;
   from: string;
 }) {
   const cues = useSrtCues(film, tl);
-  const view = useMemo(() => whatIsLeft({ ...input, subs: subsCounts(tl, cues) }), [input, tl, cues]);
+  const work = useEditWork();
+  // Alma asked for the platforms' texts for the final and on them (naming the final sends the ask)
+  const { events, tasks } = useThread();
+  const drafting = useMemo(() => textsAsked(events, tasks, input.release), [events, tasks, input.release]);
+  const view = useMemo(() => whatIsLeft({ ...input, subs: subsCounts(tl, cues), work, fresh, board, drafting }), [input, tl, cues, work, fresh, board, drafting]);
+  // the step the film page sent the user to: into view, once it is drawn
+  const listRef = useRef<HTMLOListElement>(null);
+  const focused = useRef<string>(undefined);
+  useEffect(() => {
+    if (!focus || focused.current === focus) return;
+    const row = listRef.current?.querySelector(`[data-step="${focus}"]`);
+    if (!row) return;
+    focused.current = focus;
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [focus, view]);
   // what waits for the user, first: the list of "Waiting for you", and on each step what of it holds it up
   const w = useWaitingNow();
   const [openWait, setOpenWait] = useState<string>();
@@ -136,7 +173,7 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: 
         {view.count && <span key={view.count} data-left-count className="ml-1.5 text-mute duration-200 animate-in fade-in-0">{view.count}</span>}
       </span>
       {error && <span role="status" className="text-[12px] text-warn duration-200 animate-in fade-in-0">{error}</span>}
-      <ol className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="The steps">
+      <ol ref={listRef} className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="The steps">
         {foldable && (
           <li data-left-fold className="rounded-[10px] border border-line">
             <button type="button" onClick={() => setUnfold((x) => !x)} aria-expanded={!folded}
@@ -162,18 +199,18 @@ export function LeftTab({ film, tl, input, onDo, onUntick, error, here, from }: 
 }
 
 function Row({ s, onDo, onUntick, cls, waits, onWait, making }: {
-  s: LeftStep; onDo: (d: LeftDo) => void; onUntick: (s: LeftStep) => void; cls?: string;
+  s: LeftStep; onDo: (d: LeftDo) => void; onUntick?: (s: LeftStep) => void; cls?: string;
   /** What is being made for this step and has not landed yet (lib/making.ts). */
   making?: Making[];
   /** What waits for the user and holds this step up; a press opens the first of it in the list above. */
   waits?: WaitItem[]; onWait: (key: string) => void;
 }) {
-  const st: keyof typeof STATE = s.done ? 'done' : s.current ? 'current' : 'later';
+  const st: keyof typeof STATE = s.done ? 'done' : s.working && !s.working.yours ? 'run' : s.current ? 'current' : 'later';
   const press = () => onDo(s.row);
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
     <li data-step={s.id} data-step-state={st}
-      className={cn('rounded-[10px] border transition-[border-color,background-color] duration-200', s.current ? 'border-warn/40 bg-warn/[0.04]' : 'border-line', cls)}>
+      className={cn('rounded-[10px] border transition-[border-color,background-color] duration-200', st === 'current' ? 'border-warn/40 bg-warn/[0.04]' : 'border-line', cls)}>
       <div role="button" tabIndex={0} onClick={press} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(); } }}
         data-step-row className="group/row flex min-h-[52px] cursor-pointer items-center gap-3 rounded-[10px] max-[760px]:flex-wrap px-2.5 py-1.5 outline-none transition-colors duration-150 hover:bg-raised/60 focus-visible:bg-raised/60">
         <span className="w-4 flex-none text-right font-mono text-[11.5px] text-mute">{s.n}</span>
@@ -196,7 +233,7 @@ function Row({ s, onDo, onUntick, cls, waits, onWait, making }: {
           {/* the button cannot start what it starts yet: no button, and quietly what is missing in its place */}
           {s.wait && <span key={s.wait} data-step-wait title={s.waitFull ?? s.wait} className="line-clamp-2 text-[12px] leading-snug text-mute duration-200 animate-in fade-in-0 slide-in-from-top-1">{s.wait}</span>}
         </span>
-        {s.ticked && (
+        {s.ticked && onUntick && (
           <button type="button" data-step-untick onClick={(e) => { stop(e); onUntick(s); }} onKeyDown={stop} title="Take the tick back"
             className="flex-none cursor-pointer rounded-md px-1.5 py-0.5 text-[12px] text-sub underline decoration-edge-strong underline-offset-4 transition-colors duration-150 hover:text-ink">Take back</button>
         )}

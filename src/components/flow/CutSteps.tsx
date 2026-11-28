@@ -17,6 +17,9 @@ import { useSendAsUser } from '@/components/release/AskAlma';
 import { NO_CUT, useLeftReads } from './useWhatsNext';
 import { LeftTab } from '@/components/edit/LeftTab';
 import { rememberBack } from '@/components/shell/BackLink';
+import { freshCount, newTakes } from '@/components/edit/openAt';
+import { useSeenTakes } from '@/components/edit/seenTakes';
+import { refData } from '@/components/lib/refPick';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const secs = (n: number) => `${Math.round(n)} s`;
@@ -66,7 +69,7 @@ export function ShotsStep({ s, base, fallback }: { s: FilmState; base: string; f
       <p className="m-0 text-[12.5px] text-sub">Pressing a scene opens it on the timeline.</p>
       <div className="overflow-hidden rounded-[10px] border border-edge">
         {strips.map((st, i) => (
-          <Link key={st.id} href={`${base}/edit?at=${Math.round(st.at * fps)}`} data-shot-scene={st.id} onClick={() => rememberBack(`${base}/edit`, 'Back to Shots')}
+          <Link key={st.id} href={`${base}/edit?at=${Math.round(st.at * fps)}`} data-shot-scene={st.id} {...refData({ kind: 'scene', label: st.id, scene: st.id, title: st.title })} onClick={() => rememberBack(`${base}/edit`, 'Back to Shots')}
             className={`group/sc flex min-h-[58px] items-center gap-4 bg-transparent px-3 py-1.5 text-ink no-underline transition-colors duration-150 hover:bg-raised/60 ${i > 0 ? 'border-t border-line' : ''}`}>
             <span className="flex w-[180px] flex-none flex-col gap-0.5 max-[760px]:w-[120px]">
               <span className="line-clamp-2 text-[13px] font-medium leading-snug">{st.id} · {st.title}</span>
@@ -93,24 +96,30 @@ export function ShotsStep({ s, base, fallback }: { s: FilmState; base: string; f
 export function EditNext({ s, base }: { s: FilmState; base: string }) {
   const router = useRouter();
   // the same reads as the board's Edit box (useWhatsNext.ts useLeftReads), the early steps included
-  const { film, cut, cutError, leftTl, input, left, ref, edited } = useLeftReads(s);
+  const { film, cut, cutError, leftTl, input, left, shots } = useLeftReads(s);
+  // the takes landed after the cut's, not looked at in this browser: "Go and check" opens the first in place
+  const [seen] = useSeenTakes(film);
+  const fresh = useMemo(() => (leftTl ? newTakes(leftTl, shots.by, shots.takes, seen) : undefined), [leftTl, shots.by, shots.takes, seen]);
+  const firstFresh = fresh ? [...fresh.values()][0] : undefined;
   const sendAs = useSendAsUser(film);
-  const currentVersion = ref;
-  // every press but a tick and Release goes to the Edit page, where the row's own action is
+  // every press but Release and a page of the film goes to the Edit page, where the row's own action is
   const onDo = useCallback((d: LeftDo) => {
-    const h = cut?.history;
-    if (d.kind === 'tick' && currentVersion) { void left.tick({ tick: d.tick, cut: currentVersion, ...(h?.steps[h.at] ? { state: h.steps[h.at].state, ...(typeof h.steps[h.at].rev === 'number' ? { step: h.steps[h.at].rev } : {}) } : {}), ...(edited ? { edited: true } : {}) }); return; }
+    // nothing is ticked here: the list on this page sends a tick to the Edit page's step
     if (d.kind === 'go-takes') { void sendAs(goTakesAsk(d.n, d.scenes)); return; }
-    // the page a row opens shows "Back to Edit" (BackLink.tsx), back to this list where it was scrolled
-    const to = d.kind === 'release' ? `${base}/release` : d.kind === 'page' ? `${base}/${d.page}` : `${base}/edit`;
+    // the page a row opens shows "Back to Edit" (BackLink.tsx), back to this list where it was scrolled; a tick is made on
+    // the Edit page, at its step, and the new takes are checked there, the first in its place
+    const take = (p: NonNullable<typeof firstFresh>['pick']) => `${base}/edit?tab=next&step=approved&take=${encodeURIComponent(p.src)}&shot=${encodeURIComponent(`${p.scene}:${p.tag ?? p.n}`)}`;
+    const to = d.kind === 'release' ? `${base}/release` : d.kind === 'page' ? `${base}/${d.page}`
+      : d.kind === 'on-edit' ? `${base}/edit?tab=next&step=${d.step}`
+      : d.kind === 'check' ? (firstFresh ? take(firstFresh.pick) : `${base}/edit?tab=next&step=approved`) : `${base}/edit`;
     rememberBack(to, 'Back to Edit');
     router.push(to);
-  }, [left, currentVersion, router, base, cut?.history, edited, sendAs]);
+  }, [router, base, sendAs, firstFresh]);
   if (!cut && !cutError) return <p className="m-0 text-[13px] text-sub duration-200 animate-in fade-in-0">Reading the cut…</p>;
   if (!input) return <p className="m-0 text-[13px] text-sub">No cut yet: the list starts with the first version of the timeline.</p>;
   return (
     <div data-edit-next className="flex flex-col gap-3">
-      <LeftTab film={film} tl={leftTl ?? NO_CUT} input={input} onDo={onDo} onUntick={(st) => st.ticked && void left.tick({ untick: st.ticked })} error={left.error} from="What's next on the film's board" />
+      <LeftTab film={film} tl={leftTl ?? NO_CUT} input={input} onDo={onDo} error={left.error} from="What's next on the film's board" fresh={freshCount(fresh)} board />
     </div>
   );
 }

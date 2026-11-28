@@ -1,7 +1,8 @@
 // Naming the final (Release, 14 Nov 2026): the masters on offer with their four fact rows, the final built from the
 // one the user names, and its companions asked of the app's own render queue (nothing is spent): the copy without
-// subtitles (the subtitles track left out, as "More renders" does), the 480p preview, and the subtitle file written
-// from the Subtitles track's lines (subs.ts linesToSrt) beside the renders. Never writes over a file.
+// subtitles (the subtitles track left out, as "More renders" does), the smaller file for posting, and the subtitle
+// file written from the Subtitles track's lines (subs.ts linesToSrt) beside the renders. Never writes over a file.
+// The 480p preview is a companion too, but it is not made by naming: the Release page shows it "not made" with "Make it"; one already on disk is shown as before.
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
@@ -116,14 +117,14 @@ export async function optionsOf(film: FilmTarget, p: string): Promise<RenderOpti
   return (await renderFiles(film)).find((f) => f.path === p)?.options;
 }
 
-/** Asks the render queue for the companions that do not exist yet, and writes the subtitle file. */
+/** Asks the render queue for the companions that do not exist yet, and writes the subtitle file. Not the 480p preview
+ * : that one only when the user asks for it on the Release page ("Make it", POST …/cut/render). */
 export async function queueCompanions(film: FilmTarget, final: ReleaseFinal): Promise<void> {
   const v = final.version;
-  const { clean, phone, srt, post } = final.companions;
+  const { clean, srt, post } = final.companions;
   // the smaller file first: it is the one that goes out (a final named before 14 Nov has none, and nothing is asked)
   if (post && post.path !== final.path) await queueRender(film.slug, v, 'master', { options: post.options as RenderOptions }).catch(() => undefined);
   if (clean && clean.path !== final.path) await queueRender(film.slug, v, 'master', { options: clean.options as RenderOptions }).catch(() => undefined);
-  if (phone) await queueRender(film.slug, v, 'proxy', phone.options ? { options: phone.options as RenderOptions } : {}).catch(() => undefined);
   if (srt) await writeSrt(film, v, srt.path).catch(() => undefined);
 }
 
@@ -142,7 +143,7 @@ export async function writeSrt(film: FilmTarget, version: string, rel: string): 
   return true;
 }
 
-/** Where each companion is: done (with its size), rendering, failed, or not asked for. */
+/** Where each companion is: done (with its size), rendering, failed, cancelled, or not asked for. */
 export async function companionStatus(film: FilmTarget, final: ReleaseFinal): Promise<CompanionStatus[]> {
   const out: CompanionStatus[] = [];
   const states = await renderStates(film, final.version).catch(() => ({} as Awaited<ReturnType<typeof renderStates>>));

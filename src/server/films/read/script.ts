@@ -53,8 +53,8 @@ export function readScriptText(markdown: string, warn: { add: (file: string, wha
       const c = cells(row);
       const film = c[c.length - 1] ?? '';
       if (!/^(character|location|prop)/i.test(c[0] ?? '')) continue;
-      // "C01 Maren, C02 Ana" or, when a name has a comma of its own, "C01 Maren, the keeper; C02 the Narrator"
-      for (const part of film.split(/[,;]\s*(?=[CLP]\d)/)) {
+      // the IDs of one cell are set apart by a comma, a middle dot or a semicolon ("C01 Maren · C02 Tobias")
+      for (const part of film.split(/\s*[,·;]\s*(?=[CLP]\d)/)) {
         const m = /^([CLP]\d+[a-z]?)\s+(.+)$/.exec(part.trim());
         if (!m) continue;
         // "Maren, the lighthouse keeper": the name, then who she is (a role; the script note's own role wins below)

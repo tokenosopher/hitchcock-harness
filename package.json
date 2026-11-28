@@ -72,6 +72,10 @@
     "quiet-turns:test": "tsx scripts/quiet-turns-test.ts",
     "story-waits:test": "tsx scripts/story-waits-test.ts",
     "folder:test": "tsx scripts/folder-test.ts",
+    "release-choices:test": "tsx scripts/release-choices-test.ts",
+    "cancel-render:test": "tsx scripts/cancel-render-test.ts",
+    "release-waits:test": "tsx scripts/release-waits-test.ts",
+    "refblock:test": "tsx scripts/refblock-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

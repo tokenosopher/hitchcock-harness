@@ -3,7 +3,8 @@
 // "Caption", "First comment", "Tags"), named with its word, holding the whole text of that part exactly as it will be
 // posted, in one text area that grows with it. Under it one quiet line: the count against the platform's limit and
 // Alma's one aim (derive.ts boxCount); for the Tags box, where the tags go; for X's Reply, how it goes out (ASKS 58). Above it, when the box is shared, one line
-// with "Only here" (or "Only TikTok has this caption." with "Link again"). Alma's notes about its fields stay under it.
+// with "Only here" (or "Only TikTok has this caption." with "Link again"). Under it, each field's candidates as radio
+// options with their whole text (Candidates.tsx), then Alma's notes about its fields.
 //
 // Typing is kept in the box (nothing else redraws per key but the count and the preview, drafts.ts) and saved after
 // a short pause and on leaving the box: a box of one field with `setText`, a box of several with `setPartText` (the
@@ -20,6 +21,9 @@ import { appName, boxCount, boxOverride, boxShare, boxText, editableText, factPi
 import { factIdsIn, type Platform, type ReleaseFile } from './file';
 import { draftsOf } from './drafts';
 import { FieldNotes } from './FieldNotes';
+import { Candidates } from './Candidates';
+import { refData } from '@/components/lib/refPick';
+import { fieldRef } from './refs';
 import { FactField } from './ReleaseOpen';
 import type { useRelease } from './ui';
 import type { ReleaseOp } from './ops';
@@ -94,6 +98,8 @@ export function TextBox({ ctx, b }: { ctx: BoxCtx; b: Box }) {
   const own = b.fields.some((f) => f.own);
   const many = b.fields.length > 1;
   const ids = b.fields.map((f) => f.id);
+  // the box as a thing for Alma's message box (Option-click): its field and the words in it now
+  const mark = refData(fieldRef(p, b.fields, b.label, local));
 
   const clearDraft = (t?: string) => { const d = drafts.get(); if (d?.field === b.fields[0].id && (t === undefined || d.text === t)) drafts.clear(b.fields[0].id); };
   const opFor = (t: string, only: boolean): ReleaseOp => {
@@ -145,7 +151,7 @@ export function TextBox({ ctx, b }: { ctx: BoxCtx; b: Box }) {
   // ---- pieces of the box
 
   const header = (
-    <div className="flex min-h-[24px] flex-wrap items-baseline gap-x-2 text-[12px] text-sub">
+    <div {...mark} className="flex min-h-[24px] flex-wrap items-baseline gap-x-2 text-[12px] text-sub">
       <b className="text-[12.5px] font-medium text-ink">{b.label}</b>
     </div>
   );
@@ -218,7 +224,7 @@ export function TextBox({ ctx, b }: { ctx: BoxCtx; b: Box }) {
     return (
       <div data-box={b.key} data-box-kind={b.kind} data-box-locked className="flex flex-col gap-1.5">
         {header}
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg border border-line bg-[#0a0a0a] px-2.5 py-[7px]">
+        <div {...mark} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 rounded-lg border border-line bg-[#0a0a0a] px-2.5 py-[7px]">
           <div data-locked-text className="min-w-0 whitespace-pre-wrap break-words text-[13px] leading-[1.45] text-ink-3">
             {value ? <Pieces pieces={factPieces(file, value)} plain /> : <span className="text-mute">No text</span>}
           </div>
@@ -261,7 +267,7 @@ export function TextBox({ ctx, b }: { ctx: BoxCtx; b: Box }) {
       {shareLine}
       {unlinkBox}
       {/* the whole frame takes the press, not only the line of text inside it (19 px): a press on its edge types there too */}
-      <div data-box-frame onMouseDown={(e) => {
+      <div data-box-frame {...mark} onMouseDown={(e) => {
         if (e.target !== e.currentTarget) return;
         e.preventDefault();
         if (box.current) { box.current.focus(); const n = box.current.value.length; box.current.setSelectionRange(n, n); } else setEditing(true);
@@ -273,6 +279,7 @@ export function TextBox({ ctx, b }: { ctx: BoxCtx; b: Box }) {
       {question}
       {countLine}
       {status}
+      {b.fields.map((f) => <Candidates key={f.id} ctx={ctx} f={f} text={many ? undefined : local} label={many} />)}
       {notes}
     </div>
   );

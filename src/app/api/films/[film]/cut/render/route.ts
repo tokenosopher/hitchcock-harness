@@ -5,11 +5,15 @@
 // options (RenderOptions in types.ts: loudness, stems, leaveOut, small) make a separate render whose files sit beside the
 // plain one, cut/renders/<version>-<kind>-<tag>…; it is listed in the version's renders as one of `variants`. small is
 // for the master only, not with stems (refused in words, 400).
+// DELETE {version, kind, options?} → cancels that render, named as the POST names it: a queued one
+// never runs, a running one's own ffmpeg is stopped and nothing is written into cut/renders/; its state becomes
+// 'cancelled' and a POST asks for it again. Answers 200 {cancelled, state, said}; one done, failed or not there answers
+// cancelled: false with why, never an error. Local requests only, as every writing route (src/proxy.ts).
 import { connection } from 'next/server';
 import { isMock } from '@/fixtures/mock';
-import { mockQueueRender } from '@/fixtures/renders';
+import { mockCancelRender, mockQueueRender } from '@/fixtures/renders';
 import { errorResponse, NO_STORE, routeFilm } from '@/server/edit/http';
-import { queueRender } from '@/server/edit/render';
+import { cancelRender, queueRender } from '@/server/edit/render';
 import { kindProblems, parseRenderOptions } from '@/server/edit/render-options';
 import { CutError, isVersion } from '@/server/edit/timeline';
 import { mockVersions } from '@/server/edit/working';
@@ -49,6 +53,29 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
     if (problems.length) throw new CutError(`the render options do not check out: ${problems.join('; ')}`, 400, problems);
     const render = await queueRender(film.slug, body.version, kind, { force: body.retry === true, again: body.again === true, options });
     return Response.json(render, { status: 202, headers: NO_STORE });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}
+
+export async function DELETE(req: Request, ctx: Ctx): Promise<Response> {
+  await connection();
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return Response.json({ error: 'body must be JSON' }, { status: 400 });
+  }
+  try {
+    if (!isVersion(body.version)) throw new CutError('version must be "v<n>"');
+    const kind = body.kind === 'master' ? 'master' : body.kind === 'proxy' || body.kind === undefined ? 'proxy' : undefined;
+    if (!kind) throw new CutError("kind must be 'proxy' or 'master'");
+    const { options, problems } = parseRenderOptions(body.options);
+    if (problems.length) throw new CutError(`the render options do not check out: ${problems.join('; ')}`, 400, problems);
+    // MOCK=boards: the made-up render life stops where it is (src/fixtures/renders.ts)
+    if (isMock()) return Response.json(mockCancelRender((await ctx.params).film, body.version, kind, options), { headers: NO_STORE });
+    const film = await routeFilm((await ctx.params).film);
+    return Response.json(await cancelRender(film.slug, body.version, kind, { options }), { headers: NO_STORE });
   } catch (e) {
     return errorResponse(e);
   }

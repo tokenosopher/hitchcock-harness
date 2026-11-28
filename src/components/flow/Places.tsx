@@ -11,6 +11,8 @@ import { Dot } from '@/components/shell/atoms';
 import { IconCheck, IconChevronDown, IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { rememberBack } from '@/components/shell/BackLink';
+import { refData } from '@/components/lib/refPick';
+import { locationRefOf, viewRefOf } from '@/components/shell/refItems';
 
 type Chip = (id: string, label: string, ref?: string) => void;
 
@@ -74,7 +76,7 @@ export function LocationsStep({ s, onAt, onChip }: { s: FilmState; onAt: (id: st
         const props = l.props ?? [];
         const views = l.views?.length ?? 0;
         return (
-          <article key={l.id} data-place={l.id} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-edge bg-panel">
+          <article key={l.id} data-place={l.id} {...refData(locationRefOf(l))} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border border-edge bg-panel">
             {/* the whole card opens the place; its picture opens full screen there */}
             <button type="button" data-no-zoom onClick={() => { onAt(l.id); onChip(`loc:${l.id}`, `${l.id} · ${l.name}`, l.master?.path); }} aria-label={`Open ${l.name}`}
               className="group/place flex min-w-0 cursor-pointer flex-col border-0 bg-transparent p-0 text-left text-ink">
@@ -125,7 +127,7 @@ export function ViewsStep({ s, onAt, onChip }: { s: FilmState; onAt: (id: string
         // the views first, the floor plan last with its word on it
         const v = [...all.filter((x) => !isPlan(x)), ...all.filter(isPlan)];
         return (
-          <article key={l.id} data-view-place={l.id} className="flex min-w-0 flex-col gap-2.5 rounded-[10px] border border-edge bg-panel px-3 py-3">
+          <article key={l.id} data-view-place={l.id} {...refData(locationRefOf(l))} className="flex min-w-0 flex-col gap-2.5 rounded-[10px] border border-edge bg-panel px-3 py-3">
             <button type="button" onClick={() => onAt(l.id)} aria-label={`Open ${l.name}`} className="group/v flex min-h-6 min-w-0 max-[760px]:min-h-11 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left text-ink">
               <span className="truncate text-[13.5px] font-medium">{placeName(l.name)}</span>
               <span className="flex-none text-[12px] text-sub">{plural(v.length, 'view')}</span>
@@ -134,7 +136,7 @@ export function ViewsStep({ s, onAt, onChip }: { s: FilmState; onAt: (id: string
             {v.length ? (
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {v.slice(0, SHOWN).map((x) => (
-                  <button key={x.path} type="button" onClick={() => onChip(`view:${l.id}:${x.camera}`, `${l.id} · ${x.camera}`, x.path)} aria-label={`${l.name}, ${x.camera}`} title={x.camera}
+                  <button key={x.path} type="button" {...refData(viewRefOf(s, l, x))} onClick={() => onChip(`view:${l.id}:${x.camera}`, `${l.id} · ${x.camera}`, x.path)} aria-label={`${l.name}, ${x.camera}`} title={x.camera}
                     className="relative cursor-pointer rounded-[5px] border-0 bg-transparent p-0">
                     <Media path={toRepo(x.path)} w={160} missingLabel="" fit={isPlan(x) ? 'contain' : undefined} className={cn('aspect-[4/5] w-14 rounded-[5px] border border-edge', isPlan(x) && 'bg-[#f4f1ea]')} />
                     {isPlan(x) && <span className="absolute bottom-[3px] left-[3px] rounded-[3px] bg-black/80 px-1 text-[10.5px] leading-[14px] text-ink">plan</span>}
@@ -199,7 +201,7 @@ export function PlaceDeep({ s, l, base, onChip }: { s: FilmState; l: LocationRef
           {views.length ? (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
               {views.map((v) => (
-                <button key={v.path} type="button" onClick={() => onChip(`view:${l.id}:${v.camera}`, `${l.id} · ${v.camera}`, v.path)} aria-label={`${l.name}, ${v.camera}`}
+                <button key={v.path} type="button" {...refData(viewRefOf(s, l, v))} onClick={() => onChip(`view:${l.id}:${v.camera}`, `${l.id} · ${v.camera}`, v.path)} aria-label={`${l.name}, ${v.camera}`}
                   className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
                   <Media path={toRepo(v.path)} w={320} className="aspect-[4/3] w-full rounded-[6px] border border-edge" />
                   <span className="truncate text-[11.5px] text-ink-3">{v.camera}</span>

@@ -4,7 +4,7 @@
 // Each card and pick of the batch leaves "Waiting for you" the moment "Done picking" is pressed and stays gone until the
 // film's state shows it answered, or for a while at most (a location's master is made by Alma from the pick).
 import type { FilmState } from '@/server/types';
-import { gateItems, storyWait } from './derive';
+import { gateItems, releaseWait, storyWait } from './derive';
 
 export interface Sent {
   /** The item of "Waiting for you" it answers: "card:<card key>", "gate:<gate item key>" or "story:<script|story>-<version>"
@@ -64,7 +64,8 @@ export function storySent(kind: 'script' | 'story', version: string, now = Date.
  *  its gate's picks. A sent item not among them is answered there and no longer kept aside. */
 export function listedKeys(s: FilmState): Set<string> {
   const story = storyWait(s, []);
-  return new Set([...(story ? [story.key] : []), ...(s.feed?.asks ?? []).map((c) => `card:${c.key}`), ...gateItems(s, []).map((g) => `gate:${g.key}`)]);
+  const release = releaseWait(s);
+  return new Set([...(story ? [story.key] : []), ...(s.feed?.asks ?? []).map((c) => `card:${c.key}`), ...gateItems(s, []).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])]);
 }
 
 /** The sent items still kept aside: not run out, and still listed by the state. */

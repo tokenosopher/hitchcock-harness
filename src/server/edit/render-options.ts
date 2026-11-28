@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import type { RenderKind, RenderOptions, Timeline, TimelineTrack } from '../types';
 import { FFMPEG } from './probe';
+import { adopt, checkCancelled } from './render-job';
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const ids = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string' && x.length > 0 && x.length < 120);
@@ -153,7 +154,9 @@ export const fileWord = (s: string): string => s.replace(/[^A-Za-z0-9]+/g, '-').
 /** Runs ffmpeg and returns its stderr (where loudnorm and ebur128 print), or throws with the end of it. */
 export function ffmpegText(args: string[], timeoutMs = 600000): Promise<string> {
   return new Promise((resolve, reject) => {
+    try { checkCancelled(); } catch (e) { reject(e); return; }
     const p = spawn(FFMPEG, ['-hide_banner', '-nostdin', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    adopt(p);   // kept on the render job it runs for, so a cancel stops it (render-job.ts)
     let err = '';
     const timer = setTimeout(() => p.kill('SIGKILL'), timeoutMs);
     p.stderr.on('data', (d: Buffer) => { err = (err + d.toString()).slice(-200000); });

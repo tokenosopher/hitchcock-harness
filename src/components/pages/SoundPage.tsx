@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { filmMeta, filmPath, useFilmPage } from './common';
 import { fmtBytes, PanelHead, useJson } from './postCommon';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
 
 const FIRST = 6;
 
@@ -28,7 +29,7 @@ function FileRow({ f, group, path, on, onChip }: { f: SoundFile; group: SoundGro
   const dir = f.path.split('/').slice(0, -1).join('/');
   const inside = group.folder.split(', ').reduce((d, root) => (d === root ? '' : d.startsWith(`${root}/`) ? d.slice(root.length + 1) : d), dir);
   return (
-    <li className={cn('flex min-w-0 items-center gap-3 border-t border-line px-4 py-2 first:border-t-0', on && 'bg-raised')}>
+    <li {...refData({ kind: 'text', label: f.name.length > 40 ? `${f.name.slice(0, 39)}…` : f.name, page: 'sound', section: group.title, file: path, words: f.name })} className={cn('flex min-w-0 items-center gap-3 border-t border-line px-4 py-2 first:border-t-0', on && 'bg-raised')}>
       <PlayButton path={path} label={f.name} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <button type="button" onClick={onChip} title={`${f.path} · hand it to Alma`} aria-pressed={on} className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left text-ink">

@@ -14,6 +14,7 @@ import { QCChip } from '@/components/shell/QCChip';
 import { qcEntry, qcSpec } from '@/components/lib/qc';
 import { Btn, Card, Tile, type DotState } from '@/components/shell/atoms';
 import { IconBookmark, IconChevronDown } from '@/components/shell/icons';
+import type { InlineRef } from '@/lib/refs';
 import { useFilmPage, filmPath } from './common';
 import { FromLibrary } from '@/components/library/FromLibrary';
 import { PickButton, SaveButton } from '@/components/library/PickButton';
@@ -109,6 +110,8 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
   const lib = useLibrary();
   const media = (p?: string) => (p && state ? filmPath(state, p) : undefined);
   const kept = (p?: string) => (state ? savedFrom(lib.data?.items, state.film.slug, 'face', p) : undefined);
+  // a face candidate as a thing for Alma's message box (Option-click): the character, the candidate and its picture
+  const candRef = (k: { id: string; path?: string }, round?: string): InlineRef => ({ kind: 'character', label: `${c.id} · ${k.id}`, character: c.id, item: k.id, title: `${c.name}, face candidate ${k.id}${round ? ` of round ${round.replace(/^r/, '')}` : ''}`, page: `character/${c.id}`, ...(media(k.path) ? { file: media(k.path) } : {}) });
   if (!r) return <span className="text-[12.5px] text-sub">No round yet.</span>;
   const landed = r.candidates.filter((k) => k.path);
   const pink = r.candidates.filter((k) => /pink/.test(k.note ?? '')).map((k) => k.id);
@@ -154,7 +157,7 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
                 <Tile key={k.id} label={k.id.split('-').pop() ?? k.id} src={media(k.path)} w={160} kept={!!kept(k.path)}
                   className={cn('aspect-[4/5] w-full overflow-hidden text-[9.5px] transition-shadow duration-200', k.id === chosen && k.id !== c.face?.pick?.candidateId && 'ring-1 ring-sub ring-offset-2 ring-offset-bg')}
                   selected={k.id === c.face?.pick?.candidateId} faded={!k.path}
-                  ariaLabel={`Candidate ${k.id}`} onClick={() => { if (k.path) setChosen(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
+                  ariaLabel={`Candidate ${k.id}`} mark={candRef(k)} onClick={() => { if (k.path) setChosen(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
               ))}
             </div>
             {/* any face of the round, picked or not, can be kept for a later film */}
@@ -179,7 +182,7 @@ function FaceRounds({ c, spend, onPick }: { c: CharacterRef; spend: SpendLine[];
         <>
           <div className="grid grid-cols-5 gap-1.5 max-[760px]:grid-cols-4">
             {r.candidates.map((k) => (
-              <Tile key={k.id} label={k.id} src={media(k.path)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} choose alma={k.id === r.prediction} kept={!!kept(k.path)} faded={!k.path}
+              <Tile key={k.id} label={k.id} src={media(k.path)} mark={candRef(k, r.id)} className="aspect-[4/5] w-full overflow-hidden" selected={k.id === sel} choose alma={k.id === r.prediction} kept={!!kept(k.path)} faded={!k.path}
                 onClick={() => { setSel(k.id); ui.addChip({ id: `cand:${c.id}`, label: `${c.id} · ${k.id}`, ref: k.path }); }} />
             ))}
           </div>

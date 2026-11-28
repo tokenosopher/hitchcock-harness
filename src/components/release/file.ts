@@ -49,7 +49,8 @@ export interface Fact {
   confirmedAt?: string;
 }
 
-export interface Candidate { id: string; text: string; does: string }
+/** `edited`: the user changed its words and kept them as this option; they are the user's from then on. */
+export interface Candidate { id: string; text: string; does: string; edited?: true }
 /** What Alma aims for, said in her words ("aim under 90, so the feed shows it whole"). Outside it is amber. */
 export interface Aim { min?: number; max?: number; words: string }
 
@@ -83,6 +84,12 @@ export interface Field {
   own?: boolean;
   /** The candidate in use. */
   pick?: string;
+  /** With `own`: the candidate the user's text is an edit of. Its option stays selected, and the page asks
+   *  before switching away whether to keep the edit as that option. Written by the page. */
+  from?: string;
+  /** The user's own words, from no candidate, as they were when a candidate replaced them, so the page can
+   *  offer them back as "Your text". Written by the page; cleared when the user writes their own words again. */
+  ownWas?: string;
   candidates: Candidate[];
   aim?: Aim;
   /** The other platforms whose field of the same id is this very text (both ways). */
@@ -227,6 +234,9 @@ export function validateRelease(raw: unknown): { file?: ReleaseFile; problems: s
       else if (new Set(f.candidates.map((c) => (c as Candidate).id)).size !== f.candidates.length) p.push(`${fl} has two candidates with one id.`);
       if (f.pick !== undefined && !(Array.isArray(f.candidates) && f.candidates.some((c) => obj(c) && c.id === f.pick))) p.push(`${fl}: the pick "${String(f.pick)}" is not one of its candidates.`);
       if (f.pick !== undefined && f.own) p.push(`${fl} is both a pick and the user's own text.`);
+      if (f.ownWas !== undefined && !str(f.ownWas)) p.push(`${fl}: "ownWas" must be text.`);
+      if (f.from !== undefined && !(f.own && Array.isArray(f.candidates) && f.candidates.some((c) => obj(c) && c.id === f.from))) p.push(`${fl}: "from" names one of its candidates, on the user's own text only.`);
+      if (Array.isArray(f.candidates) && f.candidates.some((c) => obj(c) && c.edited !== undefined && c.edited !== true)) p.push(`${fl}: a candidate's "edited" is true or left out.`);
       if (f.tags !== undefined && typeof f.tags !== 'boolean') p.push(`${fl}: "tags" is true or false.`);
       if (f.aim !== undefined && !(obj(f.aim) && str(f.aim.words) && (f.aim.min === undefined || typeof f.aim.min === 'number') && (f.aim.max === undefined || typeof f.aim.max === 'number'))) p.push(`${fl}: an aim needs its words and numbers.`);
       if (f.sharedWith !== undefined) {

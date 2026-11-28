@@ -15,6 +15,7 @@
 // master made here always has that record. The sample server keeps them for as long as it runs.
 import type { PictureMade, RenderKind, RenderOptions, RenderState, Timeline } from '@/server/types';
 import type { RenderFile } from '@/components/edit/renderList';
+import type { CancelAnswer } from '@/server/edit/render';
 import { baseFor, picturePieces, pictureMade, type FullInfo } from '@/components/edit/fullsize';
 import { masterRel } from '@/components/edit/masters';
 import { applyLeaveOut, dialogueTracks, fileWord, optionsTag } from '@/server/edit/render-options';
@@ -25,7 +26,7 @@ import { leftMasterSeed } from './left';
 
 /** tag '' is the plain render (the master: \"Render master\"); `fail` makes it end failed with these words. A plain
  *  master: `n` its number (masters.ts), `picture` the record of its picture (none on the seeded one). */
-interface MockJob { film: string; version: string; kind: RenderKind; tag: string; options: RenderOptions; queuedAt: number; start: number; end: number; fail?: string; n?: number; picture?: PictureMade }
+interface MockJob { film: string; version: string; kind: RenderKind; tag: string; options: RenderOptions; queuedAt: number; start: number; end: number; fail?: string; n?: number; picture?: PictureMade; /** Cancelled at. */ cancelled?: number }
 const g = globalThis as unknown as { __hhMockRenders?: { jobs: Map<string, MockJob>; busyUntil: number } };
 const S = (g.__hhMockRenders ??= { jobs: new Map(), busyUntil: 0 });
 
@@ -48,6 +49,8 @@ function sampleVersion(film: string, version: string): Timeline | undefined {
 /** What the job is at this moment. */
 function stateOf(j: MockJob, now = Date.now()): RenderState {
   const base: RenderState = { version: j.version, kind: j.kind, ...(j.tag ? { tag: j.tag, options: j.options } : {}), state: 'queued', queuedAt: iso(j.queuedAt), log: `cut/renders/${j.version}.log` };
+  // cancelled while it waited or ran (DELETE …/cut/render): stopped where it was, no file
+  if (j.cancelled !== undefined && j.cancelled <= now) return { ...base, state: 'cancelled', ...(j.cancelled >= j.start ? { startedAt: iso(j.start) } : {}), finishedAt: iso(j.cancelled) };
   if (now < j.start) return { ...base, percent: 0 };
   if (now < j.end) return { ...base, state: 'running', startedAt: iso(j.start), percent: Math.min(99, Math.round(((now - j.start) / (j.end - j.start)) * 1000) / 10) };
   const done = { ...base, startedAt: iso(j.start), finishedAt: iso(j.end), seconds: r1((j.end - j.start) / 1000) };
@@ -133,6 +136,7 @@ export function mockQueueRender(film: string, version: string, kind: RenderKind,
   if (was) {
     const st = stateOf(was);
     if (plainMaster && st.state === 'done' && again && !was.picture) n = (was.n ?? 1) + 1;
+    else if (st.state === 'cancelled') n = was.n ?? 1;   // a cancelled one is asked again like one never made
     else if (st.state !== 'failed' || !retry) return st;   // live or done: the same answer at once; failed: only again with retry
     else n = was.n ?? 1;
   }
@@ -144,6 +148,33 @@ export function mockQueueRender(film: string, version: string, kind: RenderKind,
   S.busyUntil = job.end;
   S.jobs.set(key, job);
   return stateOf(job, now);
+}
+
+/** The sample queue's state of one render (the Release page's companions, fixtures/release.ts sampleCompanions), or
+ *  nothing when it was never asked for. */
+export function mockJobState(film: string, version: string, kind: RenderKind, options?: RenderOptions): RenderState | undefined {
+  seed(film);
+  const tag = options ? optionsTag(options) : '';
+  const j = kind === 'master' && !tag ? mastersOf(film, version).pop() : S.jobs.get(keyOf(film, version, kind, tag));
+  return j ? stateOf(j) : undefined;
+}
+
+/** DELETE …/cut/render under MOCK=boards: as the real cancelRender answers (render.ts). A queued or running made-up
+ *  render stops where it is; anything else is said plainly. */
+export function mockCancelRender(film: string, version: string, kind: RenderKind, options: RenderOptions | undefined): CancelAnswer {
+  seed(film);
+  const tag = options ? optionsTag(options) : '';
+  const j = kind === 'master' && !tag ? mastersOf(film, version).pop() : S.jobs.get(keyOf(film, version, kind, tag));
+  const what = `the ${kind === 'proxy' ? '480p' : !tag ? 'master' : 'render'} of ${version}${tag ? ` (${tag})` : ''}`;
+  if (!j) return { cancelled: false, state: { version, kind, ...(tag ? { tag, options } : {}), state: 'none' }, said: `Nothing to cancel: ${what} is not queued or running.` };
+  const st = stateOf(j);
+  if (st.state !== 'queued' && st.state !== 'running') {
+    return { cancelled: false, state: st, said: st.state === 'done' ? `Nothing to cancel: ${what} is already made.` : st.state === 'cancelled' ? `Nothing to cancel: ${what} was cancelled already.` : `Nothing to cancel: ${what} failed and is not running.` };
+  }
+  const now = Date.now();
+  j.cancelled = now;
+  if (S.busyUntil === j.end) S.busyUntil = now;
+  return { cancelled: true, state: stateOf(j, now), said: st.state === 'queued' ? `Cancelled ${what} before it started.` : `Cancelled ${what}; nothing was written into cut/renders.` };
 }
 
 /** GET …/cut/render/<version> under MOCK=boards: that version's 480p and master (when one was asked for) and its

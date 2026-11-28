@@ -5,7 +5,7 @@
 // in its place, what is not found, what waits for the takes or the options). Also the takes newer than the cut's.
 import assert from 'node:assert/strict';
 import type { Timeline, TimelineClip } from '../src/server/types';
-import { findTake, hasOpenAt, newTakes, parseShotAt, readOpenAt, resolveOpenAt, tryOf, withoutOpenAt, type OpenCtx } from '../src/components/edit/openAt';
+import { findTake, freshCount, hasOpenAt, newTakes, parseShotAt, readOpenAt, resolveOpenAt, tryOf, withoutOpenAt, type OpenCtx } from '../src/components/edit/openAt';
 import { cutHref, cutOf, cutWords, takeCutOf } from '../src/components/edit/cutLink';
 import { pageHref } from '../src/components/shell/AlmaText';
 import { shotTimeline, type BySrc, type TakeShots } from '../src/components/edit/shots';
@@ -174,6 +174,11 @@ check('newTakes: per shot of the cut, the takes landed after its own, never look
   assert.ok(!seen.has(s1[0].id) && seen.get(s1[1].id)?.count === 1);
   // takes with no landing time are never new
   assert.equal(newTakes(tl, by, takes.map((t) => ({ ...t, made: undefined })), new Set()).size, 0);
+});
+check('freshCount: the takes the marks name, each once (What\'s next\'s "n new takes to check")', () => {
+  assert.equal(freshCount(newTakes(tl, by, takes, new Set())), 2);
+  assert.equal(freshCount(new Map([['a', { pick: { src: 'x.mp4' } }], ['b', { pick: { src: 'x.mp4' } }]])), 1);
+  assert.equal(freshCount(undefined), 0);
 });
 
 console.log(`\n${n} passed`);

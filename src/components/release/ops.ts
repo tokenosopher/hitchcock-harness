@@ -13,7 +13,10 @@ export type ReleaseOp =
   | { op: 'pick'; platform: string; field: string; candidate: string }
   /** The user's own text for a field. `only`: unlink it first, so a locked platform sharing it keeps its text.
    *  `tags`: written in the page's Tags box, so the field is marked as tags (it stays in that box whatever its words). */
-  | { op: 'setText'; platform: string; field: string; text: string; only?: boolean; tags?: boolean }
+  | { op: 'setText'; platform: string; field: string; text: string; only?: boolean; tags?: boolean; mine?: boolean }
+  /** The text in the box kept as the option it was edited from: the candidate's text becomes the field's
+   *  text, marked as the user's, on every platform sharing the field; then, with `switchTo`, that candidate is used. */
+  | { op: 'saveOption'; platform: string; field: string; candidate: string; switchTo?: string }
   /** The user's own text for a whole box of several fields (ASKS 57): `part` is the posted part ("caption"), `tags`
    *  its Tags box instead of its text. The first field of the box holds the whole text as the user's own; the box's
    *  other fields become empty own text (an empty field is left out of the posted text), their candidates kept. On
@@ -60,7 +63,7 @@ export type ReleaseOp =
   | { op: 'request'; platform: string; what: 'unschedule' | 'stop' | 'check' };
 
 export type OpName = ReleaseOp['op'];
-export const OP_NAMES: OpName[] = ['pick', 'setText', 'setPartText', 'confirm', 'tick', 'setRoute', 'unlink', 'link', 'nameFinal', 'ask', 'cancelAsk', 'go', 'pasteLink', 'postedNoLink', 'answer', 'undoAnswer', 'pickThumbnail', 'thumbnailOwn', 'request'];
+export const OP_NAMES: OpName[] = ['pick', 'setText', 'saveOption', 'setPartText', 'confirm', 'tick', 'setRoute', 'unlink', 'link', 'nameFinal', 'ask', 'cancelAsk', 'go', 'pasteLink', 'postedNoLink', 'answer', 'undoAnswer', 'pickThumbnail', 'thumbnailOwn', 'request'];
 
 export type OpResult = { ok: true; file: ReleaseFile; said: string } | { ok: false; refused: string };
 
@@ -101,15 +104,24 @@ function unlinkIn(file: ReleaseFile, p: Platform, fid: string): void {
   if (f) delete f.sharedWith;
 }
 
-/** Sets a field's text on every platform of its group. */
-function setGroup(file: ReleaseFile, p: Platform, f: Field, text: string, how: { own?: boolean; pick?: string }): void {
+/** Sets a field's text on every platform of its group. `from`: own text that is an edit of that candidate. */
+function setGroup(file: ReleaseFile, p: Platform, f: Field, text: string, how: { own?: boolean; pick?: string; from?: string }): void {
   for (const q of group(file, p, f)) {
     const g = q.fields.find((x) => x.id === f.id);
     if (!g) continue;
+    keepOwn(g, text, how);
     g.text = text;
     if (how.own) g.own = true; else delete g.own;
     if (how.pick && g.candidates.some((c) => c.id === how.pick)) g.pick = how.pick; else delete g.pick;
   }
+}
+
+/** The user's own words, from no candidate, are kept when something else replaces them (`ownWas`), so the page can
+ *  offer them back as "Your text"; an edit of a candidate (`from`) is not: it is saved to its option or discarded. */
+function keepOwn(g: Field, text: string, how: { own?: boolean; from?: string }): void {
+  if (g.own && !g.from && g.text.trim() && g.text !== text && !(how.own && !how.from)) g.ownWas = g.text;
+  if (how.own && !how.from) delete g.ownWas;
+  if (how.own && how.from && g.candidates.some((c) => c.id === how.from)) g.from = how.from; else delete g.from;
 }
 
 /** Every field of these ids on these platforms and their partners, as they are now (for a note's undo). */
@@ -150,9 +162,37 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (why) return no(why);
       if (op.only && x.f!.sharedWith?.length) unlinkIn(f, x.p, x.f!.id);
       for (const id of factIdsIn(op.text)) if (!f.facts.some((k) => k.id === id)) return no(`{${id}} is not a fact of this release.`);
-      setGroup(f, x.p, x.f!, op.text, { own: true });
+      const from = op.mine ? undefined : (x.f!.pick ?? x.f!.from);
+      setGroup(f, x.p, x.f!, op.text, { own: true, ...(from ? { from } : {}) });
       if (op.tags === true) for (const q of group(f, x.p, x.f!)) { const g = q.fields.find((k) => k.id === x.f!.id); if (g) g.tags = true; }
       return { ok: true, file: f, said: `Wrote their own ${lower(x.f!.label)} for ${names(f, x.p, x.f!)}` };
+    }
+    case 'saveOption': {
+      const x = find(f, op.platform, op.field);
+      if (typeof x === 'string') return no(x);
+      const c = x.f!.candidates.find((k) => k.id === op.candidate);
+      if (!c) return no(`${x.p.name} ${lower(x.f!.label)} has no candidate "${op.candidate}".`);
+      const to = op.switchTo === undefined ? undefined : x.f!.candidates.find((k) => k.id === op.switchTo);
+      if (op.switchTo !== undefined && !to) return no(`${x.p.name} ${lower(x.f!.label)} has no candidate "${op.switchTo}".`);
+      const why = editCheck(f, x.p, x.f!, now);
+      if (why) return no(why);
+      const text = x.f!.text;
+      if (!text.trim()) return no(`The ${lower(x.f!.label)} is empty: there is nothing to keep.`);
+      for (const id of factIdsIn(text)) if (!f.facts.some((k) => k.id === id)) return no(`{${id}} is not a fact of this release.`);
+      // the edit becomes that option, on every platform sharing the field (each keeps its own list of candidates)
+      for (const q of group(f, x.p, x.f!)) {
+        const g = q.fields.find((k) => k.id === x.f!.id);
+        const k = g?.candidates.find((y) => y.id === c.id);
+        if (!g || !k) continue;
+        // a note's button that offered this candidate offers it as it now reads
+        for (const n of g.notes ?? []) for (const a of n.actions) for (const e of a.effect) if (e.kind === 'set' && e.field === g.id && e.text === k.text) e.text = text;
+        k.text = text;
+        k.edited = true;
+      }
+      setGroup(f, x.p, x.f!, to ? to.text : text, { pick: to ? to.id : c.id });
+      return { ok: true, file: f, said: to
+        ? `Kept the changed ${lower(x.f!.label)} as "${c.does}" and used "${to.does}" for ${names(f, x.p, x.f!)}`
+        : `Kept the changed ${lower(x.f!.label)} as "${c.does}" for ${names(f, x.p, x.f!)}` };
     }
     case 'setPartText': {
       const x = find(f, op.platform);
@@ -173,13 +213,18 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (!op.only && (sh.state === 'some' || sh.locked.length)) return no(sh.ask!);
       if (op.only) for (const id of ids) if (x.p.fields.find((k) => k.id === id)?.sharedWith?.length) unlinkIn(f, x.p, id);
       const all = op.only || sh.state !== 'shared' ? [x.p] : [x.p, ...sh.with.map((q) => platformOf(f, q.id)!)];
+      // a box of one field is that field: its text is an edit of the option in use, as with setText
+      const f0 = x.p.fields.find((k) => k.id === ids[0]);
+      const from = ids.length === 1 && !op.back ? (f0?.pick ?? f0?.from) : undefined;
       for (const q of all) ids.forEach((id, i) => {
         const g = q.fields.find((k) => k.id === id);
         if (!g) return;
         const was = op.back?.[id];
         g.text = was ? was.text : i ? '' : op.text;
+        if (!was) keepOwn(g, g.text, { own: true, from });
         if (was ? was.own : true) g.own = true; else delete g.own;
         if (was?.pick) g.pick = was.pick; else delete g.pick;
+        if (was) delete g.from;
         if (op.tags === true && !was) g.tags = true;
       });
       const who = nameList(all.map((q) => q.name));
@@ -265,7 +310,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
         if (st.locked && q.fields.find((k) => k.id === x.f!.id)?.text !== x.f!.text) return no(`${heldWords(q, st)}. Linking would change it.`);
       }
       // the other side (and its own partners) take this text, then all of them share
-      setGroup(f, y.p, y.f!, x.f!.text, { own: x.f!.own, pick: x.f!.pick });
+      setGroup(f, y.p, y.f!, x.f!.text, { own: x.f!.own, pick: x.f!.pick, from: x.f!.from });
       const all = [...new Set([x.p.id, ...(x.f!.sharedWith ?? []), y.p.id, ...(y.f!.sharedWith ?? [])])];
       for (const id of all) {
         const g = platformOf(f, id)?.fields.find((k) => k.id === x.f!.id);
@@ -367,6 +412,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
           const g = q?.fields.find((k) => k.id === e.field);
           if (!q || !g) continue;
           for (const o of g.sharedWith ?? []) if (!e.platforms.includes(o)) { const oq = platformOf(f, o); if (oq) unlinkIn(f, oq, e.field); }
+          keepOwn(g, e.text, {});
           g.text = e.text;
           delete g.own;
           delete g.pick;
@@ -527,7 +573,7 @@ export function parseOp(raw: unknown): ReleaseOp | string {
   if (typeof o.op !== 'string' || !(OP_NAMES as string[]).includes(o.op)) return `"op" must be one of ${OP_NAMES.join(', ')}.`;
   const need = (...keys: string[]) => keys.filter((k) => typeof o[k] !== 'string');
   const want: Record<OpName, string[]> = {
-    pick: ['platform', 'field', 'candidate'], setText: ['platform', 'field', 'text'], setPartText: ['platform', 'part', 'text'], confirm: ['fact', 'value'], tick: ['platform', 'list', 'step'],
+    pick: ['platform', 'field', 'candidate'], saveOption: ['platform', 'field', 'candidate'], setText: ['platform', 'field', 'text'], setPartText: ['platform', 'part', 'text'], confirm: ['fact', 'value'], tick: ['platform', 'list', 'step'],
     setRoute: ['platform', 'route'], unlink: ['platform', 'field'], link: ['platform', 'field', 'with'], nameFinal: [], ask: ['platform', 'when'],
     cancelAsk: ['platform'], go: ['platform'], pasteLink: ['platform', 'link'], postedNoLink: ['platform'], answer: ['platform', 'field', 'note', 'action'], undoAnswer: [],
     pickThumbnail: ['platform', 'option'], thumbnailOwn: ['platform'], request: ['platform', 'what'],
@@ -537,7 +583,8 @@ export function parseOp(raw: unknown): ReleaseOp | string {
   if (o.op === 'tick' && typeof o.done !== 'boolean') return '"tick" needs "done": true or false.';
   if (o.op === 'ask' && o.file !== undefined && typeof o.file !== 'string') return '"ask" takes "file" as text.';
   if (o.op === 'thumbnailOwn' && typeof o.own !== 'boolean') return '"thumbnailOwn" needs "own": true or false.';
-  for (const k of ['only', 'tags']) if (o[k] !== undefined && typeof o[k] !== 'boolean') return `"${k}" is true or false.`;
+  if (o.op === 'saveOption' && o.switchTo !== undefined && typeof o.switchTo !== 'string') return '"switchTo" is a candidate id.';
+  for (const k of ['only', 'tags', 'mine']) if (o[k] !== undefined && typeof o[k] !== 'boolean') return `"${k}" is true or false.`;
   if ((o.op === 'unlink' || o.op === 'link') && o.fields !== undefined && !(Array.isArray(o.fields) && o.fields.every((x) => typeof x === 'string'))) return '"fields" is a list of field ids.';
   if (o.op === 'setPartText' && o.back !== undefined && !(o.back && typeof o.back === 'object' && !Array.isArray(o.back))) return '"back" is the fields as they were, by id.';
   return o as unknown as ReleaseOp;

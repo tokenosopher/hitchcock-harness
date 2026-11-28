@@ -3,7 +3,7 @@
 // everywhere), the platform's two-letter tile, the release data (GET once, again when the film's watcher sees a
 // change, the answer of each operation kept), the chip that tells Alma about the final, and the clock text.
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFilm } from '@/components/data/film';
 import { useUIActions } from '@/components/data/ui';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,8 @@ import type { ReleaseOp } from './ops';
 import { factsOf, type PlatformKind } from './platforms';
 import { nowParam, useMinute } from './clock';
 import type { ReleaseAnswer, ReleaseView } from './view';
+import { useSendAsUser } from './AskAlma';
+import { textsChip, wantsTexts } from './alma';
 
 // ---- glyphs
 
@@ -112,7 +114,7 @@ export function useRelease(film: string, opts: { light?: boolean; masters?: bool
     const id = setTimeout(() => setBump((b) => b + 1), 1500);
     return () => clearTimeout(id);
   }, [rendering, view]);
-  const run = useCallback(async (op: ReleaseOp | { op: 'nameFinal'; path: string }): Promise<ReleaseAnswer> => {
+  const send = useCallback(async (op: ReleaseOp | { op: 'nameFinal'; path: string }): Promise<ReleaseAnswer> => {
     const qn = nowParam();
     try {
       const r = await fetch(`/api/films/${film}/release${qn ? `?${qn}` : ''}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(op) });
@@ -125,6 +127,14 @@ export function useRelease(film: string, opts: { light?: boolean; masters?: bool
       return { ok: false, error: 'The harness server is not answering' };
     }
   }, [film, opts.masters]);
+  // one operation at a time, in the order the page sent them: a box saved as it is left, then the tap that left it
+  // (the edit is in the file before an option's Save or Discard reads it)
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const run = useCallback((op: ReleaseOp | { op: 'nameFinal'; path: string }): Promise<ReleaseAnswer> => {
+    const next = queue.current.then(() => send(op));
+    queue.current = next.catch(() => undefined);
+    return next;
+  }, [send]);
   return { view, error, run, reload: () => setBump((b) => b + 1) };
 }
 
@@ -132,7 +142,7 @@ export function useRelease(film: string, opts: { light?: boolean; masters?: bool
  *  (the way a click on a page tells her what the user looked at). */
 export function finalChip(final: ReleaseFinal, film: string): Chip {
   const c = final.companions;
-  const made = [c.clean && c.clean.path !== final.path ? `the copy without subtitles (${c.clean.path})` : '', c.phone ? `the 480p preview (${c.phone.path})` : '', c.srt ? `the subtitle file (${c.srt.path})` : '', c.post && c.post.path !== final.path ? `the smaller file that goes out (${c.post.path})` : ''].filter(Boolean);
+  const made = [c.clean && c.clean.path !== final.path ? `the copy without subtitles (${c.clean.path})` : '', c.srt ? `the subtitle file (${c.srt.path})` : '', c.post && c.post.path !== final.path ? `the smaller file that goes out (${c.post.path})` : ''].filter(Boolean);
   return {
     id: 'release:final',
     label: `Named the final: master of ${final.version}`,
@@ -140,12 +150,25 @@ export function finalChip(final: ReleaseFinal, film: string): Chip {
   };
 }
 
-/** Names a master as the final from anywhere (the Release page, the Renders tab), and tells Alma. */
+/** Names a master as the final from anywhere (the Release page, the Renders tab), and tells Alma. When the release
+ *  file has no platforms yet, Alma is asked at once, as the user's own message with the chip "Release texts · cut vN",
+ *  to draft the text for every platform (no second press); `texts` says whether that ask went. */
 export function useNameFinal(run: ReturnType<typeof useRelease>['run'], film: string) {
   const { addChip } = useUIActions();
-  return useCallback(async (path: string) => {
+  const sendAs = useSendAsUser(film);
+  return useCallback(async (path: string): Promise<ReleaseAnswer & { texts?: 'sent' | 'failed' }> => {
     const r = await run({ op: 'nameFinal', path });
-    if (r.ok && r.file.final) addChip(finalChip(r.file.final, film));
-    return r;
-  }, [run, addChip, film]);
+    if (!r.ok || !r.file.final) return r;
+    const final = r.file.final;
+    if (!wantsTexts(r.file, r.said)) { addChip(finalChip(final, film)); return r; }
+    // the final's own line goes with the ask, so Alma reads both in one message
+    const ok = await sendAs('', [finalChip(final, film), textsChip(film, final)]).catch(() => false);
+    if (!ok) addChip(finalChip(final, film));
+    return { ...r, texts: ok ? 'sent' : 'failed' };
+  }, [run, addChip, film, sendAs]);
 }
+
+/** The line that says the texts' ask went (or did not), under the button that named the final. */
+export const textsSaid = (t: 'sent' | 'failed' | undefined, version?: string): string | undefined =>
+  t === 'sent' ? `Sent to Alma: the text for every platform${version ? ` for the final of ${version}` : ''}. The texts appear on the Release page as she writes them.`
+    : t === 'failed' ? 'The final is named. The ask for the texts did not go: use "Ask Alma to draft them" on the Release page.' : undefined;

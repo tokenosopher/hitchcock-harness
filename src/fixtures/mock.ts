@@ -1,13 +1,14 @@
 // MOCK=boards: serves workstream A's hand-written fixtures (the numbers on the design boards) from the
 // real API routes, for comparing the app with the boards. Unset, every route serves the real files.
 // Server-only (imported by route handlers).
-import type { HarnessContext, ThreadEvent } from '@/server/types';
+import type { FilmState, HarnessContext, ThreadEvent } from '@/server/types';
 import { noteUserWrote } from '@/server/films/recent';
 import { FIXTURES_BOARDS, FIXTURE_LIBRARY, FIXTURE_THREADS } from './index';
 import cutFilm from './boards/cut-the-lighthouse.json';
 import { sampleCut, sampleFilms, sampleState } from './masters';
-import { releaseSampleFilms, releaseSampleState } from './release';
-import { LEFT_THREADS, leftSampleCut, leftSampleFilms, leftSampleState } from './left';
+import { releaseSampleFilms, releaseSampleState, releaseSeed } from './release';
+import { LEFT_THREADS, leftReleaseSeed, leftSampleCut, leftSampleFilms, leftSampleState, leftTicksSeed } from './left';
+import { postBrief, type LeftFile } from '@/components/edit/left';
 import { castSampleFilms, castSampleState } from './cast';
 import { day1SampleCut, day1SampleFilms, day1SampleState } from './day1';
 import { storySampleFilms, storySampleState } from './story';
@@ -33,7 +34,19 @@ const runningListeners = (store.running ??= new Set());
 
 export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms(), ...soundSampleFilms(), ...afterlockSampleFilms(), ...elementsSampleFilms(), ...trimSampleFilms()];
 export const mockLibrary = () => FIXTURE_LIBRARY;
-export const mockState = (film: string) => trimSampleState(film) ?? elementsSampleState(film) ?? afterlockSampleState(film) ?? soundSampleState(film) ?? storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
+export const mockState = (film: string) => withRelease(film, baseState(film));
+/** The sample's release in brief, as the real reader puts it in the state (read/post.ts): the release file in memory
+ *  (server/release/file.ts mockReleases) or its seed, and the ticks in memory (server/edit/left.ts mockLeft) or theirs,
+ *  read off their shared globals so this file imports neither ("Waiting for you" for posting). */
+function withRelease<T extends FilmState | undefined>(slug: string, s: T): T {
+  if (!s) return s;
+  const g = globalThis as unknown as { __hhMockRelease?: Map<string, unknown>; __mockLeft?: Map<string, LeftFile> };
+  const file = g.__hhMockRelease?.has(slug) ? g.__hhMockRelease.get(slug) ?? undefined : releaseSeed(slug) ?? leftReleaseSeed(slug);
+  const brief = postBrief(file, (g.__mockLeft?.get(slug) ?? leftTicksSeed(slug))?.ticks);
+  if (!brief) return s;
+  return { ...s, post: { ...(s.post ?? { cuts: [], masters: [], captions: [] }), release: { path: 'social/release.json', ...brief } } };
+}
+const baseState = (film: string) => trimSampleState(film) ?? elementsSampleState(film) ?? afterlockSampleState(film) ?? soundSampleState(film) ?? storySampleState(film) ?? releaseSampleState(film) ?? leftSampleState(film) ?? castSampleState(film) ?? day1SampleState(film) ?? sampleState(film, set().states[film]) ?? set().states[film];
 /** The Edit page's hand-written timeline (the Scenes page's cut lane as of 1 Nov), for the boards comparison:
  *  GET …/cut answers it with `mock: true` and the page keeps its versions in memory (nothing is written). */
 const CUTS: Record<string, unknown> = { 'the-lighthouse': cutFilm };

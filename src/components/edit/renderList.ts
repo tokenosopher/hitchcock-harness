@@ -38,7 +38,8 @@ export interface RenderFile {
   earlier?: boolean;
 }
 
-export type RowState = 'done' | 'running' | 'queued' | 'failed';
+/** cancelled: stopped on request; its row offers "Render it" to ask again. */
+export type RowState = 'done' | 'running' | 'queued' | 'failed' | 'cancelled';
 
 /** A row of the list. */
 export interface RenderRow {
@@ -194,9 +195,9 @@ export function renderLists(x: ListInput): RenderLists {
     const cut = `cut ${x.shown}`;
     const title = `${kind === 'master' ? 'Master' : '480p'} of ${cut}`;
     const size = sizeWords(x.width, x.height, kind);
-    if (s && s.version === x.shown && (s.state === 'running' || s.state === 'queued' || s.state === 'failed')) {
+    if (s && s.version === x.shown && (s.state === 'running' || s.state === 'queued' || s.state === 'failed' || s.state === 'cancelled')) {
       put({ key: `${kind}/`, version: x.shown, kind, state: s.state, percent: s.percent, sound: false, title, size, seconds: x.seconds, error: s.error,
-        at: s.state === 'failed' ? s.finishedAt ?? s.startedAt ?? s.queuedAt : undefined, retry: { kind }, index: 0, ...(kind === 'master' && s.state !== 'failed' && x.masterHint ? { warn: x.masterHint } : {}) });
+        at: s.state === 'failed' || s.state === 'cancelled' ? s.finishedAt ?? s.startedAt ?? s.queuedAt : undefined, retry: { kind }, index: 0, ...(kind === 'master' && s.state !== 'failed' && x.masterHint ? { warn: x.masterHint } : {}) });
       continue;
     }
     const path = (s && s.version === x.shown && s.state === 'done' ? s.path : undefined) ?? rec?.path;
@@ -223,7 +224,7 @@ export function renderLists(x: ListInput): RenderLists {
     if (v.state === 'none') continue;
     put({ key: `${v.kind}/${v.tag ?? ''}`, version: v.version, kind: v.kind, tag: v.tag, state: v.state, percent: v.percent, sound: false,
       title: v.options ? describe(v.options, v.kind, name) : `${v.kind === 'master' ? 'Full size' : '480p'} of cut ${v.version}`, size: sizeWords(x.width, x.height, v.kind),
-      seconds: x.seconds, error: v.error, at: v.state === 'failed' ? v.finishedAt ?? v.startedAt ?? v.queuedAt : undefined, retry: { kind: v.kind, options: v.options }, index: 0,
+      seconds: x.seconds, error: v.error, at: v.state === 'failed' || v.state === 'cancelled' ? v.finishedAt ?? v.startedAt ?? v.queuedAt : undefined, retry: { kind: v.kind, options: v.options }, index: 0,
       ...(v.kind === 'master' && v.state !== 'failed' && x.masterHint ? { warn: x.masterHint } : {}) });
   }
 

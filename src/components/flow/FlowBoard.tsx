@@ -12,6 +12,8 @@ import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/comp
 import type { FlowKey } from '@/components/lib/derive';
 import { IconCheck } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
+import { refData } from '@/components/lib/refPick';
+import { stageRefOf } from '@/components/shell/refItems';
 
 /** The four marks of the drawn key: done, yours to look at, being made, not yet. */
 export type Glyph = 'done' | 'now' | 'run' | 'todo';
@@ -62,6 +64,7 @@ function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(
   const liveNow = n.aims.some((a) => a.task.state === 'running');
   return (
     <button type="button" onClick={() => onOpen(n.key)} aria-pressed={on} aria-label={gate ? `Gate, your picks, ${line}` : aria(n, name, second ? `${line}; ${second}` : line)} data-box={n.key}
+      {...refData(stageRefOf(n.key, gate ? `Gate · ${name}` : name, second ? `${line}; ${second}` : line))}
       title={n.aims.length ? n.aims.map((a) => a.task.title).join('\n') : n.status || undefined}
       className={cn('box-border flex min-h-[42px] min-w-0 cursor-pointer flex-col justify-center gap-px rounded-lg border px-[9px] pb-1.5 pt-[5px] text-left transition-[background-color,border-color,box-shadow] duration-200 max-[760px]:min-h-11',
         on ? 'border-ink bg-[#141416] shadow-[inset_0_0_0_1px_#FAFAFA]' : todo ? 'border-dashed border-edge-strong bg-transparent hover:bg-panel' : 'border-edge bg-panel hover:bg-raised',
@@ -132,7 +135,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
         <div className="flex min-h-[22px] flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <span className="lbl">The flow</span>
           {/* the press is 24 px tall around the 22 px chip drawn (QC round two); the row does not move */}
-          <button type="button" onClick={() => onOpen('story')} aria-pressed={open === 'story'} aria-label={aria(story, 'Story', story.status)} data-box="story"
+          <button type="button" onClick={() => onOpen('story')} aria-pressed={open === 'story'} aria-label={aria(story, 'Story', story.status)} data-box="story" {...refData(stageRefOf('story', 'Story', story.status))}
             className="group/story -my-px inline-flex h-6 cursor-pointer items-center text-[11.5px] text-ink-3 max-[760px]:my-0 max-[760px]:h-11">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-md border px-2 transition-colors duration-200 max-[760px]:h-11',
               open === 'story' ? 'border-ink bg-[#141416]' : 'border-edge bg-transparent group-hover/story:bg-panel')}>

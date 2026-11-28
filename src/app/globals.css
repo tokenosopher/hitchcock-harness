@@ -326,3 +326,11 @@ html[data-ref-picking] :is([data-ref], [data-clip], [data-phone-clip], [data-sho
   outline-color: #fafafa;
 }
 html[data-ref-picking] [data-ref-skip] :is([data-ref], [data-clip], [data-phone-clip], [data-shot]) { outline: none; cursor: auto; }
+/* Anything else on a page goes in as its words: the block a click would take gets the same firm ring
+   under the pointer (refPicking.ts sets data-ref-hover on it). */
+html[data-ref-picking] [data-ref-hover] {
+  cursor: copy;
+  outline: 1px solid #fafafa;
+  outline-offset: -1px;
+  transition: outline-color 150ms ease-out;
+}

@@ -12,6 +12,8 @@
 //                         same content, so the master is current and the final has no amber note (ASKS 49)
 //   sample-left-posting   everything up to the final, which is the master of the cut; Reddit and YouTube posted of six
 //   sample-left-done      everything done: every platform posted
+//   sample-left-drafting  the final just named (the master of v1), no platforms yet, and the user's "Release texts ·
+//                         cut v1" ask in the thread with Alma's turn on it still going: Alma is drafting the texts
 //   sample-left-pickups   the shape of a real film at its edit: every scene in the cut, nothing
 //                         approved yet, and three pick-ups being made for S1, S2 and S3 (new previz and boards, the
 //                         board check), each a running sub-agent "pick-up · FIX-…"; no take of theirs landed
@@ -20,6 +22,9 @@
 //                         S4's pick-up has its boards and its prompt checked; S3's pick-up its boards; S2's pick-up
 //                         was dropped, so S2 shows its own check; S5 has no pick-up (S4 to S6 are scenes this
 //                         sample adds after S3)
+//   sample-left-landed    the shape of a film once its pick-ups land: nothing approved, three pick-ups for S1, S2
+//                         and S3 landed, and in those scenes a take newer than the cut's (shots.ts), not looked at
+//                         yet: What's next says "3 new takes to check"
 import type { FeedCard, FilmRef, FilmState, PickupWork, QCCategory, QCEntry, QCMiss, QCReport, ThreadEvent, Timeline } from '@/server/types';
 import type { SeedanceMark } from '@/components/edit/marks';
 import type { LeftFile } from '@/components/edit/left';
@@ -32,7 +37,7 @@ const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
 const FROM = 'assets/films/the-lighthouse/';
 
-type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-pickups' | 'sample-left-pickupqc';
+type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-drafting' | 'sample-left-pickups' | 'sample-left-pickupqc' | 'sample-left-landed';
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
 export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-start': ref('sample-left-start', "Sample · what's next: nothing done", 9),
@@ -41,11 +46,13 @@ export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-same': ref('sample-left-same', "Sample · what's next: a move and its undo", 10),
   'sample-left-posting': ref('sample-left-posting', "Sample · what's next: posting", 12),
   'sample-left-done': ref('sample-left-done', "Sample · what's next: done", 12),
+  'sample-left-drafting': ref('sample-left-drafting', "Sample · what's next: texts being drafted", 12),
   'sample-left-pickups': ref('sample-left-pickups', 'Sample · three pick-ups being made', 8),
   'sample-left-pickupqc': ref('sample-left-pickupqc', 'Sample · pick-ups with their own checks', 8),
+  'sample-left-landed': ref('sample-left-landed', 'Sample · three pick-ups landed, not looked at', 8),
 };
 /** The samples where nothing is approved, ticked or full size yet. */
-const START = (slug: string) => slug === 'sample-left-start' || slug === 'sample-left-pickups' || slug === 'sample-left-pickupqc';
+const START = (slug: string) => slug === 'sample-left-start' || slug === 'sample-left-pickups' || slug === 'sample-left-pickupqc' || slug === 'sample-left-landed';
 const isLeft = (slug: string): slug is Id => slug in LEFT_SAMPLES;
 export const leftSampleFilms = (): FilmRef[] => Object.values(LEFT_SAMPLES);
 
@@ -111,6 +118,7 @@ export function leftSampleState(slug: string): FilmState | undefined {
     ...(slug === 'sample-left-pickups' ? { pickups: PICKUPS } : {}),
     // the pick-up checks sample is a longer cut of the film: three more scenes after S3, so the checks of S4 to S6 have a place
     ...(slug === 'sample-left-pickupqc' ? { pickups: PICKUPS_QC, qc: PICKUP_QC, scenes: [...lighthouse.scenes, ...EXTRA_SCENES] } : {}),
+    ...(slug === 'sample-left-landed' ? { pickups: PICKUPS_LANDED } : {}),
   };
 }
 
@@ -125,6 +133,8 @@ const PICKUPS: PickupWork[] = [
   pickup('FIX-S2-desk', 'S2', { boards: 3 }),
   pickup('FIX-bottle-S1', 'S1', { boards: 0, previz: false, prompts: 2, promptPassed: true, landed: 1 }),
 ];
+/** sample-left-landed: four pick-ups, each with its take landed (the takes themselves are in shots.ts). */
+const PICKUPS_LANDED: PickupWork[] = ['S1', 'S2', 'S3'].map((sc) => pickup(`FIX-${sc}`, sc, { boards: 2, checked: true, prompts: 1, promptPassed: true, landed: 1 }));
 const tAt = (m: number) => `2026-11-21T09:${String(m).padStart(2, '0')}:00.000Z`;
 const pickupTask = (id: string, name: string, m: number): ThreadEvent => ({
   kind: 'task', id, at: tAt(m), task: { id, title: `Alma › pick-up · ${name}`, state: 'running', startedAt: tAt(m), steps: [{ at: tAt(m), text: 'Bash · Build the new previz in Blender' }] },
@@ -212,6 +222,14 @@ const PICKUP_QC: Record<string, QCEntry> = Object.fromEntries([
 ].map((e) => [e.key, e]));
 
 export const LEFT_THREADS: Record<string, ThreadEvent[]> = {
+  // naming the final sent the texts' ask (release/ui.tsx useNameFinal); Alma's turn on it has not ended
+  'sample-left-drafting': [
+    { kind: 'user', id: 'u-texts', at: at('17:02'), text: '', context: { film: 'sample-left-drafting', page: '/films/sample-left-drafting/edit', pinned: '', selected: [
+      { id: 'release:final', label: 'Named the final: master of v1', ref: 'The user named the master of v1 as the final.' },
+      { id: 'release:texts', label: 'Release texts · cut v1', ref: 'cut/renders/v1-master.mp4', command: 'I named the final: … Draft the text for every platform for this final now.' },
+    ] } },
+    { kind: 'assistant_text', id: 'a-texts', at: at('17:03'), text: 'Drafting the texts for every platform from the final of v1.' },
+  ],
   'sample-left-pickups': [
     { kind: 'user', id: 'u-notes', at: tAt(20), text: 'S1: the wide from lower. S2: Maren from behind Tobias, over the desk. S3: the window close-up with the light, then the wide.' },
     { kind: 'assistant_text', id: 'a-notes', at: tAt(21), text: 'Three pick-ups are being built from your notes: new previz and boards for each, the board check, then the prompt and a go card.' },
@@ -256,15 +274,16 @@ export function leftTicksSeed(slug: string): LeftFile | undefined {
 
 /** The masters the sample starts with: a master of v1 with the record of its picture (renders.ts seeds it). */
 export function leftMasterSeed(slug: string): { version: string } | undefined {
-  return slug === 'sample-left-remaster' || slug === 'sample-left-same' || slug === 'sample-left-posting' || slug === 'sample-left-done' ? { version: 'v1' } : undefined;
+  return slug === 'sample-left-remaster' || slug === 'sample-left-same' || slug === 'sample-left-posting' || slug === 'sample-left-done' || slug === 'sample-left-drafting' ? { version: 'v1' } : undefined;
 }
 
 /** The release file the sample starts with: the board's six platforms, the final the master of v1. */
 export function leftReleaseSeed(slug: string): ReleaseFile | undefined {
-  if (slug !== 'sample-left-remaster' && slug !== 'sample-left-same' && slug !== 'sample-left-posting' && slug !== 'sample-left-done') return undefined;
+  if (slug !== 'sample-left-remaster' && slug !== 'sample-left-same' && slug !== 'sample-left-posting' && slug !== 'sample-left-done' && slug !== 'sample-left-drafting') return undefined;
   const f = boardRelease();
   const final = { path: 'cut/renders/v1-master.mp4', version: 'v1', namedAt: at('17:02'), name: `${LEFT_SAMPLES[slug].title} - FINAL.mp4`, companions: {} };
   if (slug === 'sample-left-remaster' || slug === 'sample-left-same') return { ...f, final, platforms: f.platforms.map((p) => ({ ...p, send: {} })) };
   if (slug === 'sample-left-posting') return { ...f, final };
+  if (slug === 'sample-left-drafting') return { ...f, final, platforms: [] };
   return { ...f, final, platforms: f.platforms.map((p, k) => ({ ...p, send: { posted: p.send.posted ?? { at: at(`18:${String(10 + k * 5).padStart(2, '0')}`) } } })) };
 }

@@ -110,9 +110,17 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
 
 // sample-sound-picks (soundpick.ts) has the-lighthouse's picture, and its takes say when they landed: all on one day,
 // S1's "sample take A" ten days later, so its shots show as new takes on the cut
-const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut };
+// sample-left-landed (left.ts) the same, its files in its own folder as the left samples' cut has them, and
+// "sample take A" of S1, S2 and S3 landed later: three new takes to check
+const LANDED_SAMPLE = 'sample-left-landed';
+const ownCut = (slug: string): FixtureCut => JSON.parse(JSON.stringify(cutFilm).split('assets/films/the-lighthouse/').join(`assets/films/${slug}/`)) as FixtureCut;
+const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut, [LANDED_SAMPLE]: ownCut(LANDED_SAMPLE) };
 const LANDED = Date.UTC(2026, 10, 10, 12);
-const madeOf = (film: string, t: TakeShots): TakeShots => (film !== 'sample-sound-picks' || t.state === 'making' ? t : { ...t, made: LANDED + (t.scene === 'S1' && t.name === 'sample take A' ? 10 * 86400000 : 0) });
+const LATER: Record<string, (t: TakeShots) => boolean> = {
+  'sample-sound-picks': (t) => t.scene === 'S1' && t.name === 'sample take A',
+  [LANDED_SAMPLE]: (t) => ['S1', 'S2', 'S3'].includes(t.scene) && t.name === 'sample take A',
+};
+const madeOf = (film: string, t: TakeShots): TakeShots => (!LATER[film] || t.state === 'making' ? t : { ...t, made: LANDED + (LATER[film](t) ? 10 * 86400000 : 0) });
 const memo = new Map<string, TakeShots[]>();
 // which sample films have their variation being made landed (this server's memory; survives a dev reload)
 const g = globalThis as unknown as { __sampleLanded?: Set<string> };

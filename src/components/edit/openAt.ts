@@ -253,3 +253,6 @@ export function newTakes(tl: Timeline, by: BySrc, takes: TakeShots[], seen: Set<
   }
   return out;
 }
+
+/** How many takes the marks name (the newest per shot), each take once: What's next's "4 new takes to check". */
+export const freshCount = (fresh: Map<string, { pick: { src: string } }> | undefined): number => new Set([...(fresh?.values() ?? [])].map((x) => x.pick.src)).size;

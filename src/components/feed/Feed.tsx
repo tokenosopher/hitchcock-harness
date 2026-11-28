@@ -25,7 +25,7 @@ import { cardRefOf } from '@/components/shell/refItems';
 import { SoundPicks } from './SoundPicks';
 import { CutButton, sceneInCut } from './CutButton';
 import { takeCutOf } from '@/components/edit/cutLink';
-import { CardText } from './CardText';
+import { CardText, longSub } from './CardText';
 import { WhyPanel } from './WhyPanel';
 import { almaFetch } from '@/components/data/almaOutbox';
 import { askLayout, bodyMedia, optionMediaOf, readHref, readOf, wideBox } from './askMedia';
@@ -287,7 +287,11 @@ function CardBody({ card, toRepo, hideOptions }: { card: FeedCard; toRepo: ToRep
   const onChip = (m: FeedMedia) => ui.addChip({ id: `file:${m.path}`, label: short(m.label ?? m.path.split('/').pop() ?? m.path, 32), ref: toRepo(m.path) });
   return (
     <>
-      {card.sub && <p className="m-0 max-w-[760px] text-[12.5px] leading-normal text-sub">{card.sub}</p>}
+      {/* the line under the title: one quiet line as written; with line breaks, a list or many words it is drawn as the
+          card's text is (paragraphs, lists, folded under "Show more"), never as one unbroken paragraph */}
+      {card.sub && (longSub(card.sub)
+        ? <CardText text={[card.sub]} film={film} />
+        : <p className="m-0 max-w-[760px] text-[12.5px] leading-normal text-sub">{card.sub}</p>)}
       {card.quote && <blockquote data-card-quote className="m-0 max-w-[760px] whitespace-pre-wrap break-words border-l-2 border-edge-strong pl-3 text-[13px] leading-[1.5] text-ink">{card.quote}</blockquote>}
       {card.fileLine && (
         <p data-card-file className="m-0 flex max-w-[760px] items-start gap-2 text-[12.5px] leading-[1.45] text-ink-3" title={card.fileLine.path}>

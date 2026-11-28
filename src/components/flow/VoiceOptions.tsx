@@ -11,6 +11,8 @@ import { choosePick, pickChoiceId } from '@/components/library/PickButton';
 import { useChoice } from '@/components/data/choices';
 import { cn } from '@/lib/utils';
 import { facePath, WholePicture } from '@/components/characters/Cards';
+import { refData } from '@/components/lib/refPick';
+import { voiceRefOf } from '@/components/shell/refItems';
 
 /** A voice option's name: "3" and "option-3" both read "option 3" (the Voices page's words). */
 const optName = (id: string) => (/^\d+$/.test(id) ? `option ${id}` : id.replace('option-', 'option '));
@@ -47,7 +49,7 @@ function VoiceRound({ s, id, name, r, from }: { s: FilmState; id: string; name: 
         const on = sel === o.id;
         const label = `${optName(o.id)}${o.note && o.note !== r.id ? ` · ${o.note}` : ''}`;
         return (
-          <div key={o.id} data-voice-option={o.id} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
+          <div key={o.id} data-voice-option={o.id} {...refData(voiceRefOf(s, id, r.id, o.id, optName(o.id), o.path))} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
             <PlayButton path={toRepo(o.path!)} label={`${id} ${optName(o.id)}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <button type="button" role="radio" aria-checked={on} onClick={() => choosePick(s.film.slug, body(o.id), `${optName(o.id)} for ${id} ${name}`)} className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink">

@@ -6,7 +6,7 @@
 // "Choose this one" in the full-screen view) sets it aside, and "Done picking" writes it and tells Alma. Everything that would spend credits still only puts its ask in the composer, as a chip (SPEC principle 1). design/boards/Main.dc.html.
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { storyWait, type GateItem, type StoryWait } from '@/components/lib/derive';
+import { storyWait, type GateItem, type ReleaseWait, type StoryWait } from '@/components/lib/derive';
 import { CHAIN_A, CHAIN_B, ORDER, runningSummary, type Flow } from '@/components/lib/flow';
 import { Reveal } from '@/components/shell/Reveal';
 import { capital, fmtDate, repoPath, word } from '@/components/lib/format';
@@ -28,6 +28,12 @@ import { VoiceRounds } from './VoiceOptions';
 import { StepIntro } from '@/components/intro/StepIntro';
 import { beingMade, waitItemsOf } from './waitList';
 import { useKept } from './useKept';
+import { refData } from '@/components/lib/refPick';
+import type { InlineRef } from '@/lib/refs';
+
+/** A pick, a go or a lock the gate asks for, as a card for Alma's message box (Option-click). */
+const GATE_PLACE: Record<GateItem['kind'], string> = { face: 'faces', master: 'loc', voices: 'voices', clothing: 'clothing', sheet: 'sheet', prop: 'loc', go: 'scenes' };
+const gateRefOf = (p: GateItem): InlineRef => ({ kind: 'card', label: p.chip, card: p.key, place: GATE_PLACE[p.kind], title: p.title });
 
 function stateDot(st: GateItem['state']): DotState {
   return st === 'running' ? 'running' : st === 'ready' ? 'done' : st === 'queued' ? 'queued' : 'waiting';
@@ -55,7 +61,7 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
   const setAside = useChoice(film?.slug ?? '', pickKind ? pickChoiceId({ kind: pickKind, target }) : '')?.pick?.candidate;
   const saveRef = (id: string) => p.round?.candidates.find((c) => c.id === id)?.path;
   return (
-    <article className={cn('flex min-w-0 flex-col gap-3 rounded-[10px] border bg-well px-4 py-3.5', wait ? 'border-dashed border-edge-strong' : 'border-edge')}>
+    <article {...refData(gateRefOf(p))} className={cn('flex min-w-0 flex-col gap-3 rounded-[10px] border bg-well px-4 py-3.5', wait ? 'border-dashed border-edge-strong' : 'border-edge')}>
       <button type="button" onClick={() => onChip(p.key, p.chip)} aria-label={`Add ${p.chip} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
         <span className="flex min-w-0 items-center gap-2">
           <Dot state={stateDot(p.state)} />
@@ -155,7 +161,7 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
 export function GoCard({ p, base, onChip }: { p: GateItem; base: string; onChip: (id: string, label: string) => void }) {
   const ui = useUIActions();
   return (
-    <article className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
+    <article {...refData(gateRefOf(p))} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge-strong bg-panel px-4 py-3.5">
       <button type="button" onClick={() => onChip(p.key, p.chip)} aria-label={`Add ${p.chip} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
         <span className="flex min-w-0 items-center gap-2">
           <Dot state="done" />
@@ -181,7 +187,7 @@ export function StoryWaitCard({ w, base, onChip }: { w: StoryWait; base: string;
   const ui = useUIActions();
   const what = `${w.kind} ${w.version}`;
   return (
-    <article data-story-wait={w.kind} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge bg-well px-4 py-3.5">
+    <article data-story-wait={w.kind} {...refData({ kind: 'card', label: `${w.kind.charAt(0).toUpperCase()}${w.kind.slice(1)} ${w.version}`, card: `${w.kind}-${w.version}`, place: 'story', title: `The ${what} waits for you` })} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge bg-well px-4 py-3.5">
       <button type="button" onClick={() => onChip(w.key, what)} aria-label={`Add ${what} to what Alma sees`} className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
         <span className="flex min-w-0 items-center gap-2">
           <Dot state="done" />
@@ -201,6 +207,27 @@ export function StoryWaitCard({ w, base, onChip }: { w: StoryWait; base: string;
         </Link>
         <button type="button" onClick={() => ui.about({ id: w.key, label: what }, `${what}: a change before ${w.kind === 'script' ? 'the lock' : 'the settle'}`, `What should change in ${what}…`)}
           className="inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-[13px] font-medium text-sub hover:text-ink">Ask for a change</button>
+      </div>
+    </article>
+  );
+}
+
+/** The film waiting for the user to post it (derive.ts releaseWait): what is posted and one button, to the
+ *  Release page, where each platform is posted (or tick publishing done in What's next). */
+export function ReleaseWaitCard({ w, base, onChip }: { w: ReleaseWait; base: string; onChip: (id: string, label: string) => void }) {
+  return (
+    <article data-release-wait {...refData({ kind: 'card', label: 'Post the film', card: w.key, place: 'release', title: w.title })} className="flex min-w-0 flex-col gap-3 rounded-[10px] border border-edge bg-well px-4 py-3.5">
+      <button type="button" onClick={() => onChip(w.key, 'the release')} aria-label="Add the release to what Alma sees" className="flex min-w-0 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
+        <span className="flex min-w-0 items-center gap-2">
+          <Dot state="done" />
+          <span className="truncate text-[14px] font-medium">{w.title}</span>
+          <Badge>Your post</Badge>
+        </span>
+        <span className="pl-3.5 text-[12.5px] leading-normal text-sub">{w.line}</span>
+      </button>
+      <div className="flex flex-wrap items-center gap-2 pl-3.5">
+        <Link href={`${base}/release`} data-release-open
+          className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-3 text-[13px] font-medium text-bg no-underline hover:bg-ink-3">Open Release</Link>
       </div>
     </article>
   );
@@ -279,6 +306,7 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
               <Reveal key={it.key} open={here} className="min-w-0">
                 <div data-wait-item={it.key} className="pb-2.5">
                   {it.story ? <StoryWaitCard w={it.story} base={base} onChip={onChip} />
+                    : it.release ? <ReleaseWaitCard w={it.release} base={base} onChip={onChip} />
                     : it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[it.card.place]?.name}</span>} />
                     : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={onChip} />
                     : g ? <PickCard p={g} onChip={onChip} onPrefill={onPrefill} voices={it.voiceIds} /> : null}

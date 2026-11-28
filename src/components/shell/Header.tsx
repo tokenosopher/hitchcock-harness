@@ -24,7 +24,7 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
   const sub = phoneSub && last && phoneSub.startsWith(`${last.label} · `) ? phoneSub.slice(last.label.length + 3) : phoneSub;
   return (
     <>
-      <div className="flex flex-none items-center gap-1 border-b border-line p-2 min-[761px]:hidden">
+      <div data-ref-chrome="" className="flex flex-none items-center gap-1 border-b border-line p-2 min-[761px]:hidden">
         <button type="button" aria-label="Films" onClick={openNav} className="flex size-11 flex-none cursor-pointer items-center justify-center rounded-[10px] text-ink"><IconMenu size={20} /></button>
         <div className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{last?.label}</span>
@@ -34,9 +34,9 @@ export function Header({ crumbs, meta, actions, phoneSub, crumbExtra, back }: { 
       </div>
       {/* a deeper page without a row of its own: its way back under the top bar, on the phone */}
       {phoneRow && way && (
-        <div className="flex flex-none px-4 pt-3 duration-200 animate-in fade-in-0 min-[761px]:hidden"><BackLink key={way.href} back={way} phone /></div>
+        <div data-ref-chrome="" className="flex flex-none px-4 pt-3 duration-200 animate-in fade-in-0 min-[761px]:hidden"><BackLink key={way.href} back={way} phone /></div>
       )}
-      <header className="sticky top-0 z-20 flex h-14 flex-none items-center justify-between gap-3 border-b border-line bg-hdr px-6 max-[760px]:hidden">
+      <header data-ref-chrome="" className="sticky top-0 z-20 flex h-14 flex-none items-center justify-between gap-3 border-b border-line bg-hdr px-6 max-[760px]:hidden">
         {way && <BackLink key={way.href} back={way} className={way === remembered ? 'duration-200 animate-in fade-in-0' : undefined} />}
         {/* the column takes the room the actions leave, so a crumb's 40 % is of that room: "The Lighthouse" was cut to
             "The Ligh…" with half the header empty (QC round two) */}

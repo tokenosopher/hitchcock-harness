@@ -58,7 +58,7 @@ import { dissolvePlan, maxDissolveF, pressWords, removeGainPoint, saveStatus, se
 import { isLine, isSrtClip } from './subs';
 import { hasSubtitles, placeSrt, splitSrt } from './subsEdit';
 import { downloadSrt, fetchSrt, SubtitleOverlay, subtitlesAsk } from './Subtitles';
-import { leftChip, leftWords, NEXT_TAB, soundCounts, subsCounts, unreadableSplit, waitWords, whatIsLeft, type LeftDo, type LeftStep } from './left';
+import { leftChip, leftWords, NEXT_TAB, soundCounts, STEP_IDS, subsCounts, unreadableSplit, waitWords, whatIsLeft, type LeftDo, type LeftStep, type StepId } from './left';
 import { WaitingCount } from '@/components/flow/WaitingNow';
 import { LeftTab, useLeft } from './LeftTab';
 import { hasPlanned, isFirstPart, plannedCounts, retakeWords, sceneOfClip, shotSpan, PLANNED_RENDER_WHY } from './planned';
@@ -73,7 +73,8 @@ import { useSendAsUser } from '@/components/release/AskAlma';
 import { usePhoneFull } from './phoneFull';
 import { useEditRefSource } from './refSource';
 import { StepIntro } from '@/components/intro/StepIntro';
-import { hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
+import { freshCount, hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
+import { useSeenTakes } from './seenTakes';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -512,25 +513,9 @@ export function EditPage() {
   // the takes newer than the one a shot of the cut uses, never tried in this browser (openAt.ts newTakes): the clip's quiet
   // "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does. A shot selected once
   // is remembered here (localStorage), so its mark goes.
-  const [seenTakes, setSeenTakes] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(`hh:takes-seen:${film}`) ?? '[]') as unknown;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from this browser's storage, which the server render cannot see
-      if (Array.isArray(v)) setSeenTakes(new Set(v.filter((x): x is string => typeof x === 'string')));
-    } catch { /* nothing kept */ }
-  }, [film]);
-  useEffect(() => {
-    if (!picks.length) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a shot selected is a take looked at
-    setSeenTakes((cur) => {
-      const add = picks.map(pickKey).filter((k) => !cur.has(k));
-      if (!add.length) return cur;
-      const next = new Set([...cur, ...add]);
-      try { localStorage.setItem(`hh:takes-seen:${film}`, JSON.stringify([...next].slice(-2000))); } catch { /* this tab only */ }
-      return next;
-    });
-  }, [picks, film]);
+  const [seenTakes, addSeen] = useSeenTakes(film);
+  // a shot selected is a take looked at
+  useEffect(() => { if (picks.length) addSeen(picks.map(pickKey)); }, [picks, addSeen]);
   const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, seenTakes) : undefined), [tl, viewing, shots.by, shots.takes, seenTakes]);
   const tryNew = useCallback((x: NewTake) => {
     if (!tl) return;
@@ -543,6 +528,11 @@ export function EditPage() {
     if (c) setFrameRaw(Math.max(0, startF(c, tl.fps) - tl.fps));
     say(`${x.pick.scene} shot ${x.pick.tag ?? x.pick.n} of ${names.get(x.pick.src) ?? x.name} is in place, not in the film yet. Press play to see it; Use in the film keeps it, Back to the film drops it.`, { ms: 9000 });
   }, [tl, shots.by, layouts, names, say]);
+
+  const freshN = freshCount(fresh);
+  // the step the film page sent the user to (`?step=`): What's next brings it into view
+  const stepParam = params.get('step');
+  const focusStep = stepParam && (STEP_IDS as string[]).includes(stepParam) ? (stepParam as StepId) : undefined;
 
   const selFound = tl && sel ? findClip(tl, sel) : undefined;
   // the shots selected in the Takes view (ASKS 52): Alma reads them, and that the film is shown with them, not changed
@@ -1333,6 +1323,9 @@ export function EditPage() {
         return;
       case 'renders': openRenders(); return;
       case 'release': router.push(`${base}/release`); return;
+      // the new takes not looked at: the first in the cut's order put in its place, as its clip's mark does
+      case 'check': { const first = fresh ? [...fresh.values()][0] : undefined; if (first) tryNew(first); return; }
+      case 'on-edit': return;
       // the early steps (15 Nov): Alma's box, a page of the film, the planned shots, the takes, the go sent as the user's words
       case 'idea': ui.focusBox(); return;
       case 'page': router.push(d.page === 'story' ? `${base}/story` : `${base}/${d.page}`); return;
@@ -2320,7 +2313,7 @@ export function EditPage() {
           </div>
           {lowerTab === 'left' && leftInput ? (
             <div key="left" className="duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
-              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} here="/edit" from="What's next on the Edit page" />
+              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} here="/edit" from="What's next on the Edit page" fresh={freshN} focus={focusStep} />
             </div>
           ) : empty && lowerTab !== 'left' ? (
             <div key={`empty-${lowerTab}`} className="duration-200 animate-in fade-in-0">

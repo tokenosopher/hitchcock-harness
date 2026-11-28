@@ -112,8 +112,9 @@ export interface CompanionStatus {
   /** "Without subtitles", "Phone copy, 480p", "Subtitle file", "Smaller file, for posting". */
   label: string;
   path?: string;
-  /** 'same': the final itself serves (it has no subtitles to leave out); 'none': not made and not asked for. */
-  state: 'none' | 'queued' | 'running' | 'done' | 'failed' | 'same';
+  /** 'same': the final itself serves (it has no subtitles to leave out); 'none': not made and not asked for (the 480p
+   *  preview after naming); 'cancelled': stopped on request, asked again with "Render it". */
+  state: 'none' | 'queued' | 'running' | 'done' | 'failed' | 'same' | 'cancelled';
   percent?: number;
   bytes?: number;
   error?: string;

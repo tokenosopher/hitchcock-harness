@@ -329,7 +329,10 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
  *  that character's voice. */
 export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
   return gate.filter((g) => g.state === 'ready'
-    && !(g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id))));
+    && !(g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id)))
+    // a character's sheet goes where Alma's own card at Sheet asks about that character's sheet: one question a sheet
+    //
+    && !(g.kind === 'sheet' && asks.some((c) => c.place === 'sheet' && !!c.ask && c.ids.includes(g.id))));
 }
 
 /** Every item of "Waiting for you" now, by its key ("story:<script|story>-<version>", "card:<card key>", "gate:<gate
@@ -340,7 +343,8 @@ export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
 export function waitingKeys(s: FilmState, tasks: TaskCard[], gate: GateItem[] = gateItems(s, tasks)): string[] {
   const asks = s.feed?.asks ?? [];
   const story = storyWait(s, tasks);
-  return [...(story && !story.sent ? [story.key] : []), ...asks.map((c) => `card:${c.key}`), ...gateChoices(gate, asks).map((g) => `gate:${g.key}`)];
+  const release = releaseWait(s);
+  return [...(story && !story.sent ? [story.key] : []), ...asks.map((c) => `card:${c.key}`), ...gateChoices(gate, asks).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])];
 }
 /** How many items "Waiting for you" lists (waitingKeys); `gate` when the caller has gateItems(s, tasks) already. */
 export const waitingCount = (s: FilmState, tasks: TaskCard[], gate?: GateItem[]): number => waitingKeys(s, tasks, gate).length;
@@ -348,10 +352,40 @@ export const waitingCount = (s: FilmState, tasks: TaskCard[], gate?: GateItem[])
 /** What waits, in a few words, from waitingKeys: "1 pick waiting", "3 picks waiting"; the story or the script alone
  *  says what it waits for ("waits for your lock", and `long`: "Script v3 waits for your lock", for a notice). */
 export function waitingWords(keys: string[], long = false): string {
+  if (keys.length === 1 && keys[0] === RELEASE_WAIT_KEY) return long ? 'The film waits for your post' : 'waits for your post';
   const m = keys.length === 1 ? /^story:(script|story)-(.+)$/.exec(keys[0]) : null;
   if (!m) return picksWaiting(keys.length);
   const what = m[1] === 'script' ? 'your lock' : 'your read';
   return long ? `${m[1] === 'script' ? 'Script' : 'Story'} ${m[2]} waits for ${what}` : `waits for ${what}`;
+}
+
+// ---- Posting the film: once the final and its texts are in, posting waits for the user in What's next and in
+// "Waiting for you" (so the sidebar's white dot shows), and the card takes them to the Release page
+
+export const RELEASE_WAIT_KEY = 'release:post';
+/** The film waits for the user to post it: one item of "Waiting for you" (key `release:post`). */
+export interface ReleaseWait {
+  key: typeof RELEASE_WAIT_KEY;
+  /** "Post the film: 2 of 5 platforms posted". */
+  title: string;
+  /** "The final is the master of v12 · the texts for every platform are in". */
+  line: string;
+  platforms: number;
+  posted: number;
+}
+/** A final named, platforms with their texts in the release file (Alma writes a platform with its texts), and not every
+ *  one posted, nor publishing ticked done by the user in What's next (PostInfo.release, read by the server from
+ *  social/release.json and harness/left.json). Never on a delivered film. */
+export function releaseWait(s: FilmState): ReleaseWait | undefined {
+  if (s.film.status === 'delivered') return undefined;
+  const r = s.post?.release;
+  const n = r?.platforms ?? 0, p = r?.posted ?? 0;
+  if (!r?.final || !n || p >= n || r.done) return undefined;
+  return {
+    key: RELEASE_WAIT_KEY, platforms: n, posted: p,
+    title: `Post the film: ${p} of ${plural(n, 'platform')} posted`,
+    line: [r.final.version ? `The final is the master of ${r.final.version}` : 'The final is named', `the texts for ${n === 1 ? 'the platform are' : `all ${n} platforms are`} in`].join(' · '),
+  };
 }
 
 // ---- The story or the script waiting on the user: the sidebar's white dot shows for them too

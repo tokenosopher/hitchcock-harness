@@ -22,6 +22,9 @@ export function refImage(r: InlineRef): string | undefined {
   return mediaUrl(r.file, { w: 160, t: Math.round((t ?? 0.5) * 100) / 100 });
 }
 
+/** Words in a card row: quoted, about two lines. */
+const said = (w?: string) => (w ? `“${w.length > 140 ? `${w.slice(0, 139)}…` : w}”` : undefined);
+
 function rows(r: InlineRef): [string, ReactNode][] {
   const cut = r.cut ? `${r.cut}${r.edited ? ' with edits' : ''}` : undefined;
   const file = r.file ? <span className="font-mono text-[10.5px] text-sub" title={r.file}>{base(r.file)}</span> : undefined;
@@ -37,9 +40,21 @@ function rows(r: InlineRef): [string, ReactNode][] {
       case 'view': return [['Place', r.location], ['File', file]];
       case 'location': return [['Name', r.title]];
       case 'card': return [['Asks', r.title], ['Card', r.card]];
+      case 'platform': return [['Platform', r.platform]];
+      case 'field': return [['Field', r.title ?? r.field], ['Text', said(r.words)]];
+      case 'option': return [['Does', r.title], ['Text', said(r.words)]];
+      case 'note': case 'step': return [['Field', r.field], ['Says', said(r.words)]];
+      case 'final': return [['Cut', r.cut], ['File', file]];
+      case 'stage': return [['Now', r.title]];
+      case 'voice': return [['Character', r.character], ['Round', r.item], ['File', file]];
+      case 'prompt': return [['Scene', r.scene], ['Says', said(r.words)], ['File', file]];
+      case 'qc': return [['Round', r.round], ['Score', r.title], ['File', file]];
+      case 'finding': return [['Round', r.round], ['Miss', r.item], ['Says', said(r.words)]];
+      case 'line': return [['Scene', r.scene], ['Line', r.line], ['Says', said(r.words)]];
+      case 'text': return [['Page', r.page || 'the film’s page'], ['Under', r.section], ['Says', said(r.words)]];
     }
   })();
-  return list.filter((x): x is [string, ReactNode] => x[1] !== undefined && x[1] !== '');
+  return [...list, ['Selected', said(r.quote)] as [string, ReactNode | undefined]].filter((x): x is [string, ReactNode] => x[1] !== undefined && x[1] !== '');
 }
 
 /** Goes to the thing: the page on screen when it shows it, else its page. */

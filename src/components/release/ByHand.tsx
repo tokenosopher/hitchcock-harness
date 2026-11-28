@@ -20,6 +20,8 @@ import { appHome, copyWhat, currentHand, fileWords, handSteps, type HandStep } f
 import { LinkField, type SendProps } from './PlatformSend';
 import { phoneMain } from './PhoneBar';
 import { DockSlot } from './layout';
+import { refData } from '@/components/lib/refPick';
+import { stepRef } from './refs';
 
 export function ByHand({ rel, file, p, final, phone, base }: SendProps) {
   const { state } = useFilm();
@@ -53,7 +55,7 @@ export function ByHand({ rel, file, p, final, phone, base }: SendProps) {
           const isDone = !!s.done || (posted && s.kind === 'link');
           const now = cur?.id === s.id;
           return (
-            <li key={s.id} data-hand-step={s.id} data-hand-kind={s.kind} data-hand-state={isDone ? 'done' : now ? 'current' : 'to-come'}
+            <li key={s.id} data-hand-step={s.id} data-hand-kind={s.kind} {...refData(stepRef(p, s.id, s.n, s.text, 'hand'))} data-hand-state={isDone ? 'done' : now ? 'current' : 'to-come'}
               className={cn('rounded-[12px] border transition-colors duration-200', now ? 'border-ink' : 'border-edge', !isDone && !now && 'opacity-60')}>
               <StepRow s={s} isDone={isDone} now={now} phone={phone} download={download} name={final.name} size={fileWords(final)} which={final.out?.small ? 'The smaller file of the final, for posting.' : final.out?.making || final.out?.why ? `The final, full size: ${outWords(final.out).note?.replace(/\.$/, '').replace(/^\w/, (c) => c.toLowerCase())}.` : undefined} openHref={open.href} openLabel={open.label}
                 what={s.part ? copyWhat(file, p, s.part) : ''} onCopy={copy} onTick={tick}>

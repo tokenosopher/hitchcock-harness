@@ -120,6 +120,8 @@ export function useEditRefSource(input: EditRefInput): void {
       const shot = el.getAttribute('data-shot');
       return shot ? takeShotRef(o, shot) : undefined;
     },
+    // the lanes keep Option for themselves (a box, a drag, a trim alone): nothing unnamed there goes in as words
+    own: (el) => !!el.closest('[data-track], [data-phone-clip], [data-clip]'),
     moment: () => moment(now.current),
     items: () => items(now.current),
     go: (r) => {

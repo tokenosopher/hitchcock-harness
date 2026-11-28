@@ -323,7 +323,11 @@ export interface PostInfo {
   pieces?: string[];
   /** The film's release file, social/release.json (Release, 14 Nov), in brief: there, and the master named as the final
    *  when one is (Film Flow v3.3: the release starts from it; no social/kit.md is made). */
-  release?: { path: string; final?: { path: string; version?: string } };
+  release?: { path: string; final?: { path: string; version?: string };
+    /** How many platforms the file has (Alma writes them with their texts) and how many are posted; `done`: when the
+     *  user ticked publishing done in What's next (harness/left.json, the `posted` tick); read for "Waiting
+     *  for you" (derive.ts releaseWait). */
+    platforms?: number; posted?: number; done?: string };
   /** When each cut and finished film was last written (ISO), so a page can list them newest first (11 Nov). */
   written?: Record<string, string>;
 }
@@ -656,7 +660,7 @@ export interface RenderLoudness {
 export interface RenderState {
   version: string;
   kind: RenderKind;
-  state: 'none' | 'queued' | 'running' | 'done' | 'failed';
+  state: 'none' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled';   // cancelled: stopped on request, asked again like one never made
   percent?: number;             // 0–100 while running
   path?: string;                // cut/renders/<version>-<kind>.mp4, relative to the film folder
   log?: string;                 // cut/renders/<version>.log

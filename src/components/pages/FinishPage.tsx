@@ -20,6 +20,7 @@ import { Feed, ShownLink } from '@/components/feed/Feed';
 import { StepRunning } from '@/components/flow/RunningNow';
 import { FullCutLink } from '@/components/media/MasterPlayer';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
 
 
 export function FinishPage() {
@@ -191,7 +192,7 @@ export function FinishPage() {
                 {f.music.source.takes.map((t) => {
                   const picked = f.music.pick && new RegExp(`\\b${t.label.replace(/^take\s*/i, '')}\\b|${t.id ?? '#'}`, 'i').test(f.music.pick.pick);
                   return (
-                    <button key={t.label} type="button" onClick={() => chip(`music:${t.id ?? t.label}`, `music · ${t.label}${t.id ? ` ${t.id}` : ''}`)}
+                    <button key={t.label} type="button" {...refData({ kind: 'text', label: `music · ${t.label}${t.id ? ` ${t.id}` : ''}`, page: 'finish', section: 'Music', item: t.id, words: [f.music.source?.name, t.label, t.id].filter(Boolean).join(' · ') })} onClick={() => chip(`music:${t.id ?? t.label}`, `music · ${t.label}${t.id ? ` ${t.id}` : ''}`)}
                       className={cn('flex w-full cursor-pointer items-center gap-3 border-b border-line px-4 py-3 text-left hover:bg-raised', ui.hasChip(`music:${t.id ?? t.label}`) && 'bg-raised')}>
                       <span aria-hidden="true" className="flex size-8 flex-none items-center justify-center rounded-full border border-edge-strong"><IconPlay size={11} /></span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">

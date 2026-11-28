@@ -4,15 +4,15 @@
 //          kit folder when there is one; for a film with only social/kit.md, today's read-only kit page (`legacy`).
 //   POST {op, …} → one operation (ops.ts) applied to the file read fresh, checked and written; 409 {error} with the
 //          plain reason when the rules refuse it. {op: "nameFinal", path} names a master on offer as the final and
-//          asks the render queue for its companions (nothing is spent).
+//          asks the render queue for its companions (nothing is spent), the 480p preview not among them.
 // Outside production both take ?now= (the tests' clock). In sample-data mode the file lives in memory.
 import path from 'node:path';
 import { connection } from 'next/server';
-import { isMock, mockCut, mockState, resetMockThread } from '@/fixtures/mock';
+import { isMock, mockCut, mockPoke, mockState, resetMockThread } from '@/fixtures/mock';
 import { RELEASE_SAMPLES, SAMPLE_MASTERS, releaseSeed, sampleCompanions, sampleFinal, sampleKitRelease } from '@/fixtures/release';
 import { resetMockCards } from '@/server/release/mockAlma';
 import { leftReleaseSeed } from '@/fixtures/left';
-import { mockRenderFiles } from '@/fixtures/renders';
+import { mockJobState, mockQueueRender, mockRenderFiles } from '@/fixtures/renders';
 import { fileWords } from '@/components/edit/renderList';
 import { getFilmState } from '@/server/films/state';
 import { readRelease, shownFolder } from '@/server/films/read/release';
@@ -25,10 +25,10 @@ import { buildFinal, companionStatus, finalFacts, listMasters, optionsOf, queueC
 import { deriveAll } from '@/components/release/derive';
 import { cutNowView as cutView, finalNames, masterRows, type MasterOption } from '@/components/release/masters';
 import { parseOp, type ReleaseOp } from '@/components/release/ops';
-import type { ReleaseFile } from '@/components/release/file';
+import type { ReleaseFile, ReleaseFinal } from '@/components/release/file';
 import type { ReleaseView } from '@/components/release/view';
 import { versionPart } from '@/server/edit/timeline';
-import type { Timeline } from '@/server/types';
+import type { RenderKind, RenderOptions, Timeline } from '@/server/types';
 
 type Ctx = { params: Promise<{ film: string }> };
 const refused = (error: string, status = 409) => Response.json({ ok: false, error }, { status, headers: NO_STORE });
@@ -50,6 +50,15 @@ function mockMasters(slug: string): MasterOption[] {
   });
 }
 
+/** A sample final's companions as the sample render queue has them (src/fixtures/renders.ts). */
+const mockLive = (slug: string, final: ReleaseFinal) => (kind: RenderKind, options?: Record<string, unknown>) => mockJobState(slug, final.version, kind, options as RenderOptions | undefined);
+/** Naming a sample final asks the sample queue for its companions, as queueCompanions does (final.ts). */
+function mockQueueCompanions(slug: string, final: ReleaseFinal): void {
+  for (const c of [final.companions.post, final.companions.clean]) {
+    if (c && c.path !== final.path && c.options) mockQueueRender(slug, final.version, 'master', c.options as RenderOptions, false);
+  }
+}
+
 async function mockGet(slug: string, now: Date, wantMasters: boolean, light: boolean): Promise<ReleaseView> {
   const st = mockState(slug);
   const file = mockFile(slug);
@@ -59,7 +68,7 @@ async function mockGet(slug: string, now: Date, wantMasters: boolean, light: boo
   return {
     film: slug, mock: true, file, derived: file ? deriveAll(file, now) : undefined,
     masters: !legacy && (!file?.final || wantMasters) ? mockMasters(slug) : undefined,
-    companions: file?.final ? sampleCompanions(file.final, now) : undefined,
+    companions: file?.final ? sampleCompanions(file.final, now, mockLive(slug, file.final)) : undefined,
     finalFile: fm ? { bytes: fm.bytes, seconds: fm.seconds, width: 1080, height: 1920, ...(fm.fromBytes ? { fromBytes: fm.fromBytes } : {}) } : undefined,
     cut: cutView(st?.cut?.current, file?.final, ((mockCut(slug)?.timelines ?? []) as Timeline[]).find((t) => t.version === file?.final?.version)),
     kit: slug === 'sample-release-open' ? { shown: 'assets/final-cuts/2026-11-14 The Lighthouse/Social kit', folder: path.join(/*turbopackIgnore: true*/ harnessConfig().driveRoot, 'final-cuts', '2026-11-14 The Lighthouse', 'Social kit') } : undefined,
@@ -129,7 +138,11 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
       }
       const r = await mockOperate(slug, mockSeed(slug), op, now);
       if (!r.ok) return refused(r.refused);
-      return Response.json({ ok: true, file: r.file, said: r.said, derived: deriveAll(r.file, now), companions: r.file.final ? sampleCompanions(r.file.final, now) : undefined }, { headers: NO_STORE });
+      // the sample render queue makes the copy without subtitles and the smaller file, not the 480p
+      if (naming && r.file.final) mockQueueCompanions(slug, r.file.final);
+      // the sample's state carries the release in brief (fixtures/mock.ts): sent again, as the watcher does for a film
+      mockPoke(slug);
+      return Response.json({ ok: true, file: r.file, said: r.said, derived: deriveAll(r.file, now), companions: r.file.final ? sampleCompanions(r.file.final, now, mockLive(slug, r.file.final)) : undefined }, { headers: NO_STORE });
     }
     const film = await routeFilm(slug);
     let op = parsed as ReleaseOp;

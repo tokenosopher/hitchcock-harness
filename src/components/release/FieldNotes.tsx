@@ -8,13 +8,19 @@ import { useState } from 'react';
 import { Btn } from '@/components/shell/atoms';
 import { cn } from '@/lib/utils';
 import { answerWords, lastAnswered } from './derive';
+import { noteReasons } from './choices';
 import type { Field, Note, Platform, ReleaseFile } from './file';
 import type { useRelease } from './ui';
+import { refData } from '@/components/lib/refPick';
+import { noteRef } from './refs';
 
 type Run = ReturnType<typeof useRelease>['run'];
 
 export function FieldNotes({ file, p, f, run, locked }: { file: ReleaseFile; p: Platform; f: Field; run: Run; locked: boolean }) {
-  const notes = f.notes ?? [];
+  // a note that only offered candidates is drawn no more where the options are: its words are under the
+  // option it recommends; on a locked platform, which shows no options, it stays as it was
+  const plain = locked ? undefined : noteReasons(p, f).plain;
+  const notes = (f.notes ?? []).filter((n) => !plain?.has(n.id));
   if (!notes.length) return null;
   const last = lastAnswered(file);
   return (
@@ -45,7 +51,7 @@ function NoteBox({ file, p, f, n, run, locked, undoable }: { file: ReleaseFile; 
   if (n.answered) {
     const a = n.actions.find((x) => x.id === n.answered!.action);
     return (
-      <div data-note={n.id} data-answered className="flex flex-col gap-1 duration-200 animate-in fade-in-0">
+      <div data-note={n.id} data-answered {...refData(noteRef(p, f, n))} className="flex flex-col gap-1 duration-200 animate-in fade-in-0">
         <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-[12px] leading-[1.45] text-ink-3">
           <span data-note-done>{a ? answerWords(file, a) : 'Answered.'}</span>
           {undoable && <button type="button" data-note-undo disabled={busy} onClick={() => void undo()} className="inline-flex min-h-7 cursor-pointer items-center text-ink underline decoration-faint underline-offset-2 transition-colors duration-150 hover:decoration-ink disabled:opacity-50">Undo</button>}
@@ -55,7 +61,7 @@ function NoteBox({ file, p, f, n, run, locked, undoable }: { file: ReleaseFile; 
     );
   }
   return (
-    <div data-note={n.id} className="relative flex flex-col gap-2.5 rounded-[10px] border border-edge-strong bg-[#0f0f11] px-3 py-2.5 duration-200 animate-in fade-in-0">
+    <div data-note={n.id} {...refData(noteRef(p, f, n))} className="relative flex flex-col gap-2.5 rounded-[10px] border border-edge-strong bg-[#0f0f11] px-3 py-2.5 duration-200 animate-in fade-in-0">
       <span aria-hidden className="absolute -top-[5px] left-[22px] size-2 rotate-45 border-l border-t border-edge-strong bg-[#0f0f11]" />
       <div className="flex items-start gap-[9px]">
         <span aria-hidden className="grid size-[18px] flex-none place-items-center rounded-full border border-edge-strong text-[10px] text-sub">A</span>

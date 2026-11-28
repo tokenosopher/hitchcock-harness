@@ -4,8 +4,8 @@
 import type { FeedCard, FilmState, TaskCard } from '@/server/types';
 import {
   atStoryStage, clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
-  partsStatus, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
-  type StoryWait, type TaskAim,
+  partsStatus, releaseWait, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
+  type ReleaseWait, type StoryWait, type TaskAim,
 } from './derive';
 import { fmtDate } from './format';
 import { editWork, type EditWork } from './editWork';
@@ -44,6 +44,8 @@ export interface Flow {
   waitWords: string;
   /** The story or the script waiting on the user, as "Waiting for you" lists it (derive.ts storyWait). */
   story?: StoryWait;
+  /** The film waiting for the user to post it (derive.ts releaseWait). */
+  release?: ReleaseWait;
   faceGate: number;       // face picks still open (the small gate in chain B)
   masterGate: number;     // master picks still open (the small gate in chain A)
   /** The film went out: the board reads as a record. `deliveredOn` is the day, as shown ("9 Nov"). */
@@ -109,6 +111,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // move until the files show it (lib/sent.ts)
   const sw = storyWait(s, tasks);
   const storyWaits = sw && !sw.sent ? sw : undefined;
+  const releaseWaits = releaseWait(s);
   const node = (key: FlowKey, num: string, name: string, { also = 0, ...o }: Partial<FlowNode> & { state: NodeState; status: string; also?: number }): FlowNode => {
     const aims = o.aims ?? allAims(o.parts ?? []);
     // a live sub-agent makes a node run; a delivered film has nothing left waiting
@@ -357,6 +360,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     waiting,
     waitWords: waiting ? waitingWords(keys) : '',
     ...(storyWaits ? { story: storyWaits } : {}),
+    ...(releaseWaits ? { release: releaseWaits } : {}),
     faceGate: faceP.filter((p) => p.state !== 'done').length,
     masterGate: open.length,
     done: delivered,
