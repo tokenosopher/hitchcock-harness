@@ -6,14 +6,14 @@ board, and the generation's shots file for the pre-submit check.
 
 ## Rules
 - Blender is `/Applications/Blender.app`, or the program named in `BLENDER_BIN`.
-- Run Blender **only** through the slot wrapper (at most eight renders at once on this Mac, shared with other agents; the limit
-  is `SLOTS` in `blender_run.py`), from the studio folder:
+- Run Blender **only** through the slot wrapper (at most three renders at once on this Mac, shared with other agents, two when memory is
+  short; the limit is `SLOTS` in `blender_run.py`, and nothing raises it past three), from the studio folder:
   `.venv/bin/python tools/previz/blender_run.py <script>.py -- --film $FILM [flags]`. The kit refuses a headless run that
   did not come through it. Waiting runs are served first come, first served (a numbered ticket each). Runs that render
   nothing (`--project`, `--shots-file`, `--build`, `--facts`, `build_location.py`) never wait behind renders: they have their own fast
   lane (`FAST_SLOTS`, 3). Every run ends with `blender_run: <lane> slot N, waited W s, ran R s, exit E`.
-  Eight is the ceiling, not a promise: a render also waits while the Mac has no room for one more
-  (the first four always start; a further one needs normal memory pressure and about 3 GB free, `MEM_NEED_GB`). A waiting
+  Three is the ceiling, not a promise: a render also waits while the Mac has no room for one more
+  (the first ones always start; a further one needs normal memory pressure and about 3 GB free, `MEM_NEED_GB`). A waiting
   run says `waiting for memory...`; that is the wrapper doing its job, not a hang. Each render prints the memory free at
   its start and its peak, and every run is logged in `scratch.nosync/previz-blender/blender-runs.log` in the studio folder.
 - A scene in a location that has a people file starts with `R = location('<LID>')`, not `room(...)`, and builds no one

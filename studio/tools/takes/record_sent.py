@@ -21,7 +21,9 @@ Writes, beside the take, once (a re-run with the same content is accepted; anyth
   pickup   generations/FIX-<name>/takes/take<N>/FIX-<name>-take<N>-sent.json
   element  elements/<CID>/takes/take<N>/E-<CID>-take<N>-sent.json
 and the job id file beside it (<G>-take<N>.jobid, as land.py names it) when there is none; a job id file holding another
-job is refused, so a wrong take number shows at once.
+job is refused, so a wrong take number shows at once. A reference whose file cannot be found (not in the media list, the
+upload registry, elements.json, a .jobid beside a file, or a cast, props or locations prompts.json or r1.json) is named,
+and the record is refused with exit 2, nothing written: give --media-list or add the id to the registry, then run again.
 
 It completes what the kit already writes and replaces none of it: the prompt file, the media list and the take-medias
 file (never overwritten), the upload registry (file, media id, sha1), the job id file, the spend.md row (found by the job
@@ -78,6 +80,53 @@ def registry_path(film):
     return new if os.path.exists(new) or not os.path.exists(old) else old
 
 
+UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+MEDIA_EXT = ('.png', '.jpg', '.jpeg', '.webp', '.mp4', '.mp3', '.wav')
+
+
+def generated_ids(film):
+    """Media ids that are not uploads but earlier generations sent by their job id (an element's video, a cast, prop or
+    location picture, a still made for a pick-up), each with the film file it is: from elements.json, every
+    <name>.jobid beside its <name>.<ext>, and the job_id/file pairs of cast, props and locations prompts.json and r1.json.
+    Without this a pick-up sent by job ids gets a record with no files, and its take's page shows its inputs empty."""
+    out = {}
+    try: el = load(os.path.join(film, 'elements.json'), {})
+    except (OSError, ValueError): el = {}
+    for c, e in ((el.get('elements') or {}) if isinstance(el, dict) else {}).items():
+        v = (e or {}).get('video_element') or {} if isinstance(e, dict) else {}
+        if isinstance(v, dict) and isinstance(v.get('final_job'), str) and isinstance(v.get('final_file'), str):
+            out.setdefault(v['final_job'], v['final_file'])
+    for root, dirs, files in os.walk(film):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and not d.endswith('.nosync') and d not in ('cut', 'review')]
+        rel_root = os.path.relpath(root, film)
+        for n in files:
+            p = os.path.join(root, n)
+            if n.endswith('.jobid'):
+                stem = n[:-6]
+                for ext in MEDIA_EXT:
+                    if os.path.exists(os.path.join(root, stem + ext)):
+                        try: jid = open(p).read().strip()
+                        except OSError: break
+                        if UUID.fullmatch(jid): out.setdefault(jid, os.path.normpath(os.path.join(rel_root, stem + ext)))
+                        break
+            elif n in ('prompts.json', 'r1.json') and rel_root.split(os.sep)[0] in ('cast', 'props', 'locations'):
+                def walk(o):
+                    if isinstance(o, dict):
+                        jid, f = o.get('job_id'), o.get('file')
+                        if isinstance(jid, str) and isinstance(f, str) and UUID.fullmatch(jid):
+                            for cand in (os.path.join(rel_root, f), f, os.path.join(rel_root, os.path.basename(f))):
+                                full = os.path.realpath(os.path.join(film, cand))
+                                # only a file inside the film folder counts
+                                if full.startswith(os.path.realpath(film) + os.sep) and os.path.exists(full):
+                                    out.setdefault(jid, os.path.normpath(cand)); break
+                        for x in o.values(): walk(x)
+                    elif isinstance(o, list):
+                        for x in o: walk(x)
+                try: walk(load(p, {}))
+                except (OSError, ValueError): pass         # a file that is not JSON names nothing
+    return out
+
+
 def paths(film, kind, gid, take, v):
     """(id, prompt, media list, take-medias, take folder, stem) for this take."""
     if kind == 'element':
@@ -122,6 +171,7 @@ def build(A):
     for f, e in reg.items():
         mid = e.get('media_id') if isinstance(e, dict) else e
         if mid: by_id.setdefault(mid, f)
+    for mid, f in generated_ids(film).items(): by_id.setdefault(mid, f)
 
     # the prompt
     if params is not None and isinstance(params.get('prompt'), str):
@@ -237,8 +287,17 @@ def main():
     out = os.path.join(folder, f'{stem}-sent.json')
     jobid = os.path.join(folder, f'{stem}.jobid')
     shown = os.path.relpath(out, film)
+    blank = [r['label'] for r in rec['references'] if not r.get('file')]
+    blank_msg = (f'{len(blank)} of {len(rec["references"])} inputs have no file, so the take\'s page in the app would show '
+                 f'them empty: {", ".join(blank)}. Give a media list naming each file (--media-list), or add the id to the '
+                 f'upload registry, and run it again.') if blank else ''
     if A.dry_run:
-        print(json.dumps(rec, indent=1, ensure_ascii=False)); print(f'dry run: would write {shown}'); return
+        print(json.dumps(rec, indent=1, ensure_ascii=False)); print(f'dry run: would write {shown}')
+        if blank: print('WARNING: ' + blank_msg + ' (a real run writes nothing then)')
+        return
+    if blank:
+        print('refused: ' + blank_msg + ' Nothing written.', file=sys.stderr)
+        sys.exit(2)
     if os.path.exists(jobid) and open(jobid).read().strip() != A.job:
         sys.exit(f'{os.path.relpath(jobid, film)} holds another job ({open(jobid).read().strip()}); is --take right? nothing written')
     if os.path.exists(out):

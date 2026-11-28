@@ -1,0 +1,7 @@
+{
+ "_about": [
+  "Read by: the Hitchcock Harness, in place of the hard cuts it found itself in this take. Written by hand, only when the app missed a cut or found a false one.",
+  "Described in: Flow v3.3 - 7 Takes (step 13) and the app's edit recipe, \"The film in shots\". Goes to generations/<G>/takes/take<N>/cuts.json (any take folder, a pick-up's too). cuts: the seconds where each new shot starts, in order, never 0; [] says the take has no cut."
+ ],
+ "cuts": [2.375, 4.042, 8]
+}
