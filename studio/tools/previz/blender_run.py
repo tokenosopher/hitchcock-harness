@@ -1,6 +1,7 @@
-"""Run Blender headless with at most SLOTS renders at once across every agent of this studio.
+"""Run Blender headless with at most SLOTS renders at once across every agent of this studio: three by default, and
+never more than three, since six renders at once ran a 16 GB Mac out of memory (set it to 2 when memory is short).
 It can be changed while renders wait: write a number into <studio>/scratch.nosync/previz-blender/line-slots (every waiting
-run reads it on each try); remove the file to go back to SLOTS.
+run reads it on each try; 3 is the most it can raise it to); remove the file to go back to SLOTS.
     .venv/bin/python tools/previz/blender_run.py <scene script>.py -- --film $FILM <script args>
 Blender is /Applications/Blender.app, or the program named in BLENDER_BIN. Waits for a free slot (an flock on
 <studio>/scratch.nosync/previz-blender/line-slot-N), runs `Blender -b --disable-autoexec -P <script> -- <args>` (a .blend
@@ -15,9 +16,9 @@ the scene and print or write text. They never take a render slot: they have thei
 line-fast-N, their own queue), so a camera question is not stuck behind takes.
 Every run ends with one line: `blender_run: <lane> slot N, waited W s, ran R s, exit E` (timing.py reads it).
 
-The memory check. A grey previz render can take about 2 GB; eight at once can fill a 16 GB Mac's memory. SLOTS stays the
+The memory check. A grey previz render can take about 2 GB; a few at once can fill a 16 GB Mac's memory. SLOTS stays the
 ceiling; a render also waits while the Mac has no room for one more:
-  - the first four renders always start (MEM_MIN_PARALLEL), so nothing can wait for ever;
+  - the first renders, up to MEM_MIN_PARALLEL (and never past SLOTS), always start, so nothing can wait for ever;
   - a further render starts only when macOS reports normal memory pressure and at least MEM_NEED_GB (3) is free, counting
     MEM_NEED_GB as already taken by each render started in the last MEM_RAMP_S (45) seconds, which has not grown yet;
   - the line stays first come, first served: the run at the head waits for memory and the others wait behind it.
@@ -30,7 +31,8 @@ of this studio shares one line; BLENDER_RUN_PREFIX and BLENDER_RUN_LOG choose ot
 import ctypes, fcntl, json, os, resource, struct, subprocess, sys, threading, time
 
 BLENDER = os.environ.get('BLENDER_BIN', '/Applications/Blender.app/Contents/MacOS/Blender')
-SLOTS = int(os.environ.get('SLOTS', 8))
+SLOTS = int(os.environ.get('SLOTS', 3))
+MAX_SLOTS = 3                                   # the ceiling for SLOTS and the live file alike
 FAST_SLOTS = int(os.environ.get('FAST_SLOTS', 3))
 STUDIO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # tools/previz/ -> the studio
 LINE_DIR = os.path.join(STUDIO, 'scratch.nosync', 'previz-blender')
@@ -52,9 +54,9 @@ LANES = {'render': dict(slot=PREFIX + '-slot-%d', queue=PREFIX + '-queue'),
 
 def slots(lane):
     if lane == 'fast': return max(1, FAST_SLOTS)
-    if 'SLOTS' in os.environ: return max(1, SLOTS)        # an explicit SLOTS for this run beats the live file
+    if 'SLOTS' in os.environ: return max(1, min(MAX_SLOTS, SLOTS))        # an explicit SLOTS for this run beats the live file
     try:
-        return max(1, min(8, int(open(LIVE).read().strip())))
+        return max(1, min(MAX_SLOTS, int(open(LIVE).read().strip())))
     except (OSError, ValueError):
         return SLOTS
 NOISE = ('Fra:', 'Read prefs', 'Shadow buffer full', 'Saved: ', 'Time: ', 'Append frame')

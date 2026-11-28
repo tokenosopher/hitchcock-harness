@@ -11,6 +11,9 @@ One template for every file Alma writes by hand for a film. The rules live in `f
 | `generation/prompt-common.md` | `generations/prompt-common.md` | `tools/prompts/assemble.py` (`@KEY` in MEDIA descriptions and TAGS lines only) |
 | `generation/shots.json` | `generations/<G>/<G>-shots.json` | `tools/prompts/check.py` (`id`, `in_frame`, `duration`); `tools/prompts/assemble.py` (`duration` fallback); the previz scene script |
 | `generation/media.json` | `generations/<G>/prompt/<G>-media-<v>.json` (written by `assemble.py`; by hand only for a set it does not build) | `tools/prompts/check.py` |
+| `generation/stands.json` | `generations/FIX-<name>/FIX-<name>-stands.json` (written by `tools/film/land.py --stands-for`; by hand only for what that cannot say) | the Hitchcock Harness (the Takes view, the Shots page, Shot details) |
+| `generation/cuts.json` | `generations/<G>/takes/take<N>/cuts.json`, only where the app's cuts of a take were wrong | the Hitchcock Harness (the take's shots) |
+| `experiments.md` | `experiments.md` (one entry per experiment, then the post-analysis) | no script |
 | `previz/previz-take.json` | `previz/<G>/<G>-previz-take-<N>.json` (written by the scene script's `run()`) | `tools/prompts/assemble.py`, `tools/prompts/check.py`, `tools/previz/assemble_film.py` |
 | `previz/board.json` | `previz/<G>/storyboard/v<N>/board.json` | `tools/previz/storyboard.py` |
 | `views.md` | `locations/views.md` (one table per location, a row per painted view) | `tools/previz/views_cams.py` (adds the Camera column); `tools/previz/precheck.py` (the plate check) |

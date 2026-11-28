@@ -2,11 +2,13 @@
 (review/cards.json), the Higgsfield and element records, the upload registry; and the film's line in the studio's
 films.txt. Flow v3.3 - 1 Setup and story, done in one command. Never overwrites a file. Calls no service.
 
-    .venv/bin/python tools/film/new_film.py assets/films/<film> --title "<Public Title>" --code <ABC> [--ratio 9:16|16:9]
+    .venv/bin/python tools/film/new_film.py assets/films/<film> --title "<Public Title>" --code <ABC> [--ratio 9:16|16:9|21:9|1:1]
                                             [--budget-credits N] [--date YYYY-MM-DD]
 
 --code is the film's short code (2 to 6 capitals or digits, e.g. LHK): the prefix of its Higgsfield element and upload
-names. --ratio defaults to 9:16 and --budget-credits to 2000 (the setup defaults).
+names. --ratio defaults to 9:16 and --budget-credits to 2000 (the setup defaults). The ratio goes into brief.md as its
+"- Aspect ratio:" line, which the Hitchcock Harness reads for the frame of the film's cut (9:16 1080x1920, 16:9 1920x1080,
+21:9 2520x1080, 1:1 1080x1080), and into higgsfield.json for every Seedance job.
 --date is the day the film starts (default today); it dates the delivery folder assets/final-cuts/<date> <Title>."""
 import argparse, datetime, json, os, re, sys
 
@@ -48,7 +50,8 @@ def main():
     ap.add_argument('film', help='the film folder to create (or complete)')
     ap.add_argument('--title', required=True, help='the public title, e.g. "The Lighthouse Keeper"')
     ap.add_argument('--code', required=True, help='short code, 2 to 6 capitals or digits, e.g. LHK')
-    ap.add_argument('--ratio', default='9:16', choices=['9:16', '16:9'], help='default 9:16')
+    ap.add_argument('--ratio', default='9:16', choices=['9:16', '16:9', '21:9', '1:1'],
+                    help='the film\'s frame, which the app sizes the cut from (default 9:16)')
     ap.add_argument('--budget-credits', type=int, help=f'the Higgsfield credit budget the user set (default {DEFAULT_BUDGET})')
     ap.add_argument('--date', help='the day the film starts, YYYY-MM-DD (default today)')
     A = ap.parse_args()

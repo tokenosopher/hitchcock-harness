@@ -18,7 +18,8 @@ frames (same frame count, cuts on the same frames), so the cut needs no change.
        > $TK/<G>-take<N>-1080p-params.json
    ```
    The first prints the params with `get_cost: true` for the quote; the second is the file you submit. A draft can be
-   finalized within 7 days.
+   finalized within 7 days. A take made without `draft: true` cannot be finalized at all (Higgsfield answers "Completed
+   Seedance 2.5 draft not found"): it goes to route 2.
 3. After the go: `generate_video` with those params, one call per take, at most about 12 in flight; log each in `spend.md`
    (`Higgsfield · seedance_2_5 finalize 1080p`). A take whose `<G>-take<N>-1080p.jobid` exists is waited on, never sent again.
 4. `jobs_wait` until done, then land each beside its draft:
@@ -31,7 +32,10 @@ frames (same frame count, cuts on the same frames), so the cut needs no change.
 6. The app renders the master from the 1080p takes; check it against a 480p render of the same version:
    `.venv/bin/python tools/finish/check_cut.py cut/renders/v<n>-master.mp4 --ref <the 480p render> --sheet <dir>`.
 
-## Route 2, only when the user asks: the Higgsfield upscale (`upscale_video`) on segments
+## Route 2, for a take that cannot be finalized or when the user asks: the Higgsfield upscale (`upscale_video`)
+
+A few such takes are upscaled each whole (uploaded whole, one call each, the result beside the take as
+`<G>-take<N>-1080p-up.mp4`); the whole cut goes through the segments below only when most of it is such takes.
 
 No price on file and no cost preflight: the first go covers one segment; read `balance` before and after it and write the
 price per output second into note 13, then quote the rest.
@@ -45,6 +49,7 @@ price per output second into note 13, then quote the rest.
 3. `upscale_video` per segment: first `{provider: "topaz", video_id: <media id>, resolution: "1080p", aspect_ratio: <the film's ratio>}`;
    when a result does not keep the segment's frame count at 24 fps, `{provider: "bytedance", video_id, resolution: "1080p",
    fps: 24, width, height}` (the segment's size; `preset: "aigc"` suits generated video; above 30 fps doubles the price).
+   Topaz keeps the skin's texture; ByteDance smooths skin to wax, so look at every face at full size when it is used.
 4. `jobs_wait`, then download each result without printing its link to `$FILM/video/1080/upscale/seg-NN-up.mp4`. Log every
    job in `$FILM/video/1080/upscale/batch-log.json` (a list of `{segment, media_id, job_id, provider, seconds, credits}`) and
    one `spend.md` row for the run (`Higgsfield upscale (upscale_video, topaz, 1080p)`).

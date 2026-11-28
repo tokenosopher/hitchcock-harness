@@ -14,7 +14,7 @@ Started <YYYY-MM-DD>. Film Flow v3.3: Seedance 2.5 video built from character vi
 
 ## Decisions (<YYYY-MM-DD>)
 The setup defaults hold unless the user said otherwise at the start:
-- **Aspect ratio 9:16** <or 16:9, for <platform>>.
+- **Aspect ratio 9:16** <or 16:9, 21:9 or 1:1, for <platform>; the `- Aspect ratio:` line above is the one the app reads for the frame of the cut>.
 - **Voices from Higgsfield:** preset voices, voices made from the face, variants of a preset. The element lines come from the picked voices.
 - **Drafts: one generation per scene, 480p with the draft flag, no batches.** A second take only after the user's notes. 1080p only on the user's say-so for that action.
 - **Video elements: 1920x1080, 5 s**, one per speaking character; extras go into scenes as their group picture, cropped to each scene.

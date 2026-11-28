@@ -6,7 +6,7 @@ place on the film's timeline in the same step. Nothing else comes before this; t
         (--file <downloaded mp4> | --url-file <file holding the result URL on its first line>)
         --job <job id> --title "<card title>" --section "<section heading>"
         [--sub "<card sub line>"] [--credits N] [--section-sub "<section text>"] [--of take|element|pickup] [--no-check]
-        [--no-timeline] [--drop-wait SECONDS]
+        [--no-timeline] [--drop-wait SECONDS] [--stands-for <ids> ...] [--scene S<n>]
 
 Where each kind lands (one folder per take; every file name unique in the film; the job id beside the clip under the same
 name):
@@ -33,7 +33,15 @@ the answer (cut/alma/<same>.answer.json): when the cut moved meanwhile it reads 
 tries); when the harness is not running the drop waits there and is taken in when it starts. Nothing is dropped when the
 scene has its take in the film already (a later take waits on the Takes view for the keeper pick or the user's word), when
 the scene has no boards or planned shots on the cut, or when the film has no cut yet. --no-timeline skips it (a test take).
-Exit 2: the take landed but the harness refused the drop (its reason is printed); run the app's call instead or ask."""
+Exit 2: the take landed but the harness refused the drop (its reason is printed); run the app's call instead or ask.
+
+The stands record (--kind pickup; Flow v3.3 - 8 Redos, step 14): one --stands-for per shot the pick-up was asked for, in
+order, each the place ids of its scene that shot replaces ("4", or "5,6" for one shot that replaces two). It writes
+generations/FIX-<name>/FIX-<name>-stands.json once, {"schema": 1, "scene", "by": "land.py", "at", "shots":
+[{"stands_for": [...]}]}, which the app reads to show each shot of the pick-up under the place it stands for. The scene
+comes from the scene number in the pick-up's name (FIX-door-S4, FIX-S6b: S4, S6), or --scene. A record already there is
+kept as it is (a later take lands with it); one that differs is named, never written over. Anything --stands-for cannot
+say (an insert, a take cut differently) goes into the record by hand (templates/generation/stands.json)."""
 import argparse, copy, datetime, hashlib, json, math, os, re, shutil, subprocess, sys, tempfile, time
 
 CHECKING = 'Checks running; this text gets the findings.'
@@ -100,7 +108,10 @@ def place(film, kind, gid, take, of):
 
 # ---- the timeline: the take in its boards' place (a port of the app's takeForBoards, components/edit/planned.ts)
 
-SCENE = re.compile(r'(?:^|[^A-Za-z0-9])(S\d+[A-Z]?)(?![A-Za-z0-9])')     # the app's scene of a take folder (server/edit/shots.ts)
+# the app's scene of a take folder (server/edit/shots.ts): a pick-up's own lowercase letter after the scene number
+# ("FIX-S6b", a pick-up of S6) is not part of the scene
+SCENE = re.compile(r'(?:^|[^A-Za-z0-9])(S\d+[A-Z]?)[a-z]?(?![A-Za-z0-9])')
+PLACE = re.compile(r'[0-9]+[A-Za-z]?')
 
 
 def r6(x):
@@ -248,6 +259,39 @@ def to_timeline(film, gid, take_n, dest, wait):
     return 2, 'timeline: NOT taken: the cut kept moving; put the take in with the app\'s call ("A take in its boards\' place")'
 
 
+def write_stands(film, gid, stands, scene):
+    """generations/<gid>/<gid>-stands.json, once, from --stands-for; a record already there is never written over."""
+    p = os.path.join(film, 'generations', gid, f'{gid}-stands.json')
+    shown = os.path.relpath(p, film)
+    if stands is None:
+        if not os.path.exists(p):
+            print(f'note: no stands record yet ({shown}); give --stands-for, or write it by hand, so the app knows which '
+                  f'places of its scene the pick-up stands for')
+        return
+    scene = scene or (SCENE.search(gid).group(1) if SCENE.search(gid) else None)
+    if not scene:
+        print(f'note: no scene number in {gid}; give --scene S<n>. {shown} not written')
+        return
+    if os.path.exists(p):
+        try:
+            old = json.load(open(p, encoding='utf-8'))
+        except (OSError, ValueError):
+            old = None
+        same = isinstance(old, dict) and old.get('scene') == scene and \
+            [s.get('stands_for') for s in old.get('shots') or [] if isinstance(s, dict)] == [s['stands_for'] for s in stands]
+        print(f'{shown} is there already' + ('' if same else ' and says otherwise: kept as it is; change it by hand if it is wrong'))
+        return
+    rec = {'schema': 1, 'scene': scene, 'by': 'land.py',
+           'at': datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z', 'shots': stands}
+    tmp = p + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(rec, f, indent=1, ensure_ascii=False)
+        f.write('\n')
+    os.replace(tmp, p)
+    print(f'wrote {shown}: ' + '; '.join(f'shot {i + 1} stands for {", ".join(s["stands_for"])}' for i, s in enumerate(stands))
+          + f' of {scene}')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split('\n\n', 1)[1])
@@ -269,6 +313,10 @@ def main():
     ap.add_argument('--no-check', action='store_true', help='accepted for the commands in the stage notes; does nothing')
     ap.add_argument('--no-timeline', action='store_true', help='--kind take: do not put the take on the timeline (a test take)')
     ap.add_argument('--drop-wait', type=float, default=15, help='seconds to wait for the harness to answer the drop (default 15)')
+    ap.add_argument('--stands-for', action='append', metavar='IDS',
+                    help='--kind pickup: the place ids of the scene one shot of the pick-up stands for ("4" or "5,6"); '
+                         'once per shot, in order. Writes FIX-<name>-stands.json')
+    ap.add_argument('--scene', help='--kind pickup: the scene the pick-up belongs to, when its name does not say it (S4)')
     A = ap.parse_args()
 
     film = os.path.abspath(os.path.expanduser(A.film))
@@ -282,6 +330,19 @@ def main():
     job = A.job.strip()
     if not re.fullmatch(r'[A-Za-z0-9-]{6,}', job):
         sys.exit(f'--job does not look like a job id: {job!r}')
+    stands = None
+    if A.stands_for or A.scene:
+        if A.kind != 'pickup':
+            sys.exit('--stands-for and --scene are for --kind pickup only')
+        if A.scene and not re.fullmatch(r'S\d+[A-Z]?', A.scene):
+            sys.exit(f'--scene must be a scene id like S4 (got {A.scene!r})')
+    if A.stands_for:
+        stands = []
+        for raw in A.stands_for:
+            ids = [x.strip() for x in raw.split(',') if x.strip()]
+            if not ids or not all(PLACE.fullmatch(x) for x in ids):
+                sys.exit(f'--stands-for takes place ids of the scene, such as 4, 4a or 5,6 (got {raw!r})')
+            stands.append({'stands_for': ids})
 
     kind_of, gid, folder, clip, jobid_name = place(film, A.kind, A.id, A.take, A.of)
     if A.kind == 'pass' and not os.path.isdir(folder):
@@ -368,6 +429,10 @@ def main():
 
     print(f'landed {rel} ({secs:.2f} s, {size}); job {job} in {os.path.relpath(jobid_p, film)}')
     print(f'card first in "{A.section}"' + (' (new section)' if made_section else '') + ', section first in review/cards.json')
+
+    # where a pick-up stands (Flow v3.3 - 8 Redos, step 14)
+    if A.kind == 'pickup':
+        write_stands(film, gid, stands, A.scene)
 
     # the take in its boards' place on the timeline, in the same step, before any check (Flow v3.3 - 7 Takes, step 19)
     if A.kind == 'take' and not A.no_timeline:

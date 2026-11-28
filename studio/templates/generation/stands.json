@@ -1,0 +1,19 @@
+{
+ "_about": [
+  "Read by: the Hitchcock Harness (the Takes view, the Shots page, Shot details), to put each shot of a pick-up under the place of its scene it stands for. Written by tools/film/land.py --stands-for when the pick-up lands; by hand only for what that cannot say.",
+  "Described in: Flow v3.3 - 8 Redos (step 14) and the app's edit recipe, \"The film in shots\". Goes to generations/FIX-<name>/FIX-<name>-stands.json, beside its takes/. Keep only the keys you need: inside, t0, t1, note and takes are optional."
+ ],
+ "schema": 1,
+ "scene": "S<n>",
+ "by": "<land.py, or Alma>",
+ "at": "<ISO time>",
+ "shots": [
+  {"stands_for": ["<place id of the scene, e.g. 4>"]},
+  {"stands_for": ["<5>", "<6>"], "note": "<one shot that replaces two places>"},
+  {"stands_for": ["<1>"], "inside": {"place": "<1>", "from": 4.75}, "note": "<an insert into part of place 1, from 4.75 s of it; {\"place\": \"1\", \"to\": 4.5} for a shot that cuts back to the scene's take>"},
+  {"stands_for": ["<2>"], "t0": 0.0, "t1": 3.2, "note": "<where the shot lies in the take, only when known>"}
+ ],
+ "takes": {
+  "take2": [{"stands_for": ["<2>"]}, {"stands_for": ["<3>"]}]
+ }
+}

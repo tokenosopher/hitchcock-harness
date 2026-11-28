@@ -9,7 +9,7 @@ status: live
 
 ## Inputs
 - The cut on the Edit page, as this stage finds it: approved at 480p ([[Flow v3.3 - 9 Edit]]), moved to 1080p on the same timeline ([[Flow v3.3 - 10 Finish and 1080p]]), with its music and effects on its own tracks ([[Flow v3.3 - 11 Sound and music]]). Here the subtitles go on its subtitle track, and the master the app renders from it carries them.
-- The final: the master the user names on the Release page. The harness records it in `social/release.json` (`final`) with its companions: the copy without subtitles, the 480p phone preview, the `.srt` of the lines and the smaller file for posting. The harness makes them; you never write `final` (the app's release recipe, `recipes/release.md` in the app's folder; its full path is in your instructions).
+- The final: the master the user names on the Release page. The harness records it in `social/release.json` (`final`) with its companions: the copy without subtitles, the `.srt` of the lines and the smaller file for posting, made when the final is named; and the 480p phone preview, made only when the user presses "Make it" on the Release page (one already on disk is used). The harness makes them; you never write `final` (the app's release recipe, `recipes/release.md` in the app's folder; its full path is in your instructions).
 - The app's edit recipe, `recipes/edit.md` in the app's folder ("Subtitle lines", "Renders with options"), for how lines go on the subtitle track and which renders the Edit page asks for.
 - The public title, in `$FILM/brief.md` (`- Title:`), asked for at setup ([[Flow v3.3 - 1 Setup and story]]). The slug and every release file name come from it.
 - `$FILM/script.md`, current: its `## Script` holds every line as the final cut speaks it, under a `### S<n>` heading per generation, one `**NAME:** "words"` row per line, names spelt as the script spells them. `audio/lines.json` instead when the film has a line table.
@@ -65,7 +65,11 @@ status: live
     - Put only dialogue on the subtitle track: no headline, no hook sticker, no "AI film" band. A small series card ("Part N of M") is the most text to add.
     - The user moves, trims, splits and retypes lines on the Edit page. Read the version notes before you write lines again, and keep the user's words unless asked.
     - The master with the lines in it is rendered on the user's word ([[Flow v3.3 - 10 Finish and 1080p]]). The user names it the final on the Release page; the app then makes its companions.
-8. Read the final's true peak in dBTP. A render with the loudness option records it (the app's edit recipe). Over -1 dBTP, report the reading to the user; the trim is the user's call, so change nothing.
+8. **The loudness master.** The final that goes out is the loudness master of the version, at -14 LUFS integrated and -1 dBTP true peak, as social apps expect; the plain master itself is never trimmed or changed.
+    - When the master that is to go out as the final is rendered, also request the loudness master of the same version, without being asked: the app's render with options, loudness (the app's edit recipe, "Renders with options"). Renders with options are otherwise sent by the Edit page; this one request is the user's standing word for you to send it yourself: `curl -s -X POST "$HARNESS_URL/api/films/<film>/cut/render" -H 'content-type: application/json' -d '{"version": "v<n>", "kind": "master", "options": {"loudness": {"lufs": -14, "truePeak": -1}}}'`. It lands as `cut/renders/v<n>-master-lufs14-tp1.mp4`.
+    - Measure it when it lands, integrated loudness and true peak, with ffmpeg's `ebur128` filter (`peak=true`), and measure the plain master the same way. Propose the loudness master as the final on the Release page, with both readings; the user names it there.
+    - Any other reading over -1 dBTP: report it to the user; the trim is the user's call, so change nothing.
+    - When the master that is to go out as the final is rendered, write the experiments' post-analysis at the same time as the final and the social files are made (step 43).
 9. Grab four captioned frames from the final, by frame index, on the busiest backgrounds, and show them on a card at Release (the app's show recipe):
     ```bash
     $PY $S/thumbnails.py --film "$FILM" --master <the final's path> --outdir "$FILM/cut/derived/<slug>-captions" \
@@ -74,7 +78,7 @@ status: live
     - It takes each frame by index from one straight decode of the file, never by seeking.
     - Keep `--outdir` out of `social/`, because every `social/youtube-thumbnail-*.jpg` goes to the Social kit as a thumbnail.
     - Read each frame at 480 wide, as a phone shows it. A line that reaches TikTok's in-feed overlay (Checks) is shortened or rewrapped on the subtitle track.
-10. Deliver to the Social kit once the final's companions are made (the Release page shows their progress). Take the paths from `final` in `social/release.json` (the final and its `phone`, `clean` and `srt` companions):
+10. Deliver to the Social kit once the final's companions are made (the Release page shows their progress). Take the paths from `final` in `social/release.json` (the final and its `phone`, `clean` and `srt` companions). The `phone` copy exists only once the user has made it ("Make it" on the Release page): when it is not there, ask on the card whether to make it, and deliver without it until it is:
     ```bash
     $PY "$STUDIO/tools/deliver.py" --film "$FILM" \
       --folder "<YYYY-MM-DD> <Title>" --sub "Social kit" \
@@ -85,7 +89,7 @@ status: live
     - The thumbnails follow with the same script (step 27).
     - The FINAL files are replaced in place under the same names, so there is no old copy to post by mistake. Never delete an older file in the folder: name it to the user and remove one only on the user's yes for that file.
     - Every copy is byte-compared.
-11. Tell the user the full path (`assets/final-cuts/`, the folder `<YYYY-MM-DD> <Title>`, then `Social kit`, then `<Title> - FINAL captioned.mp4`). Say what you checked, and that the 480p copy is for the phone.
+11. Tell the user the full path (`assets/final-cuts/`, the folder `<YYYY-MM-DD> <Title>`, then `Social kit`, then `<Title> - FINAL captioned.mp4`). Say what you checked, and that the 480p copy, once made, is for the phone.
 12. **GATE:** the user watches the FINAL captioned file, on the Release page or on the phone. Write a card that asks for a yes on `<Title> - FINAL captioned.mp4`, naming the cut version it is a master of, and wait for the user's yes.
 13. After a change, redo only what the change touches:
     - A change on the timeline (the sound, the music, a subtitle line, a 1080p picture of a shot): the master is rendered again on the user's word, the user names it the final again, and you deliver (step 10). The SRT stays while the dialogue is unchanged.
@@ -97,7 +101,8 @@ status: live
     - Each platform in the file has its account, its route, its wave (the day and the time it goes out), its fields, the steps after it posts, the steps by hand, and its sending record.
     - Every post goes out by hand in this copy: every platform's `route` is `"hand"`, and `upload.bufferSets` stays empty. The user posts; you write the texts, the steps by hand and the record.
     - Its page shows one box per part the platform has (title, description, caption, first comment, a reply on X), each as it will be posted, the tags in a box of their own, the cover frame on a platform that takes one, the facts to confirm (step 24), and the go.
-    - The candidates for each field, two or three with what each one does, live in `social/release.json`. The page does not show them: it shows only the text in use.
+    - The candidates for each field, two or three with what each one does, live in `social/release.json`. The page shows them under their box as options, each with what it does and its whole text: a tap puts that text in the box, where the user can edit it. A candidate the user edited and saved to its option is marked `edited: true`: it is the user's words from then on, so never rewrite or drop it.
+    - When the user names the final and no platform is written yet, the app sends you the ask for the texts at once ("Release texts · cut v<n>"): draft every platform's text then, without waiting to be asked again. The user then posts from the Release page; the last step in What's next stays theirs until every platform is posted.
     - When a line changes, check the other platforms' text for the same claim.
 15. Write all copy to these rules:
     - Bring the evidence and two or three candidates (in `social/release.json`). Use the user's wording or the candidate the user picks, and fix only mechanics (handles, typos, a link that does not resolve). A text the user gives goes in word for word, in place of the draft.
@@ -136,10 +141,10 @@ status: live
     - The post and reply 1 go out together, as one thread, with the video in the first post. Reply 1 is a text the user picks like any other, and the go covers both.
     - Native video, under 240 characters, no hashtags, no link.
 21. **Reddit**, from the user's personal account, because posts from new accounts with no karma get removed:
-    - r/aivideo first, as a native upload with a tool flair.
+    - r/aivideo and r/aivideos, every time, as native uploads with a tool flair, with the same title and the same first comment in each. Write the account as "r/aivideo and r/aivideos" and the steps by hand for r/aivideo; the Release page adds the step for r/aivideos and a second link box itself, and counts Reddit as posted only when both links are in (the app's release recipe, "By hand").
     - A title: the premise or a joke; no teaser, no political wording.
     - The first comment, posted at once: "Fully AI-generated, human-written", the tools with the resolution stated honestly, the inspiration, the hardest part, a request for honest feedback.
-    - A second subreddit only once the first post has proved itself, 6 to 12 hours later, with a different title: r/singularity (a declarative third-person title, no "I made", no links, best posted by someone else), r/ChatGPT (the GPT Image angle, "fully AI-generated, human-written and directed"), r/ClaudeAI only when Claude did the work, with the build story as the body.
+    - A further subreddit only once the first posts have proved themselves, 6 to 12 hours later, with a different title: r/singularity (a declarative third-person title, no "I made", no links, best posted by someone else), r/ChatGPT (the GPT Image angle, "fully AI-generated, human-written and directed"), r/ClaudeAI only when Claude did the work, with the build story as the body.
     - Stay out of r/davinciresolve, r/artificial, r/scifi, r/Filmmakers, r/videos and r/shortfilms.
     - Reddit often refuses plain fetches of a thread. When it does, ask the user to paste what you need from it.
 22. **LinkedIn**, from the user's personal account, posted last, the morning after the others, as a native upload of the smaller encode of the captioned file:
@@ -160,10 +165,11 @@ status: live
     - Use your own web search and page reads: the top recent posts for searches such as "ai short film", "ai film", "seedance", "ai comedy sketch" on TikTok, r/aivideo's top posts of the week and month, and the posts of a few small accounts in the niche on X. No paid data service is part of this copy.
     - Score each post against its own account where the page shows the numbers (views over the account's median). Check accounts that posted both kinds before believing a gap, because a gap can be genre.
     - Write the findings to `$FILM/social/research-<YYYY-MM-DD>.md`, with the numbers and the links to the posts behind them. Say plainly where a page could not be read.
-26. **GATE:** write the candidates for each platform's fields into `social/release.json`, with the cover frames. The user writes or picks every line, on the platform's Release page or in the chat, platform by platform, and picks the cover frame there. To offer another candidate for a text already in a box, write a note under its field, with its buttons (the app's release recipe). Wait for each pick: the text that is posted is only what the user picked or wrote.
+26. **GATE:** write the candidates for each platform's fields into `social/release.json`, with the cover frames. The user writes or picks every line, on the platform's Release page or in the chat, platform by platform, and picks the cover frame there. To offer another text, add it as one more candidate of that field: the options are the way to choose. A note under a field is for a reason, a question, or a change that is not a plain candidate (a new text, an unlink), never a button that only sets a candidate (the app's release recipe). Wait for each pick: the text that is posted is only what the user picked or wrote.
     - A text the user gives in the chat (a title, a description, the tags, or which text goes on which platforms) is written straight into those platforms' boxes in `social/release.json`, word for word; say what you wrote. Never put it behind a note with buttons or ask for a confirmation: candidates and notes with buttons are only for texts the user has not given or picked. The go for posting stays its own gate, one platform at a time.
     - Every release choice the user makes (a title, a line, the tags, the thumbnail) gets a row in `taste.md` at the studio root. From the next film on, each release round is shown with a prediction of the user's pick, as every other round is ([[Flow v3.3 - 0 Standing rules]]).
     - One cover frame serves every platform that takes one (YouTube Shorts, TikTok, Instagram Reels). The thumbnail the user picks for one platform is the pick for all of them. Use a different cover on one platform only when the user asks for it.
+    - The user may also pick any frame of the final as the cover ("Pick any frame" on a platform's page). The page writes it as the user's own option (`by: "user"`): never change or remove it, never offer it again among yours, and keep it when you rewrite the options. Its time is the cover frame's time when a platform asks for one.
 27. Deliver the picked thumbnails into the Social kit:
     ```bash
     $PY "$STUDIO/tools/deliver.py" --film "$FILM" --folder "<YYYY-MM-DD> <Title>" --sub "Social kit" \
@@ -232,20 +238,27 @@ At the end of every film, once it is released, ask the user why they made the ch
     - A change to the flow itself goes into `flow-fixes.md` at the studio root ([[Flow v3.3 - 0 Standing rules]], The flow's text), and is decided with the user before it is written into a stage note.
 42. **What the debrief measures**, film by film, written into the film's record: the number of changes the user made to the AI editor's first cut and the time the edit took; the sounds re-picked ("none of these"); the redos. They go down when the lessons work.
 
+### The experiments' post-analysis
+43. **When the master that is to go out as the final is rendered**, alongside making the final and the files for the social platforms, read the film's `$FILM/experiments.md` ([[Flow v3.3 - 8 Redos]], step 17) and its redo history (the `FIX-` generations, their prompt diffs and their rows in `spend.md`). Write a `## Post-analysis` section at the end of `experiments.md`:
+    - what each experiment showed;
+    - which lessons hold across films, read against the post-analyses of the films before;
+    - which of them should become a fix to the flow. Propose each to the user. It goes into `flow-fixes.md` only on the user's word.
+    A film with no experiments gets no post-analysis.
+
 ## Checks
 - **The caption script:** `social/script.json` has every line the final cut speaks, in film order, in the words the cut speaks, names spelt as the script spells them, no stage directions or stress capitals left.
 - **Caption timing:** the stem is the cut's dialogue tracks alone (step 4), never the mix. `make_srt.py` reports `script lines not found in the cut: 0`. Each cue has at most two lines and 6.5 s, starts 0.15 s before its first word and ends 0.12 s after its last. Every cue is read (step 6), and every line on the subtitle track has its cue's words, rows and times.
 - **Caption widths:** the SRT laid on the subtitle track at 30 characters a line for the 46 px style. The caption block's bottom sits above y 1535 of 1920, and no line passes x 882 below y 805.
 - **The burned frame at feed size:** four captioned frames, by frame index, on the busiest backgrounds, read at 480 wide: the caption is legible and clear of the overlay. Each thumbnail reads at 168×94, and none sits on a time with a caption on screen.
 - **The true peak:** read the true peak in dBTP, not the sample peak. Over -1 dBTP, report it to the user.
-- **The small viewing copy:** `<Title> - FINAL captioned 480p.mp4` sits beside the big master in `Social kit`, for the phone and for friends on a weak connection.
+- **The small viewing copy:** once the user has made it, `<Title> - FINAL captioned 480p.mp4` sits beside the big master in `Social kit`, for the phone and for friends on a weak connection.
 - **The thumbnails:** before they are delivered, `social/` holds only the picked `youtube-thumbnail-*.jpg`.
 - **The copy:** every story claim matches the script; every new handle is checked in autocomplete; no hook, title or thumbnail gives the punchline away; the YouTube title is 41 to 70 characters, the X post under 240 characters with no hashtags; every quoted date has its weekday checked.
 - **The posting record:** every post the user made has its row and link in `published-links.md`, in the film's section, under its public title.
 
 ## Outputs
 - In `$FILM/social/`: `script.json`, `dialogue-stem.wav`, `<slug>.words.json`, `<slug>-w30.srt` (the lines on the subtitle track), `thumbnails-sheet.jpg`, `youtube-thumbnail-<name>.jpg` (the picked options; the others in `thumbnail-options/`), `research-<YYYY-MM-DD>.md` when a look at the niche was made, and `release.json`: each platform's texts, the user's picks, the facts and the sending record.
-- In the cut: the subtitle lines on `C1 Subtitles`. In `$FILM/cut/renders/`: the master the user named the final, with its companions (the copy without subtitles, the 480p, the `.srt`, the smaller file), made by the app.
+- In the cut: the subtitle lines on `C1 Subtitles`. In `$FILM/cut/renders/`: the master and its loudness master at -14 LUFS and -1 dBTP (step 8), the one the user named the final with its companions (the copy without subtitles, the `.srt`, the smaller file, and the 480p once the user made it), made by the app.
 - In `assets/final-cuts/<YYYY-MM-DD> <Title>/Social kit/`:
     - `<Title> - FINAL captioned.mp4`: the full-size final. Its smaller encode is the file posted everywhere.
     - `<Title> - FINAL captioned 480p.mp4`: the phone and friends copy.
@@ -253,6 +266,7 @@ At the end of every film, once it is released, ask the user why they made the ch
     - `<slug>.srt`: the final's `.srt`, made by the app from the subtitle lines.
     - `YouTube thumbnail - <name>.jpg`: one per picked option.
 - On cards at Release: the four checked frames, the thumbnail sheet, any second-post clip.
+- In `$FILM/experiments.md`: the `## Post-analysis` section (step 43), when the film had experiments.
 - At the studio root: `film-records/<Title>.md`, the film's rows in `film-records/voices.md`, `finished-scripts/<Title>.md`, and the film's section in `published-links.md`.
 - The debrief: the film's debrief page in the app with the user's answers; each lesson added to `tools/edit/AI_EDITOR.md` or `tools/sound/SOUND_DESIGNER.md`; each change to the flow added to `flow-fixes.md`; the debrief's counts in the film's record.
 

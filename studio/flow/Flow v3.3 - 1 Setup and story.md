@@ -35,9 +35,9 @@ status: live
 3. Make the film folder and its files with one command.
    - **GATE:** Ask the user for the film's public title only, and name the folder and the short code you will make from the title. The title goes into `brief.md`, names the delivery folder and the Higgsfield project, and the release slug is made from it ([[Flow v3.3 - 12 Release]]). Wait for the title.
    - Never ask about the setup defaults; take them as they are unless the user said otherwise at the start: 9:16; voices from Higgsfield (preset voices, voices made from the face, variants of a preset); video elements 1920x1080, 5 s; 1080p by Seedance 2.5 finalize; a budget of 2,000 credits.
-   - Run `$PY $T/film/new_film.py $FILM --title "<Public Title>" --code <ABC> --ratio 9:16|16:9 [--budget-credits N] [--date YYYY-MM-DD]`.
+   - Run `$PY $T/film/new_film.py $FILM --title "<Public Title>" --code <ABC> --ratio 9:16|16:9|21:9|1:1 [--budget-credits N] [--date YYYY-MM-DD]`.
      - `--code`: 2 to 6 capitals or digits, the prefix of the film's element and upload names.
-     - `--ratio`: 9:16, or 16:9 only when the user said so.
+     - `--ratio`: 9:16, or 16:9, 21:9 or 1:1 only when the user said so. It is written as the `- Aspect ratio:` line of `brief.md`, which the app reads for the frame of the film's cut (9:16 1080×1920, 16:9 1920×1080, 21:9 2520×1080, 1:1 1080×1080), so keep that line and change it there when the user changes the ratio. A cut with no pictures yet takes the new frame by itself; one that already holds pictures in the old shape is switched by the user on the Edit page (the app's edit recipe).
      - `--budget-credits`: 2000, or the budget the user set. Always pass it.
      - `--date`: the day the film starts, when that is not today; it dates the delivery folder.
    - It never overwrites a file, makes no delivery folder, calls no service, adds the folder to `films.txt` (the list of films the app shows, at the studio root) and prints the next commands. It makes every top-level folder and file below, the empty `story/` and `refs/research/` included, except `script.md` (step 20), `refs/README.md` and `refs/characters/SOURCES.md` (steps 14 to 16) and `video/` (the finish stage). The folders inside them come with the stages that fill them:
@@ -231,7 +231,7 @@ All paths under the studio folder; `$PY`, `$T`, `$STUDIO` and `$FILM` as in step
 
 | Script | Command | Does |
 |---|---|---|
-| `tools/film/new_film.py` | `$PY $T/film/new_film.py $FILM --title "<Public Title>" --code <ABC> --ratio 9:16\|16:9 [--budget-credits N] [--date YYYY-MM-DD]` | the folder tree, `brief.md` (title, code, ratio, budget, delivery folder), the `spend.md` header, the cards file the app reads, `higgsfield.json`, `elements.json`, `generations/upload-registry.json`, `regeneration-log.md`; adds the folder to `films.txt`; never overwrites |
+| `tools/film/new_film.py` | `$PY $T/film/new_film.py $FILM --title "<Public Title>" --code <ABC> --ratio 9:16\|16:9\|21:9\|1:1 [--budget-credits N] [--date YYYY-MM-DD]` | the folder tree, `brief.md` (title, code, ratio, budget, delivery folder), the `spend.md` header, the cards file the app reads, `higgsfield.json`, `elements.json`, `generations/upload-registry.json`, `regeneration-log.md`; adds the folder to `films.txt`; never overwrites |
 | `tools/film/land.py` | `$PY $T/film/land.py $FILM --kind take\|element\|pickup\|pass --id <G\|CID\|FIX-name> --take N (--file <mp4> \| --url-file <file>) --job <job id> --title "…" --section "…"` | lands a clip in its take folder under a unique name and puts its card at the top, where the app shows it; the routine is in [[Flow v3.3 - 7 Takes]] |
 | `tools/deliver.py` | `$PY $T/deliver.py --film $FILM SRC "Name.mp4" [SRC "Name" …] [--sub "Social kit"] [--480p]` | copies into the film's delivery folder in `assets/final-cuts/` and compares byte for byte; `--check` tests the folder |
 | `tools/disk_report.py` | `$PY $T/disk_report.py --film $FILM [--prune]` | free space and where it went; `--prune` lists what could go (older `cut/renders/v<N>-*` renders and `cut/*.nosync` only); `--prune --yes --keep <approved cut>` deletes, only on the user's ask |
