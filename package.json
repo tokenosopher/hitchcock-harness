@@ -85,6 +85,12 @@
     "shot-details:test": "tsx scripts/shot-details-test.ts",
     "shotplaces:test": "tsx scripts/shotplaces-test.ts",
     "pickuprows:test": "tsx scripts/pickuprows-test.ts",
+    "speed:test": "tsx scripts/speed-test.ts",
+    "frame:test": "tsx scripts/frame-test.ts",
+    "frame-render:test": "tsx scripts/frame-render-test.ts",
+    "fadefrom:test": "tsx scripts/fadefrom-test.ts",
+    "multimove:test": "tsx scripts/multimove-test.ts",
+    "frame-gaps:test": "tsx scripts/frame-gaps-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

@@ -1,6 +1,8 @@
 // Hitchcock Harness · shared types between the server (files, claude -p) and the UI.
 // This file is the contract of build step 1. Change it only by agreement (note the change in ARCHITECTURE.md).
 
+import type { Aspect } from '@/lib/frame';
+export type { Aspect } from '@/lib/frame';
 export type Stage =
   | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12; // Film Flow v3 numbering (1 Setup and story … 12 Release)
 
@@ -31,7 +33,7 @@ export interface FilmRef {
    *  phone, not a release. `date` is the day of the newest video in it (13 Nov, ASKS 37). */
   copies?: { date: string; folder: string }[];
   stage?: Stage;                // the stage the film is at, when derivable
-  aspect?: '9:16' | '16:9';
+  aspect?: Aspect;              // the brief's aspect ratio (src/lib/frame.ts: the cut's frame follows it)
   supersededBy?: string;        // slug of the film that carried this draft folder on; the sidebar hides it (integration, 8 Nov)
 }
 
@@ -569,6 +571,9 @@ export interface TimelineClip {
   takeRef?: { scene: string; take: string };
   gain?: number;                // dB, audio clips and the audio of video clips; default 0
   fadeIn?: number; fadeOut?: number;   // seconds
+  /** Sound clips: the level a fade in starts from and a fade out ends at, dB on the scale of `gain`
+   *  (−13.5 = "from −13.5 dB"), straight in dB over the fade (components/edit/fades.ts). Unset: from or to silence. */
+  fadeInFrom?: number; fadeOutTo?: number;
   muted?: boolean;
   speed?: number;               // playback rate, default 1 (0.75 = slowed); the clip lasts (out − in) / speed on the timeline (step 4a, 8 Nov)
   unlinked?: boolean;           // a picture clip or its sound, set free of the other (13 Nov): an edit on one no longer touches the other

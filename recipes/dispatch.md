@@ -20,7 +20,7 @@ Both chains start together at the lock. Inside a chain a step waits only for the
 - Before any scene agent of a location is briefed, that location's people file exists and is built (`previz/rooms/<LID>-people.json`, `build_location.py`). One job writes it; a scene agent never does.
 - Each scene's brief names the people file and points to that README section: the script loads the shared file, builds no one it holds, and stages only its own action.
 - The cast's heights reach the scenes through the people file, never as numbers typed into a brief.
-- Blender runs go through `tools/previz/blender_run.py` (eight renders at once; runs that render nothing have their own lane). After the stage, `tools/previz/timing.py` prints how long every run waited and ran.
+- Blender runs go through `tools/previz/blender_run.py` (at most three renders at once, two when memory is short; runs that render nothing have their own lane). After the stage, `tools/previz/timing.py` prints how long every run waited and ran.
 
 ## One sub-agent per independent unit
 

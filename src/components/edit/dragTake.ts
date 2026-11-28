@@ -27,9 +27,10 @@ export function takePieces(d: TakeDrag, takeName: string, fps: number): { clips:
   const { t } = d;
   const base = `${t.scene} · ${takeName}`;
   const ref = { scene: t.scene, take: takeName };
-  const shots = shotsOf(t);
+  // the shots on the cut's frame grid (shots.ts shotEdge): the pieces of a whole take meet exactly
+  const shots = shotsOf(t, fps);
   if (d.n !== undefined) {
-    const s = shotOf(t, d.n, d.tag);
+    const s = shotOf(t, d.n, d.tag, fps);
     if (!s) return { error: `${base} has no shot ${d.tag ?? d.n} now.` };
     const label = `${base} · shot ${subTag(s) ?? s.n}`;
     const clip = { id: 'new', src: t.src, in: r6(s.in), out: r6(s.out), at: 0, label, takeRef: ref, f: 0 };

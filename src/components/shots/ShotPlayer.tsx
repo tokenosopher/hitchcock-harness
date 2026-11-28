@@ -7,6 +7,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { mediaUrl } from '@/components/media/Media';
 import { zoomItems } from '@/components/media/Lightbox';
 import { cn } from '@/lib/utils';
+import { aspectStyle } from '@/lib/frame';
 import { PICK, pickProps } from './tell';
 import type { PageShot } from './model';
 
@@ -17,7 +18,9 @@ export const fmtT = (t: number): string => `${Math.floor(t / 60)}:${(t % 60).toF
 export const ShotPlayer = forwardRef<PlayerHandle, {
   path?: string; shots: PageShot[]; sel?: PageShot; total?: number; phone: boolean; onTell: (at: number) => void;
   onShot: (i: number) => void; badge: string; standing?: string;
-}>(function ShotPlayer({ path, shots, sel, total: given, phone, onTell, onShot, badge, standing }, ref) {
+  /** The film's aspect: the picture's box takes it; 9:16 when absent. */
+  aspect?: string;
+}>(function ShotPlayer({ path, shots, sel, total: given, phone, onTell, onShot, badge, standing, aspect }, ref) {
   const vid = useRef<HTMLVideoElement>(null);
   const stopAt = useRef<number | null>(null);
   const [t, setT] = useState(0);
@@ -84,7 +87,7 @@ export const ShotPlayer = forwardRef<PlayerHandle, {
   return (
     <div className="flex flex-col gap-2.5">
       <div {...pickProps(() => onTell(t))} onClick={(e) => { if (!e.altKey) toggle(); }} onDoubleClick={(e) => { if (!e.altKey) full(); }} role="button" tabIndex={-1} aria-label={playing ? 'Pause' : 'Play'}
-        className={cn('relative aspect-[9/16] w-full flex-none cursor-pointer overflow-hidden rounded-[10px] border border-edge bg-black', phone && 'max-h-[72vh] rounded-[12px]', PICK)}>
+        style={aspectStyle(aspect)} className={cn('relative aspect-[9/16] w-full flex-none cursor-pointer overflow-hidden rounded-[10px] border border-edge bg-black', phone && 'max-h-[72vh] rounded-[12px]', PICK)}>
         {path ? (
           <video ref={vid} key={path} src={mediaUrl(path)} playsInline preload="auto" className="size-full object-contain"
             onTimeUpdate={tick} onSeeked={tick} onLoadedMetadata={(e) => { const d = e.currentTarget.duration; if (Number.isFinite(d)) setDur(d); ready(); }}

@@ -24,6 +24,7 @@ import { peekWorking } from '@/server/edit/working';
 import { RENDERS_DIR, resolveSrc, timelineLength } from '@/server/edit/timeline';
 import { renderProxies } from '@/server/edit/render-files';
 import { hearClip } from '@/server/edit/hear';
+import { outputSize } from '@/server/edit/render';
 import { peaksOf } from '@/server/edit/options';
 import { probe } from '@/server/edit/probe';
 import { piecesFor, windowOf } from '@/components/feed/hearIt';
@@ -40,7 +41,9 @@ async function cardOf(slug: string, key: string): Promise<FeedCard | undefined> 
 
 /** The cut as it is now (the working cut, else the newest version), its 480p (the version's own, else the newest one
  *  made), and how a path of it is found on disk. */
-interface Cut { tracks: TimelineTrack[]; version?: string; picture?: { file: string; version: string; stale: boolean }; resolve: (src: string) => Promise<string | undefined> }
+/** The cut's 480p size: black of it when there is no picture (render.ts outputSize). */
+const proxySize = (t: { width?: number; height?: number }): { w: number; h: number } | undefined => (t.width && t.height ? outputSize({ width: t.width, height: t.height }, 'proxy') : undefined);
+interface Cut { tracks: TimelineTrack[]; size?: { w: number; h: number }; version?: string; picture?: { file: string; version: string; stale: boolean }; resolve: (src: string) => Promise<string | undefined> }
 async function cutOf(slug: string): Promise<Cut | undefined> {
   const s = await storeFor(slug).catch(() => undefined);
   if (!s) return undefined;
@@ -52,14 +55,14 @@ async function cutOf(slug: string): Promise<Cut | undefined> {
   if (isMock()) {
     const mockFile = async (src: string) => { const p = src.startsWith('assets/') ? src : `assets/films/${slug}/${src}`; return soundCardsFile(p)?.real ?? (await soundMedia(p))?.real ?? (await mockMedia(p))?.real; };
     const pic = slug === SOUND_CARDS ? soundCardsFile(SOUND_CARDS_PROXY)?.real : path.join(process.cwd(), 'src/fixtures/media/sample-render.mp4');
-    return { tracks: t.tracks, version, picture: pic ? { file: pic, version: version ?? 'v1', stale: edited } : undefined, resolve: mockFile };
+    return { tracks: t.tracks, size: proxySize(t), version, picture: pic ? { file: pic, version: version ?? 'v1', stale: edited } : undefined, resolve: mockFile };
   }
   const film = await routeFilm(slug);
   const proxies = await renderProxies(film).catch(() => []);
   const own = version ? proxies.find((p) => p.version === version) : undefined;
   const newest = own ?? [...proxies].sort((a, b) => Number(b.version.slice(1)) - Number(a.version.slice(1)))[0];
   const picture = newest ? { file: path.join(film.dir, RENDERS_DIR, `${newest.version}-proxy.mp4`), version: newest.version, stale: edited || newest.version !== version } : undefined;
-  return { tracks: t.tracks, version, picture, resolve: async (src) => resolveSrc(film, src) };
+  return { tracks: t.tracks, size: proxySize(t), version, picture, resolve: async (src) => resolveSrc(film, src) };
 }
 
 /** The file with byte ranges (an iPhone asks for the first two bytes first, then the rest in pieces). */
@@ -122,7 +125,7 @@ export async function GET(req: Request, ctx: Ctx): Promise<Response> {
   if (option && !moment.places[option]) return bad(404, `option ${option} is not laid at ${mid}`);
   if (!cut) return bad(404, 'the film has no cut to hear it in');
   try {
-    const clip = await hearClip({ film: slug, tracks: cut.tracks, moment, option, picture: cut.picture?.file, filmEnd, resolve: cut.resolve });
+    const clip = await hearClip({ film: slug, tracks: cut.tracks, moment, option, picture: cut.picture?.file, ...(cut.size ? { size: cut.size } : {}), filmEnd, resolve: cut.resolve });
     if (q.get('warm') === '1') return Response.json({ ok: true, ...(clip.inCut ? { inCut: clip.inCut } : {}), pieces: clip.pieces, skipped: clip.skipped }, { headers: NO_STORE });
     return await send(req, clip.file);
   } catch (e) {

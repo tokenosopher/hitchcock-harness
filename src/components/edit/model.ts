@@ -47,7 +47,10 @@ const toS = (f: number, fps: number) => Math.round((f / fps) * 1e6) / 1e6;
 /** A clip's playback rate (TimelineClip.speed, default 1): it lasts (out − in) / speed on the timeline. */
 export const speedOf = (c: TimelineClip) => (c.speed && c.speed > 0 ? c.speed : 1);
 export const startF = (c: TimelineClip, fps: number) => toF(c.at, fps);
-export const lenF = (c: TimelineClip, fps: number) => Math.max(1, toF((c.out - c.in) / speedOf(c), fps));
+/** A clip's length in frames: from the frame it starts on to the frame its end falls on, as the render counts it
+ *  (server/edit/render.ts: frameOf(at + length) − frameOf(at)). Rounding the length alone would leave a one-frame
+ *  hole or overlap between two pieces of one take whose join is off the frame grid. */
+export const lenF = (c: TimelineClip, fps: number) => Math.max(1, toF(c.at + (c.out - c.in) / speedOf(c), fps) - toF(c.at, fps));
 /** The source point `d` timeline frames after `sec` on this clip: whole source frames at speed 1, else exact. */
 const srcPlus = (c: TimelineClip, sec: number, d: number, fps: number) => {
   const sp = speedOf(c);
@@ -312,6 +315,99 @@ export function moveToTrack(tl0: Timeline, r: ClipRef, toId: string, d = 0): Edi
   return { tl, note: `moved ${clipName(c)} from ${x.track.id} ${x.track.name} to ${to.id} ${to.name}${d ? `, ${signed(d)} f` : ', same time'}${other}` };
 }
 
+/** Where each clip of a selection would go when the one in hand (`hand`) is dragged onto track `toId`. The hand's track and `toId` are N tracks apart among the
+ *  tracks of their kind; every selected clip goes N tracks of its own kind the same way, at its time moved by `d`
+ *  frames, so the gaps between them stay. A picture and its sound both selected count as one, as the selection draws
+ *  them: the half of the hand's kind goes, the other stays on its track (the link is kept, and a pair kept
+ *  by `link` moved in time takes the same frames on its own track). All or nothing: `why` says, plainly, why not.
+ *  `d` comes back held at the start of the film, so no clip of the group is squeezed against frame 0. */
+export function planTrackMove(tl: Timeline, refs: ClipRef[], hand: ClipRef, toId: string, d0 = 0): { moves: { ref: ClipRef; to: string }[]; mates: ClipRef[]; d: number; why?: string } {
+  const fps = tl.fps;
+  const h = findClip(tl, hand), dest = tl.tracks.find((t) => t.id === toId);
+  if (!h || !dest || dest.id === h.track.id || dest.kind !== h.track.kind) return { moves: [], mates: [], d: 0, why: 'not a track of the same kind' };
+  const ofKind = (k: TrackKind) => tl.tracks.filter((t) => t.kind === k);
+  const n = ofKind(dest.kind).indexOf(dest) - ofKind(h.track.kind).indexOf(h.track);
+  const keyOf = (r: ClipRef) => `${r.trackId}:${r.clipId}`;
+  // each selected clip once; a picture and its sound are one in the selection (selecting either outlines both), so of a
+  // pair the half of the hand's kind goes and the other stays where it is
+  const mine: { ref: ClipRef; clip: TimelineClip; track: TimelineTrack }[] = [];
+  const seen = new Set<string>();
+  for (const r0 of [hand, ...refs]) {
+    const p = partnerOf(tl, r0);
+    const r = p && findClip(tl, r0)?.track.kind !== h.track.kind && findClip(tl, p)?.track.kind === h.track.kind ? p : r0;
+    const f = findClip(tl, r);
+    if (!f || seen.has(keyOf(r))) continue;
+    seen.add(keyOf(r));
+    mine.push({ ref: r, clip: f.clip, track: f.track });
+  }
+  const words = (k: TrackKind) => (k === 'video' ? 'picture' : k === 'audio' ? 'sound' : 'subtitles');
+  const where = n > 0 ? 'below' : 'above';
+  // video tracks are drawn V2 over V1: "below" is further down the list for every kind
+  const d = Math.max(d0, -Math.min(...mine.map((m) => startF(m.clip, fps)))) || 0;
+  const moves: { ref: ClipRef; to: string }[] = [];
+  for (const m of mine) {
+    const list = ofKind(m.track.kind);
+    const t = list[list.indexOf(m.track) + n];
+    if (!t) return { moves: [], mates: [], d, why: `${clipName(m.clip)} has no ${words(m.track.kind)} track ${Math.abs(n)} ${where} ${m.track.id} ${m.track.name}: nothing moved` };
+    if (m.track.locked) return { moves: [], mates: [], d, why: `${m.track.id} ${m.track.name} is locked: nothing moved` };
+    if (t.locked) return { moves: [], mates: [], d, why: `${t.id} ${t.name} is locked: nothing moved` };
+    moves.push({ ref: m.ref, to: t.id });
+  }
+  // the clips that stay on each target track (those leaving it are not in the way)
+  const going = new Set(moves.map((m) => keyOf(m.ref)));
+  for (const m of moves) {
+    const c = findClip(tl, m.ref)!.clip;
+    const s = startF(c, fps) + d, e = s + lenF(c, fps);
+    const t = tl.tracks.find((x) => x.id === m.to)!;
+    const hit = t.clips.find((k) => !going.has(`${t.id}:${k.id}`) && startF(k, fps) < e && endF(k, fps) > s);
+    if (hit) return { moves: [], mates: [], d, why: `${clipName(hit)} on ${t.id} ${t.name} is in the way of ${clipName(c)}: nothing moved` };
+  }
+  // a link mate left on its track shifts in time with its half: refused when its track is locked
+  const mates: ClipRef[] = [];
+  if (d) for (const m of moves) {
+    const lm = linkMate(tl, m.ref), p = partnerOf(tl, m.ref);
+    if (lm && p && keyOf(lm) === keyOf(p) && !going.has(keyOf(p))) {
+      const lock = lockedWhy(tl, [m.ref]);
+      if (lock) return { moves: [], mates: [], d, why: lock };
+      mates.push(p);
+    }
+  }
+  return { moves, mates, d };
+}
+
+/** Move a selection onto other tracks of its kind at once, as `planTrackMove` says: one edit, or refused with the
+ *  plain reason (nothing is half moved). */
+export function moveClipsToTracks(tl0: Timeline, refs: ClipRef[], hand: ClipRef, toId: string, d0 = 0): Edit | undefined {
+  const plan = planTrackMove(tl0, refs, hand, toId, d0);
+  if (plan.why) return refuse(`${plan.why}.`);
+  if (!plan.moves.length) return undefined;
+  const { d } = plan;
+  const fps = tl0.fps;
+  const tl = clone(tl0);
+  const { mates } = plan;
+  const taken = plan.moves.map((m) => { const x = findClip(tl, m.ref)!; x.track.clips = x.track.clips.filter((c) => c.id !== x.clip.id); return { clip: x.clip, to: m.to }; });
+  for (const { clip, to } of taken) {
+    const t = tl.tracks.find((x) => x.id === to)!;
+    t.clips.push({ ...clip, at: toS(startF(clip, fps) + d, fps) });
+    sortClips(t, fps);
+  }
+  const went: string[] = [];
+  for (const p of mates) {
+    const m = findClip(tl, p);
+    if (!m) continue;
+    const at = Math.max(0, startF(m.clip, fps) + d), len = lenF(m.clip, fps);
+    m.clip.at = toS(at, fps);
+    const home = landing(tl, m.track, m.clip, at, len);
+    if (home === null) return refuse(`No track takes the ${m.track.kind === 'audio' ? 'sound' : 'picture'} linked to ${clipName(m.clip)} at its new time: nothing moved.`);
+    if (home) went.push(home);
+  }
+  const first = findClip(tl0, plan.moves[0].ref)!;
+  const tos = [...new Set(plan.moves.map((m) => m.to))].map((id) => { const t = tl.tracks.find((x) => x.id === id)!; return `${t.id} ${t.name}`; });
+  const froms = [...new Set(plan.moves.map((m) => m.ref.trackId))].map((id) => { const t = tl0.tracks.find((x) => x.id === id)!; return `${t.id} ${t.name}`; });
+  const what = plan.moves.length === 1 ? clipName(first.clip) : `${plan.moves.length} clips`;
+  return { tl, note: `moved ${what} from ${froms.join(', ')} to ${tos.join(', ')}${d ? `, ${signed(d)} f` : ', same time'}${mates.length ? `, ${mates.length === 1 ? 'its' : 'their'} linked ${mates.length === 1 ? 'half' : 'halves'} with ${plan.moves.length === 1 ? 'it' : 'them'}${went.length ? ` (now on ${[...new Set(went)].join(', ')})` : ''}` : ''}` };
+}
+
 /** A clip just moved to frame `at` on its track that now overlaps another there goes on the track above (a picture) or
  *  beside (a sound), as a plain move does: the track's id and name when it went, '' when it stays, null when no track
  *  takes it (a subtitle line, or every track there is full). */
@@ -511,7 +607,7 @@ function splitIn(t: TimelineTrack, f: number, fps: number, links: Map<string, st
     return;
   }
   const len = lenF(c, fps);
-  const right: TimelineClip = { ...c, id: newId(c.id), in: srcPlus(c, c.in, cut, fps), at: toS(f, fps), fadeIn: undefined, dissolve: undefined };
+  const right: TimelineClip = { ...c, id: newId(c.id), in: srcPlus(c, c.in, cut, fps), at: toS(f, fps), fadeIn: undefined, fadeInFrom: undefined, dissolve: undefined };
   if (c.link) {
     const l = links.get(c.link) ?? newLink();
     links.set(c.link, l);
@@ -519,6 +615,7 @@ function splitIn(t: TimelineTrack, f: number, fps: number, links: Map<string, st
   }
   c.out = srcPlus(c, c.in, cut, fps);
   c.fadeOut = undefined;
+  c.fadeOutTo = undefined;
   // each piece keeps its own end's fade, never longer than the piece (the server refuses a fade past the clip: found
   // when sample mode began to check every step on the server, 14 Nov)
   if (right.fadeOut !== undefined) right.fadeOut = Math.min(right.fadeOut, toS(len - cut, fps));
@@ -1077,8 +1174,8 @@ export function relinkSound(tl0: Timeline, r: ClipRef, nameOf?: NameOf): Edit | 
   const S = findClip(tl, sRef)!, P = findClip(tl, pRef)!.clip, dlg = tl.tracks.find((t) => t.id === dlg0.id)!;
   const c = S.clip;
   const offTail = endF(c, fps) - pe, offHead = ps - startF(c, fps);
-  if (offTail > 0 && c.fadeOut !== undefined && Math.abs(toF(c.fadeOut, fps) - offTail) <= 1) delete c.fadeOut;
-  if (offHead > 0 && c.fadeIn !== undefined && Math.abs(toF(c.fadeIn, fps) - offHead) <= 1) delete c.fadeIn;
+  if (offTail > 0 && c.fadeOut !== undefined && Math.abs(toF(c.fadeOut, fps) - offTail) <= 1) { delete c.fadeOut; delete c.fadeOutTo; }
+  if (offHead > 0 && c.fadeIn !== undefined && Math.abs(toF(c.fadeIn, fps) - offHead) <= 1) { delete c.fadeIn; delete c.fadeInFrom; }
   c.in = P.in; c.out = P.out; c.at = P.at;
   delete c.unlinked; delete P.unlinked;
   fitFades(c);

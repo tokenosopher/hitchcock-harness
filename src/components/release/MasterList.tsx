@@ -1,4 +1,5 @@
 'use client';
+import { aspectStyle } from '@/lib/frame';
 // Naming the final (board 14): the masters on offer, newest first, each with the same four rows; "Make this the
 // final" on the newest, "Use this one instead" on the others; a master out of date says why and offers the Renders
 // tab instead of the button. Used by the closed Release page and by "Change…" on the open one.
@@ -18,8 +19,10 @@ function madeWords(m: MasterOption, now: Date, newest: boolean): string {
   return `made ${dayWords(d, now)} ${hm(d)}${newest ? ', the newest' : ''}`;
 }
 
-export function MasterList({ masters, media, goesOutAs, editHref, onName, current, locked }: {
+export function MasterList({ masters, media, goesOutAs, editHref, onName, current, locked, aspect }: {
   masters: MasterOption[];
+  /** The film's aspect: each master's still takes it. */
+  aspect?: string;
   /** /api/media path of a film-relative file. */
   media: (rel: string) => string;
   goesOutAs: string;
@@ -50,7 +53,7 @@ export function MasterList({ masters, media, goesOutAs, editHref, onName, curren
           <article key={m.path} data-master={m.path} data-stale={m.stale ? '' : undefined}
             className={cn('grid grid-cols-[64px_minmax(0,1fr)_auto] items-start gap-4 rounded-[10px] border p-3 transition-colors duration-200 max-[760px]:grid-cols-[56px_minmax(0,1fr)]',
               main ? 'border-edge-strong bg-panel' : 'border-edge')}>
-            <Media path={media(m.still ?? m.path)} w={160} t={2} play fit="cover" className="aspect-[9/16] w-full rounded-[6px] border border-line" />
+            <Media path={media(m.still ?? m.path)} w={160} t={2} play fit="cover" style={aspectStyle(aspect)} className="aspect-[9/16] w-full rounded-[6px] border border-line" />
             <div className="flex min-w-0 flex-col gap-2">
               <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
                 <b className="text-[13.5px] font-semibold">{m.title}</b>

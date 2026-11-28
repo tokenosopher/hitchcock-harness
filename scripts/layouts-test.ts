@@ -196,7 +196,8 @@ ok('a shot of another layout\'s take into a place of the layout in use: the boar
   assert.equal(put.note, 'S3 shot 4: take 1 shot 3 in place of its boards, 57 f longer');
   const v = put.tl.tracks[0].clips, a = put.tl.tracks[1].clips;
   const c = v.find((x) => x.id === 'x1')!;
-  assert.deepEqual([c.shot, c.layout, c.in, c.out], [4, 3, 7.2, 13]);
+  // its in on the cut's frame grid: the cut at 7.2 s is frame 172.8, put on frame 173 (shots.ts shotEdge)
+  assert.deepEqual([c.shot, c.layout, c.in, c.out], [4, 3, 7.208333, 13]);
   assert.equal(shotNo(c, by), 4, 'it fills place 4');
   assert.equal(ownShot(c, by), 3, 'it shows its take\'s shot 3');
   assert.ok(inFilm(put.tl, by).has(`${T1}#3`), 'the Takes view rings the shot it shows');

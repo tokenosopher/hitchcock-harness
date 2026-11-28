@@ -4,6 +4,7 @@
 // for itself (data-ref-skip on its root: the message box's own Option-pick does not take it), so it works whether the
 // box has the cursor or not. While Option is held, the thing under the pointer gets a ring.
 import { useEffect, useRef } from 'react';
+import { rememberFocus } from '@/components/shell/jumpBack';
 
 /** The ring while Option is held: on the page root, `data-sd-picking`; each thing that can go in has PICK. */
 export const PICK = '[[data-sd-picking]_&]:cursor-copy [[data-sd-picking]_&:hover]:outline [[data-sd-picking]_&:hover]:outline-1 [[data-sd-picking]_&:hover]:outline-offset-2 [[data-sd-picking]_&:hover]:outline-ink';
@@ -19,6 +20,8 @@ export function pickProps(go: () => void): { onClickCapture: (e: React.MouseEven
       e.preventDefault();
       e.stopPropagation();
       const el = e.currentTarget;
+      // where the cursor was, for after the message; go() puts the cursor in the box
+      rememberFocus();
       go();
       el.animate?.([{ boxShadow: '0 0 0 3px rgba(250,250,250,.5)' }, { boxShadow: '0 0 0 0 rgba(250,250,250,0)' }], { duration: 700, easing: 'ease-out' });
     },

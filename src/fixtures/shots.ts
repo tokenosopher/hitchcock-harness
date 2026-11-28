@@ -21,6 +21,7 @@ import type { TakeShots } from '@/server/edit/shots';
 import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
 import cutFilm from './boards/cut-the-lighthouse.json';
 import { trimSampleShots } from './trim';
+import { gapsSampleShots } from './framegaps';
 
 interface FixtureClip { id: string; src: string; in: number; out: number; at: number; takeRef?: { scene: string; take: string } }
 interface FixtureCut { current: { tracks: { id: string; kind: string; clips: FixtureClip[] }[] }; sourceSeconds?: Record<string, number> }
@@ -139,7 +140,9 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
 // "sample take A" of S1, S2 and S3 landed later: three new takes to check
 const LANDED_SAMPLE = 'sample-left-landed';
 const ownCut = (slug: string): FixtureCut => JSON.parse(JSON.stringify(cutFilm).split('assets/films/the-lighthouse/').join(`assets/films/${slug}/`)) as FixtureCut;
-const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut, [LANDED_SAMPLE]: ownCut(LANDED_SAMPLE) };
+const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut, [LANDED_SAMPLE]: ownCut(LANDED_SAMPLE),
+  // the 16:9 samples (masters.ts): the same takes, their pictures the 1920x1080 test clip
+  'sample-wide': ownCut('sample-wide'), 'sample-wide-portrait': ownCut('sample-wide-portrait') };
 const LANDED = Date.UTC(2026, 10, 10, 12);
 const LATER: Record<string, (t: TakeShots) => boolean> = {
   'sample-sound-picks': (t) => t.scene === 'S1' && t.name === 'sample take A',
@@ -154,7 +157,7 @@ const landedSet = (g.__sampleLanded ??= new Set());
 /** The sample film's takes with their shots ({takes, waiting: 0}); no takes for a film without a fixture cut. */
 export function mockShots(film: string): { takes: TakeShots[]; waiting: number } {
   // the sample film of a take cut into its shots (trim.ts): its takes as written there
-  const trim = trimSampleShots(film);
+  const trim = trimSampleShots(film) ?? gapsSampleShots(film);
   if (trim) return trim;
   const cut = CUTS[film];
   if (!cut) return { takes: [], waiting: 0 };

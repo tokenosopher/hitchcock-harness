@@ -204,10 +204,10 @@ export function UpscaleCheck({ tl, takes, shots, marks, onToggle, frame, fps, la
               <div className="flex flex-wrap gap-2">
                 {t.shots.map((s) => (
                   <button key={s.clip.id} type="button" data-shot={s.clip.id} onClick={() => onPlay(s)} title={`${shotName(s)} · ${secs(s.len, fps)} · ${s.kind === 'small' ? '480p · not upscaled' : s.label}`}
-                    className={cn('flex w-[84px] cursor-pointer flex-col gap-1 rounded-[7px] border bg-transparent p-1 text-left transition-colors duration-200',
+                    className={cn('flex w-[84px] [[data-frame=wide]_&]:w-[132px] cursor-pointer flex-col gap-1 rounded-[7px] border bg-transparent p-1 text-left transition-colors duration-200',
                       cur?.clip.id === s.clip.id ? 'border-ink' : on ? 'border-dashed border-warn' : 'border-edge hover:border-sub')}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- a WebP still from /api/media */}
-                    <img alt="" src={s.still} loading="lazy" className="aspect-[9/16] w-full rounded-[4px] bg-black object-cover" />
+                    <img alt="" src={s.still} loading="lazy" className="aspect-[9/16] w-full rounded-[4px] bg-black object-cover [[data-frame=wide]_&]:aspect-[var(--film-aspect)] [[data-frame=wide]_&]:object-contain" />
                     <span className="truncate text-[11px] text-ink">{shotName(s)}</span>
                     <span className={cn('truncate font-mono text-[10px]', s.kind === 'small' ? 'text-warn' : 'text-mute')}>{secs(s.len, fps)} · {s.kind === 'small' ? '480p' : s.label}</span>
                   </button>

@@ -32,7 +32,28 @@ const toS = (f: number, fps: number) => Math.round((f / fps) * 1e6) / 1e6;
 const r6 = (s: number) => Math.round(s * 1e6) / 1e6;
 const clone = (tl: Timeline): Timeline => JSON.parse(JSON.stringify(tl)) as Timeline;
 
-export function shotsOf(t?: TakeShots): Shot[] {
+/** A shot boundary on the cut's frame grid: the found cuts are times in the take's own frames
+ *  (a MAGI-2 take is 25 fps, the cut 24), so the join of two shots is put on the nearest whole frame of the cut. Nearest,
+ *  because that is where the render shows the new shot: its fps filter gives each frame of the cut the source frame
+ *  nearest in time (S2's cut at 17.6 s first shows at frame 422 = 17.583 s, not 423). The end of a shot and the start
+ *  of the next are the same number, so they always meet. The one rule for every shot boundary on the timeline. */
+export const shotEdge = (sec: number, fps: number): number => toS(toF(sec, fps), fps);
+
+/** A take's cuts and length on the cut's frame grid (shotEdge): what the server hands the page, and what the page uses
+ *  again before it splits a clip, so a cut read before this rule, or a hand-written cuts.json, is put on the grid too.
+ *  Cuts that fall on one frame, or on the take's first or last frame, count once or not at all. */
+export function onGrid(t: TakeShots, fps: number): TakeShots {
+  if (!t.cuts || !(fps > 0)) return t;
+  const seconds = t.seconds !== undefined ? shotEdge(t.seconds, fps) : undefined;
+  const cuts = [...new Set(t.cuts.map((c) => shotEdge(c, fps)))].filter((c) => c > 0 && (seconds === undefined || c < seconds)).sort((x, y) => x - y);
+  // the ids and tags name the shots in order: when two cuts fell on one frame they no longer fit, and are dropped
+  const fits = cuts.length === t.cuts.length;
+  const { ids, tags, ...rest } = t;
+  return { ...rest, cuts, ...(seconds !== undefined ? { seconds } : {}), ...(fits && ids ? { ids } : {}), ...(fits && tags ? { tags } : {}) };
+}
+
+export function shotsOf(t?: TakeShots, fps?: number): Shot[] {
+  if (t && fps) t = onGrid(t, fps);
   if (!t || !t.cuts || !t.seconds) return [];
   const b = [0, ...t.cuts, t.seconds];
   let ids = t.ids && t.ids.length === b.length - 1 && t.ids.every((n) => Number.isInteger(n) && n >= 1) ? t.ids : undefined;
@@ -71,8 +92,8 @@ export function idsFor(file: number[] | undefined, cuts: number[] | undefined): 
 }
 
 /** The take's shot that is the scene's shot `n`; with `tag` ("7b"), the one of that id among the shots of `n`. */
-export const shotOf = (t: TakeShots | undefined, n: number, tag?: string): Shot | undefined =>
-  shotsOf(t).find((s) => s.n === n && (tag === undefined || subTag(s) === tag || (!subTag(s) && tag === String(n))));
+export const shotOf = (t: TakeShots | undefined, n: number, tag?: string, fps?: number): Shot | undefined =>
+  shotsOf(t, fps).find((s) => s.n === n && (tag === undefined || subTag(s) === tag || (!subTag(s) && tag === String(n))));
 
 /** The shot of the scene a clip fills: a planned shot's or a board's own number; a take's shot swapped into another
  *  place of its scene's layout (`layout` and `shot` set), that place; else the shot of its take its middle
@@ -135,7 +156,7 @@ function namedShot(c: TimelineClip, shots: Shot[], fps: number): Shot | undefine
  *  not cut at its shots) may use the run of shots it spans. A file with one shot, or none known, has its own ends. */
 export function clipFrames(c: TimelineClip, by: BySrc, seconds: number | undefined, fps: number): ClipFrames {
   if (c.plan || isLine(c)) return seconds;
-  const shots = shotsOf(by.get((c.src ?? '')));
+  const shots = shotsOf(by.get((c.src ?? '')), fps);
   if (shots.length < 2) return seconds;
   const own = namedShot(c, shots, fps);
   const t = own ? [own] : touched(c, shots, fps);
@@ -151,7 +172,8 @@ const baseLabel = (c: TimelineClip) => (c.takeRef ? `${c.takeRef.scene} · ${c.t
  *  back when there is nothing to split. */
 export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
   const { v, a } = mainTracks(tl);
-  const m = 2 / tl.fps;
+  const fps = tl.fps;
+  const m = 2 / fps;
   let changed = false;
   // a piece's id must be new in the whole cut: a clip that was split before and has grown across the same cut again
   // (its end dragged, or its join moved) would otherwise give its new piece the id of the piece that is already there
@@ -177,22 +199,28 @@ export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
     return l;
   };
   const split = (t: TimelineTrack): TimelineClip[] => t.clips.flatMap((c) => {
-    const take = by.get((c.src ?? ''));
-    if (!take?.cuts || speedOf(c) !== 1) return [c];
+    const raw = by.get((c.src ?? ''));
+    if (!raw?.cuts || speedOf(c) !== 1) return [c];
+    // the cuts on the cut's frame grid (shotEdge): each piece ends on the frame the next one starts on
+    const take = onGrid(raw, fps);
     // already one shot (its name says which), only run on past its own frames: kept whole
-    if (namedShot(c, shotsOf(take), tl.fps)) return [c];
-    const inner = take.cuts.filter((b) => b > c.in + m && b < c.out - m);
+    if (namedShot(c, shotsOf(take), fps)) return [c];
+    const inner = take.cuts!.filter((b) => b > c.in + m && b < c.out - m);
     if (!inner.length) return [c];
     changed = true;
     const bounds = [c.in, ...inner, c.out];
+    // where each piece starts on the timeline, in whole frames from the clip's own start: the same number is the end
+    // of the piece before, so no hole and no overlap is ever drawn or played between two shots of one take
+    const s0 = startF(c, fps);
+    const startAt = (i: number) => (i === 0 ? c.at : toS(s0 + toF(bounds[i] - c.in, fps), fps));
     return bounds.slice(0, -1).map((from, i) => {
-      const piece: TimelineClip = { ...c, id: i === 0 ? c.id : fresh(`${c.id}~${i + 1}`), in: r6(from), out: r6(bounds[i + 1]), at: r6(c.at + (from - c.in)) };
+      const piece: TimelineClip = { ...c, id: i === 0 ? c.id : fresh(`${c.id}~${i + 1}`), in: r6(from), out: r6(bounds[i + 1]), at: startAt(i) };
       const n = shotNo(piece, by);
       // a shot with a letter is named by it ("shot 7b"), as Alma names it
       const own = n ? ownShotOf(piece, by) : undefined;
       if (n) piece.label = `${baseLabel(c)} · shot ${own && own.n === n ? subTag(own) ?? n : n}`;
-      if (i > 0) { delete piece.fadeIn; delete piece.dissolve; if (c.link) piece.link = linkFor(c.link, i); }
-      if (i < bounds.length - 2) delete piece.fadeOut;
+      if (i > 0) { delete piece.fadeIn; delete piece.fadeInFrom; delete piece.dissolve; if (c.link) piece.link = linkFor(c.link, i); }
+      if (i < bounds.length - 2) { delete piece.fadeOut; delete piece.fadeOutTo; }
       return piece;
     });
   });
@@ -321,7 +349,8 @@ let seq = 0;
  *  difference, on every track, markers too. `tag` ("7b"): the take's shot of that id among its shots of `n`; it takes
  *  the place of the shot of the same id when the film has one there, else of the whole shot `n`. */
 export function putShot(tl0: Timeline, scene: string, n: number, take: TakeShots, takeName: string, by: BySrc, id?: string, order?: string[], into?: { to: number; layout: number }, tag?: string): (Edit & { clipId: string; at: number; frames: number }) | undefined {
-  const shot = shotOf(take, n, tag);
+  // the shot's in and out on the cut's frame grid (shotEdge), so it meets the shots beside it in its take exactly
+  const shot = shotOf(take, n, tag, tl0.fps);
   const tl = clone(tl0);
   const { v, a } = mainTracks(tl);
   if (!shot || !v) return undefined;

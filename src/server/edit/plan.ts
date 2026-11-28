@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
 import { QC_LOCK_SCORE, type Timeline } from '../types';
+import { frameSize } from '@/lib/frame';
 import { bringUp, boardsBack, hasPlanned, READING_PACE, takeForBoards, type PlanPreviz, type PlanScene, type PlanShot, type PlanSource, type PrevizLine, type TakeIn } from '@/components/edit/planned';
 import { CutError, resolveSrc } from './timeline';
 import { ensureNow, historyNow, inFilmQueue, saveNow, stateNow, stepNow, WorkingError, type CutStore, type WorkingAnswer } from './working';
@@ -434,7 +435,8 @@ export function planUpdate(s: CutStore, src: PlanSource | undefined, o: { by: 'u
     if (!src) throw new CutError('This film has no script.md with a "## Script" section yet.', 409);
     if (!src.locked) throw new CutError('The script is not locked yet: the timeline starts when it is.', 409);
     const now = await here(s, o.rev);
-    const b = bringUp(now.tl, src);
+    // the first cut takes the brief's frame (src/lib/frame.ts); a cut there already keeps its own
+    const b = bringUp(now.tl, src, now.tl ? {} : frameSize(await s.aspect()));
     if (!b) return { same: true, ...(now.tl ? await peekNow(s) : {}) };
     if (!now.tl) {
       // the first cut: written as v1, then the working cut and its history seeded from it

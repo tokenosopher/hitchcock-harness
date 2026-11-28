@@ -8,7 +8,8 @@
 import Link from 'next/link';
 import { StepIntro } from '@/components/intro/StepIntro';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { isWide } from '@/lib/frame';
 import type { Timeline } from '@/server/types';
 import type { ShotList } from '@/server/films/read/shotlist';
 import { usePage } from '@/components/data/ui';
@@ -91,13 +92,14 @@ function Key() {
 
 /** The whole film's previz, as one small tile: a tap opens it full screen and plays it. Nothing plays here. */
 function PrevizTile({ pv, titles, phone }: { pv: NonNullable<ShotList['previz']>; titles: Map<string, string>; phone?: boolean }) {
+  const box = useBox();
   const open = () => zoomVideo(mediaUrl(pv.path), `Previz of the whole film · ${pv.version}`,
     pv.scenes.map((s) => ({ from: s.from, to: s.to, label: titles.has(s.scene) ? `${s.scene} · ${titles.get(s.scene)}` : s.scene })));
   return (
     <button type="button" data-previz-film onClick={open} aria-label={`Play the previz of the whole film, ${pv.version}${pv.seconds ? `, ${clock(pv.seconds)}` : ''}, full screen`}
       className={cn('group/pv flex flex-none cursor-pointer items-center gap-2.5 rounded-[10px] border border-edge bg-panel p-1 pr-3 text-left text-ink transition-colors duration-150 hover:border-edge-strong hover:bg-raised',
         phone ? 'h-11 w-full' : 'h-10')}>
-      <Media path={pv.path} w={160} t={Math.min(8, (pv.seconds ?? 16) / 2)} missingLabel="" className={cn('flex-none rounded-md', phone ? 'h-9 w-[22px]' : 'h-8 w-5')} />
+      <Media path={pv.path} w={160} t={Math.min(8, (pv.seconds ?? 16) / 2)} missingLabel="" className={cn('flex-none rounded-md', box(phone ? 'h-9 w-[22px]' : 'h-8 w-5'))} />
       <span className="min-w-0 flex-1 truncate text-[12.5px]">Previz of the whole film{pv.seconds ? <span className="text-sub"> · {clock(pv.seconds)}</span> : null}</span>
       <span aria-hidden="true" className="flex size-6 flex-none items-center justify-center rounded-full border border-edge-strong transition-colors duration-150 group-hover/pv:border-sub">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="#FAFAFA"><path d="M7 4.5v15l12-7.5z" /></svg>
@@ -109,17 +111,34 @@ function PrevizTile({ pv, titles, phone }: { pv: NonNullable<ShotList['previz']>
 // ---------------------------------------------------------------------------------------------------- desktop
 
 const CARD = 92;
+// A landscape film: each picture's box turned on its side, the cards as wide as their pictures. Written out
+// in full so Tailwind sees every class; a 9:16 film keeps the boxes as drawn.
+const WideFilm = createContext(false);
+const SIDEWAYS: Record<string, string> = {
+  'h-[142px] w-20': 'h-20 w-[142px]', 'h-24 w-[54px]': 'h-[54px] w-24', 'h-[39px] w-[22px]': 'h-[22px] w-[39px]',
+  'h-[92px] w-[50px]': 'h-[50px] w-[92px]', 'h-[110px] w-[62px]': 'h-[62px] w-[110px]', 'h-[103px] w-[58px]': 'h-[58px] w-[103px]',
+  'h-16 w-9': 'h-9 w-16', 'h-[86px] w-12': 'h-12 w-[86px]', 'h-9 w-[22px]': 'h-[22px] w-9', 'h-8 w-5': 'h-5 w-8',
+  'w-[60px]': 'w-[102px]', 'w-[72px]': 'w-[120px]', 'w-[68px]': 'w-[113px]', 'w-[52px]': 'w-[92px]', 'h-[92px] w-[52px]': 'h-[52px] w-[92px]',
+};
+/** The box of a picture: as written for a 9:16 film, on its side for a landscape one. */
+function useBox(): (c: string) => string {
+  const wide = useContext(WideFilm);
+  return (c) => (wide ? SIDEWAYS[c] ?? c : c);
+}
+const useCardW = (): number => (useContext(WideFilm) ? 154 : CARD);
 
 function PlaceCard({ film, scene, p, open, onToggle }: { film: string; scene: string; p: Place; open: boolean; onToggle: () => void }) {
+  const box = useBox();
+  const cardW = useCardW();
   const v = shownVersion(p);
   const n = parseShotId(p.id)?.n;
   if (!v) {
     return (
-      <div data-place={p.id} data-unmade="" className="box-border flex flex-col gap-1.5 rounded-[10px] border border-dashed border-edge-strong p-1.5" style={{ width: CARD }}>
+      <div data-place={p.id} data-unmade="" className="box-border flex flex-col gap-1.5 rounded-[10px] border border-dashed border-edge-strong p-1.5" style={{ width: cardW }}>
         <b className="h-4 font-mono text-[13px] font-medium text-ink">{p.id}</b>
         <span className="relative block">
-          {p.board ? <Media path={p.board.src} t={p.board.t} w={160} missingLabel="" className="h-[142px] w-20 rounded-md opacity-85" />
-            : <span className="block h-[142px] w-20 rounded-md bg-tile" />}
+          {p.board ? <Media path={p.board.src} t={p.board.t} w={160} missingLabel="" className={box('h-[142px] w-20') + ' rounded-md opacity-85'} />
+            : <span className={'block ' + box('h-[142px] w-20') + ' rounded-md bg-tile'} />}
           {p.board && <span className="absolute inset-x-1 bottom-1 rounded-[5px] bg-[rgba(9,9,11,0.82)] py-0.5 text-center text-[10.5px] text-ink">{/\.(png|jpe?g|webp)$/i.test(p.board.src) ? 'Storyboard' : 'Previz'}</span>}
         </span>
         <span className="text-[12px] leading-tight text-sub">Not made yet</span>
@@ -128,11 +147,11 @@ function PlaceCard({ film, scene, p, open, onToggle }: { film: string; scene: st
   }
   const href = shotDetailsHref(film, v.src, v.i);
   return (
-    <div data-place={p.id} className={cn('box-border flex flex-col gap-1.5 rounded-[10px] border bg-panel p-1.5 transition-colors duration-200', open ? 'border-ink' : 'border-edge')} style={{ width: CARD }}
+    <div data-place={p.id} className={cn('box-border flex flex-col gap-1.5 rounded-[10px] border bg-panel p-1.5 transition-colors duration-200', open ? 'border-ink' : 'border-edge')} style={{ width: cardW }}
       {...refData({ kind: 'shot', label: `${scene} · place ${p.id} · ${v.take} of ${v.gen}`, scene, ...(n ? { shot: n } : {}) })}>
       <b className="h-4 font-mono text-[13px] font-medium text-ink">{p.id}</b>
       <Link href={href} aria-label={`Place ${p.id}, ${v.take} of ${v.gen}: open its Shot details`} className="relative block rounded-md">
-        <Media path={v.src} t={midT(v)} w={160} missingLabel="" className="h-[142px] w-20 rounded-md" />
+        <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={box('h-[142px] w-20') + ' rounded-md'} />
         {v.inFilm ? <span aria-label="In the film" title="In the film" className="absolute bottom-[5px] left-[5px]"><Dot /></span> : <NotUsed className="absolute bottom-1 left-1" />}
       </Link>
       <span className="flex min-w-0 flex-col gap-px">
@@ -154,10 +173,11 @@ function PlaceCard({ film, scene, p, open, onToggle }: { film: string; scene: st
 }
 
 function VersionCard({ film, v, n }: { film: string; v: Made; n: number }) {
+  const box = useBox();
   return (
     <Link href={shotDetailsHref(film, v.src, v.i)} data-version={n}
       className={cn('flex gap-[11px] rounded-[10px] border bg-panel p-[7px] text-ink no-underline transition-colors duration-150 hover:bg-raised', v.inFilm ? 'border-ink' : 'border-edge hover:border-edge-strong')}>
-      <Media path={v.src} t={midT(v)} w={160} missingLabel="" className="h-24 w-[54px] flex-none rounded-md" />
+      <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={box('h-24 w-[54px]') + ' flex-none rounded-md'} />
       <span className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
         <b className="text-[13px] font-semibold">Version {n}</b>
         <span className="truncate font-mono text-[10.5px] text-sub">{v.take.toLowerCase()} of {v.gen}</span>
@@ -214,10 +234,11 @@ function PlaceRow({ film, scene, ver, openId, onOpen }: { film: string; scene: s
 
 /** A cut a take made that its prompt did not ask for: a quiet strip under the scene, as drawn. */
 function ExtraStrip({ film, scene, x }: { film: string; scene: string; x: SceneShots['extras'][number] }) {
+  const box = useBox();
   const between = x.after && x.before ? `between places ${x.after} and ${x.before}` : x.after ? `after place ${x.after}` : x.before ? `before place ${x.before}` : '';
   return (
     <Link href={shotDetailsHref(film, x.v.src, x.v.i)} data-extra-cut className="mt-2 flex items-center gap-2.5 rounded-[9px] border border-dashed border-edge-strong py-[5px] pl-[5px] pr-2.5 text-[12px] text-sub no-underline transition-colors duration-150 hover:border-sub">
-      <Media path={x.v.src} t={midT(x.v)} w={160} missingLabel="" className="h-[39px] w-[22px] flex-none rounded-[3px] opacity-70" />
+      <Media path={x.v.src} t={midT(x.v)} w={160} missingLabel="" className={box('h-[39px] w-[22px]') + ' flex-none rounded-[3px] opacity-70'} />
       <span className="whitespace-nowrap rounded border border-faint px-[5px] text-[10px] font-medium text-ink-3">Not asked for</span>
       <span>{x.v.take} of {x.v.gen === scene ? scene : x.v.gen} also cut once {between} ({(x.v.to - x.v.from).toFixed(1)} s), which its prompt did not ask for. It is not a place.</span>
     </Link>
@@ -226,6 +247,7 @@ function ExtraStrip({ film, scene, x }: { film: string; scene: string; x: SceneS
 
 /** Shots whose place is not known, by take, with why: never placed by a guess. */
 function OtherTakes({ film, other, phone }: { film: string; other: Made[]; phone?: boolean }) {
+  const box = useBox();
   const byTake = new Map<string, Made[]>();
   for (const v of other) byTake.set(takeFolder(v.src) + v.gen, [...(byTake.get(takeFolder(v.src) + v.gen) ?? []), v]);
   return (
@@ -237,10 +259,10 @@ function OtherTakes({ film, other, phone }: { film: string; other: Made[]; phone
           <div className="flex flex-wrap gap-2">
             {[...vs].sort((a, b) => a.from - b.from).map((v) => (
               <Link key={v.key} href={shotDetailsHref(film, v.src, v.i)} title={`Shot ${v.i} of ${v.take.toLowerCase()} of ${v.gen}: open its Shot details`}
-                className={cn('box-border flex flex-col gap-1 rounded-lg border bg-panel p-1 text-ink no-underline transition-colors duration-150 hover:bg-raised', v.inFilm ? 'border-mute' : 'border-edge', phone ? 'w-[60px]' : 'w-[72px]')}>
+                className={cn('box-border flex flex-col gap-1 rounded-lg border bg-panel p-1 text-ink no-underline transition-colors duration-150 hover:bg-raised', v.inFilm ? 'border-mute' : 'border-edge', box(phone ? 'w-[60px]' : 'w-[72px]'))}>
                 <span className="font-mono text-[11px] text-sub">shot {v.i}</span>
                 <span className="relative block">
-                  <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={cn('rounded-[5px]', phone ? 'h-[92px] w-[50px]' : 'h-[110px] w-[62px]')} />
+                  <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={cn('rounded-[5px]', box(phone ? 'h-[92px] w-[50px]' : 'h-[110px] w-[62px]'))} />
                   {v.inFilm && <span className="absolute bottom-1 left-1"><Dot size={8} /></span>}
                 </span>
                 <span className="text-[10px] text-sub">{secs(v)}</span>
@@ -257,6 +279,7 @@ const versionName = (v: SceneVersion) => `Version ${v.n} · ${plural(v.places.le
 
 /** The scene's earlier versions, folded under it. */
 function Earlier({ film, scene, older, open, onToggle }: { film: string; scene: string; older: SceneVersion[]; open: boolean; onToggle: () => void }) {
+  const box = useBox();
   const summary = older.map((o) => { const c = versionCounts(o); return `${versionName(o)}, ${c.inFilm ? `${c.inFilm} in the film` : 'none in the film'}`; }).join(' · ');
   return (
     <div id={`earlier-${scene}`} data-earlier={scene} className="mt-2.5 rounded-[10px] border border-edge bg-well px-3">
@@ -279,14 +302,14 @@ function Earlier({ film, scene, older, open, onToggle }: { film: string; scene: 
                   {o.places.map((p) => {
                     const v = shownVersion(p);
                     if (!v) return (
-                      <div key={p.id} className="flex w-[52px] flex-col gap-[3px]"><b className="font-mono text-[11.5px] font-medium">{p.id}</b><span className="box-border block h-[92px] w-[52px] rounded-[5px] border border-dashed border-edge-strong" /><span className="text-[10px] text-sub">not made</span></div>
+                      <div key={p.id} className={cn('flex flex-col gap-[3px]', box('w-[52px]'))}><b className="font-mono text-[11.5px] font-medium">{p.id}</b><span className={cn('box-border block rounded-[5px] border border-dashed border-edge-strong', box('h-[92px] w-[52px]'))} /><span className="text-[10px] text-sub">not made</span></div>
                     );
                     return (
                       <Link key={p.id} href={shotDetailsHref(film, v.src, v.i)} title={`${v.take} of ${v.gen}: open its Shot details`}
-                        className={cn('box-border flex w-[68px] flex-col gap-1 rounded-lg border bg-panel p-1 text-ink no-underline transition-colors duration-150 hover:bg-raised', v.inFilm ? 'border-mute' : 'border-edge')}>
+                        className={cn('box-border flex flex-col gap-1 rounded-lg border bg-panel p-1', box('w-[68px]'), ' text-ink no-underline transition-colors duration-150 hover:bg-raised', v.inFilm ? 'border-mute' : 'border-edge')}>
                         <span className="flex items-center justify-between gap-1"><b className="font-mono text-[11.5px] font-medium">{p.id}</b>{p.versions.length > 1 && <span className="truncate text-[9px] text-sub">{p.versions.length} versions</span>}</span>
                         <span className="relative block">
-                          <Media path={v.src} t={midT(v)} w={160} missingLabel="" className="h-[103px] w-[58px] rounded-[5px]" />
+                          <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={box('h-[103px] w-[58px]') + ' rounded-[5px]'} />
                           {v.inFilm && <span className="absolute bottom-1 left-1"><Dot size={8} /></span>}
                         </span>
                         <span className="text-[10.5px] text-ink-2">{v.take}</span>
@@ -337,12 +360,13 @@ function SceneSection({ film, s, openPlace, onOpenPlace }: { film: string; s: Sc
 // ---------------------------------------------------------------------------------------------------- phone
 
 function PhoneRow({ p, onOpen }: { p: Place; onOpen: () => void }) {
+  const box = useBox();
   const v = shownVersion(p);
   if (!v) {
     return (
       <div data-place={p.id} data-unmade="" className="flex items-center gap-3 rounded-[14px] border border-dashed border-edge-strong px-3 py-2">
         <b className="w-6 flex-none text-center font-mono text-[15px] font-medium">{p.id}</b>
-        {p.board ? <Media path={p.board.src} t={p.board.t} w={160} missingLabel="" className="h-16 w-9 flex-none rounded-md opacity-85" /> : <span className="h-16 w-9 flex-none rounded-md bg-tile" />}
+        {p.board ? <Media path={p.board.src} t={p.board.t} w={160} missingLabel="" className={box('h-16 w-9') + ' flex-none rounded-md opacity-85'} /> : <span className={box('h-16 w-9') + ' flex-none rounded-md bg-tile'} />}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5"><span className="text-[14px] text-sub">Not made yet</span><span className="text-[12px] text-mute">{p.board ? (/\.(png|jpe?g|webp)$/i.test(p.board.src) ? 'storyboard panel' : 'previz frame') : 'no panel yet'}</span></span>
       </div>
     );
@@ -351,7 +375,7 @@ function PhoneRow({ p, onOpen }: { p: Place; onOpen: () => void }) {
     <button type="button" data-place={p.id} onClick={onOpen} aria-label={`Place ${p.id}, ${v.take} of ${v.gen}, ${v.inFilm ? 'in the film' : 'not in the film'}: its versions and Shot details`}
       className="flex w-full cursor-pointer items-center gap-3 rounded-[14px] border border-edge bg-panel px-3 py-2 text-left text-ink transition-colors duration-150 active:bg-raised">
       <b className="w-6 flex-none text-center font-mono text-[15px] font-medium">{p.id}</b>
-      <Media path={v.src} t={midT(v)} w={160} missingLabel="" className="h-16 w-9 flex-none rounded-md" />
+      <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={box('h-16 w-9') + ' flex-none rounded-md'} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-medium">{v.take}</span>
         <span className="truncate font-mono text-[11px] text-sub">{v.gen}</span>
@@ -363,6 +387,7 @@ function PhoneRow({ p, onOpen }: { p: Place; onOpen: () => void }) {
 }
 
 function PhonePlace({ film, s, p }: { film: string; s: SceneShots; p: Place }) {
+  const box = useBox();
   // it opens at its top, whatever the list was scrolled to
   const top = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -375,7 +400,7 @@ function PhonePlace({ film, s, p }: { film: string; s: SceneShots; p: Place }) {
       {p.versions.map((v, k) => (
         <Link key={v.key} href={shotDetailsHref(film, v.src, v.i)} data-version={p.versions.length - k}
           className={cn('flex items-center gap-3 rounded-[14px] border bg-panel p-2 text-ink no-underline', v.inFilm ? 'border-ink' : 'border-edge')}>
-          <Media path={v.src} t={midT(v)} w={160} missingLabel="" className="h-[86px] w-12 flex-none rounded-md" />
+          <Media path={v.src} t={midT(v)} w={160} missingLabel="" className={box('h-[86px] w-12') + ' flex-none rounded-md'} />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <b className="text-[15px] font-semibold">Version {p.versions.length - k}</b>
             <span className="truncate font-mono text-[11px] text-sub">{v.take.toLowerCase()} of {v.gen}</span>
@@ -426,6 +451,11 @@ function SceneChips({ scenes, active, phone, onGo }: { scenes: SceneShots[]; act
 }
 
 export function ShotsPage() {
+  const { state } = useFilmPage();
+  return <WideFilm.Provider value={isWide(state?.film.aspect)}><ShotsPageIn /></WideFilm.Provider>;
+}
+
+function ShotsPageIn() {
   const { film, state, error, base } = useFilmPage();
   const shots = useShots(film);
   const extra = useJson<ShotList>(state ? `/api/films/${encodeURIComponent(film)}/shotlist` : undefined);

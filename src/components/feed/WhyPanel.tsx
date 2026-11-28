@@ -9,6 +9,7 @@ import type { FeedCard } from '@/server/types';
 import { Btn } from '@/components/shell/atoms';
 import { choose, unchoose, useChoice } from '@/components/data/choices';
 import { cn } from '@/lib/utils';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 
 /** The likely answers as chips to tap, and the box. Controlled: the caller keeps what is chosen and the words. */
 export function WhyQuestion({ id, answers, picked, words, multi, disabled, onPick, onWords, onBlur, placeholder = 'Or in your own words' }: {
@@ -63,6 +64,7 @@ export function WhyPanel({ film, card }: { film: string; card: FeedCard; from: s
         {skipped || has
           ? <span data-chosen className="inline-flex items-center gap-1.5 text-[12.5px] text-ink duration-200 animate-in fade-in-0"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen{skipped ? ': skip' : ''} · goes with Done picking</span>
           : <span className="text-[12.5px] text-sub">Tap one, write a line, or skip.</span>}
+        <ClearChoice shown={skipped || has} onClear={() => { setPicked([]); setWords(''); unchoose(film, cid); }} />
         {/* tapped again, the skip is taken back */}
         <Btn ghost aria-pressed={skipped} onClick={() => { if (skipped) { unchoose(film, cid); return; } setPicked([]); setWords(''); choose(film, { id: cid, label: label('skip'), answer: { card: card.key, kind: 'why', option: 'skip' } }); }}>{skipped ? 'Skipped' : 'Skip'}</Btn>
       </div>

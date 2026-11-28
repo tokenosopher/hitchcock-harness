@@ -9,7 +9,8 @@ import { Btn } from '@/components/shell/atoms';
 import { IconBookmark } from '@/components/shell/icons';
 import { postSave, type LibraryItem, type LibraryKind, type PickBody } from './data';
 import { cn } from '@/lib/utils';
-import { choose, useChoice } from '@/components/data/choices';
+import { choose, unchoose, useChoice } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 
 type Phase = { k: 'idle' } | { k: 'busy' } | { k: 'done'; text: string } | { k: 'error'; text: string };
 
@@ -37,6 +38,7 @@ export function PickButton({ film, body, label, what, disabled, reason, onPicked
       ) : (
         <Btn disabled={disabled} title={disabled ? reason : undefined} onClick={() => { choosePick(film, body, what); onPicked?.(); }}>{label}</Btn>
       )}
+      <ClearChoice shown={chosenHere} onClear={() => unchoose(film, pickChoiceId(body))} />
       {disabled && reason && <span className="text-[12px] text-mute">{reason}</span>}
     </span>
   );

@@ -20,6 +20,7 @@ import { Feed, ShownLink } from '@/components/feed/Feed';
 import { StepRunning } from '@/components/flow/RunningNow';
 import { FullCutLink } from '@/components/media/MasterPlayer';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { aspectStyle, isWide } from '@/lib/frame';
 import { refData } from '@/components/lib/refPick';
 
 
@@ -117,9 +118,10 @@ export function FinishPage() {
             {master ? (
               <div className="flex flex-col gap-1 border-b border-line px-4 py-3">
                 <SubLabel>{`The master${f.cut?.render ? ` · ${f.cut.render}` : ''}`}</SubLabel>
-                <div className="flex gap-3">
-                  <Media path={p(master.path)} w={320} t={2} play fit="cover" onPlay={() => chip(`master:${master.path}`, `1080p master · ${baseName(master.path)}`, p(master.path))}
-                    className="aspect-[9/16] w-[72px] flex-none rounded-[6px] border border-edge bg-black" />
+                {/* a landscape film's master: the picture across the card, the facts under it */}
+                <div className={cn('flex gap-3', isWide(state.film.aspect) && 'flex-col')}>
+                  <Media path={p(master.path)} w={320} t={2} play fit="cover" style={aspectStyle(state.film.aspect)} onPlay={() => chip(`master:${master.path}`, `1080p master · ${baseName(master.path)}`, p(master.path))}
+                    className={cn('aspect-[9/16] flex-none rounded-[6px] border border-edge bg-black', isWide(state.film.aspect) ? 'w-full' : 'w-[72px]')} />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <KV k="Length" mono>{master.frames !== undefined ? smpteFrames(master.frames, fps) : '—'}{f.cut?.timelineFrames !== undefined && master.frames !== undefined && f.cut.timelineFrames !== master.frames && !settled && <ToConfirm title={`cut/${f.cut.version}.json runs ${f.cut.timelineFrames} frames`} />}</KV>
                     <KV k="Frames" mono>{master.frames ?? '—'}</KV>

@@ -8,7 +8,8 @@ import { repoPath } from '@/components/lib/format';
 import { voiceParts } from '@/components/lib/derive';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
 import { choosePick, pickChoiceId } from '@/components/library/PickButton';
-import { useChoice } from '@/components/data/choices';
+import { unchoose, useChoice } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 import { cn } from '@/lib/utils';
 import { facePath, WholePicture } from '@/components/characters/Cards';
 import { refData } from '@/components/lib/refPick';
@@ -52,7 +53,7 @@ function VoiceRound({ s, id, name, r, from }: { s: FilmState; id: string; name: 
           <div key={o.id} data-voice-option={o.id} {...refData(voiceRefOf(s, id, r.id, o.id, optName(o.id), o.path))} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
             <PlayButton path={toRepo(o.path!)} label={`${id} ${optName(o.id)}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <button type="button" role="radio" aria-checked={on} onClick={() => choosePick(s.film.slug, body(o.id), `${optName(o.id)} for ${id} ${name}`)} className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
+              <button type="button" role="radio" aria-checked={on} onClick={() => (on ? unchoose(s.film.slug, cid) : choosePick(s.film.slug, body(o.id), `${optName(o.id)} for ${id} ${name}`))} className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
                 <span aria-hidden="true" className={cn('flex size-3.5 flex-none items-center justify-center rounded-full border', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink" />}</span>
                 <span className="min-w-0 truncate text-[13px] max-[760px]:line-clamp-2 max-[760px]:whitespace-normal" title={label}>{label}</span>
                 {o.hz !== undefined && <span className="flex-none font-mono text-[11px] text-sub">{Math.round(o.hz)} Hz</span>}
@@ -63,7 +64,10 @@ function VoiceRound({ s, id, name, r, from }: { s: FilmState; id: string; name: 
           </div>
         );
       })}
-      {sel && <span data-chosen className="text-[12px] text-mute duration-200 animate-in fade-in-0">Chosen: {optName(sel)} · goes with Done picking</span>}
+      <span className="flex flex-wrap items-center gap-2 empty:hidden">
+        {sel && <span data-chosen className="text-[12px] text-mute duration-200 animate-in fade-in-0">Chosen: {optName(sel)} · goes with Done picking</span>}
+        <ClearChoice shown={!!sel} onClear={() => unchoose(s.film.slug, cid)} />
+      </span>
     </div>
   );
 }

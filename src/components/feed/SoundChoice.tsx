@@ -215,6 +215,16 @@ export function HearInFilm({ film, card, moments, options, data, toRepo, predict
     },
   }), [m, moments, active, load, choose, start]);
 
+  // a landscape film's picture: its box takes the shape of the cut's 480p, read off a still of it
+  const [wideRatio, setWideRatio] = useState<number>();
+  const shapeSrc = data?.cut?.picture ? mediaUrl(toRepo(`cut/renders/${data.cut.picture.version}-proxy.mp4`), { w: 320, t: 0 }) : undefined;
+  useEffect(() => {
+    if (!shapeSrc) return;
+    const im = new Image();
+    im.onload = () => { const r = im.naturalWidth / im.naturalHeight; setWideRatio(r > 1 ? r : undefined); };
+    im.src = shapeSrc;
+  }, [shapeSrc]);
+
   if (!m) return null;
   const full = () => {
     const el = stage.current;
@@ -313,7 +323,7 @@ export function HearInFilm({ film, card, moments, options, data, toRepo, predict
           panel's whole width under them */}
       <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_auto_1fr] gap-x-3 gap-y-2">
         {/* the picture; full screen, the whole of it fitted on black, the options and the play button over its foot */}
-        <div ref={stage} data-hear-stage className={cn('relative row-span-3 self-start max-[560px]:row-span-1', fs ? 'flex h-full w-full items-center justify-center bg-black' : 'w-[104px] min-[761px]:w-[132px]')}>
+        <div ref={stage} data-hear-stage className={cn('relative row-span-3 self-start max-[560px]:row-span-1', fs ? 'flex h-full w-full items-center justify-center bg-black' : wideRatio ? 'w-[184px] min-[761px]:w-[234px]' : 'w-[104px] min-[761px]:w-[132px]')}>
           <video ref={vid} data-hear-video playsInline preload="none" poster={poster} aria-label={`The film at ${clock(m.at)}`}
             onPlay={(e) => { stopOtherFilms(e.currentTarget); setSt((p) => ({ ...p, playing: true, err: undefined })); }}
             onPause={() => setSt((p) => ({ ...p, playing: false, waiting: false }))}
@@ -333,7 +343,7 @@ export function HearInFilm({ film, card, moments, options, data, toRepo, predict
               }).catch(() => undefined);
             }}
             onClick={toggle}
-            className={cn('block cursor-pointer bg-black [&:fullscreen]:object-contain', fs ? 'h-full w-full object-contain' : 'aspect-[9/16] w-full rounded-[6px] border border-edge object-cover')} />
+            className={cn('block cursor-pointer bg-black [&:fullscreen]:object-contain', fs ? 'h-full w-full object-contain' : 'aspect-[9/16] w-full rounded-[6px] border border-edge object-cover')} style={!fs && wideRatio ? { aspectRatio: String(wideRatio) } : undefined} />
           <button type="button" onClick={full} aria-label={fs ? 'Leave full screen' : 'Full screen'} data-hear-full
             className={cn('absolute flex cursor-pointer items-center justify-center rounded-md border-0 bg-black/55 p-0 text-white backdrop-blur-sm transition-opacity duration-200 hover:bg-black/75', fs ? 'right-4 top-4 size-10' : 'right-1 top-1 size-7')}>
             {fs

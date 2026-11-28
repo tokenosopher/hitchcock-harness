@@ -1,4 +1,5 @@
 'use client';
+import { aspectStyle } from '@/lib/frame';
 // Release (stage 12). Since 14 Nov 2026 the Release page is the film and where it goes (src/components/release/):
 // closed until a final is named, then the platforms from social/release.json. A film with only the old social/kit.md
 // (no release file, no final) keeps the page below, read-only, as it was: KitRelease.
@@ -171,7 +172,7 @@ function KitRelease({ r }: { r: ReleaseInfo }) {
             );
   const playCard = r.play && (
               <Card className="flex gap-4 p-4 max-[760px]:flex-col">
-                <Media path={r.play.twin ? p(r.play.twin) : r.play.path} w={640} t={8} play fit="contain"
+                <Media path={r.play.twin ? p(r.play.twin) : r.play.path} w={640} t={8} play fit="contain" style={aspectStyle(state.film.aspect)}
                   onPlay={() => ui.addChip({ id: 'release:cut', label: `delivered cut · ${r.play!.label}` })}
                   className="aspect-[9/16] w-[180px] flex-none rounded-[9px] border border-edge bg-black max-[760px]:w-full max-[760px]:max-w-[260px]" />
                 <div className="flex min-w-0 flex-col gap-1.5 text-[13px]">

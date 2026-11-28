@@ -26,6 +26,7 @@ import { clipLength, CutError, cutFilm, frameOf, isVersion, logWrite, readVersio
 import { parseSrt, type Cue } from '@/components/edit/subs';
 import { baseFor, dissolveJoins, madeWords, picturePieces, pictureMade, videoLayout, type FullBase, type FullInfo, type Join, type Piece, type Placed } from '@/components/edit/fullsize';
 import { shotTimeline } from '@/components/edit/shots';
+import { fadeFilters } from '@/components/edit/fades';
 import type { PictureMade } from '../types';
 import { readFullSize } from './fullsize';
 import { masterAge, masterLogRel, masterNo, masterRel, newestMaster, type MasterAge } from '@/components/edit/masters';
@@ -396,8 +397,9 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
         // exactly as before dissolves existed
         chain = [`atrim=start=${f6(c.in)}:end=${f6(c.out)}`, 'asetpts=PTS-STARTPTS', 'aresample=48000', 'aformat=sample_fmts=fltp:channel_layouts=stereo', ...levels(c, c.in), ...atempo(speed), `atrim=end=${f3(len)}`];
         if (c.gain) chain.push(`volume=${c.gain}dB`);
-        if (c.fadeIn) chain.push(`afade=t=in:st=0:d=${f3(c.fadeIn)}`);
-        if (c.fadeOut) chain.push(`afade=t=out:st=${f3(Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        if (c.fadeIn && c.fadeInFrom === undefined) chain.push(`afade=t=in:st=0:d=${f3(c.fadeIn)}`);
+        if (c.fadeOut && c.fadeOutTo === undefined) chain.push(`afade=t=out:st=${f3(Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        chain.push(...fadeFilters(c, 0));
         const ms = Math.round(c.at * 1000);
         if (ms > 0) chain.push(`adelay=${ms}:all=1`);
       } else {
@@ -410,8 +412,9 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
         chain = [`atrim=start=${f6(srcStart)}:end=${f6(c.out + post * speed)}`, 'asetpts=PTS-STARTPTS', 'aresample=48000', 'aformat=sample_fmts=fltp:channel_layouts=stereo', ...levels(c, srcStart), ...atempo(speed),
           ...(silent > 1e-6 ? [`adelay=${Math.round(silent * 48000)}S:all=1`] : []), `apad=whole_dur=${f6(total)}`, `atrim=end=${f6(total)}`];
         if (c.gain) chain.push(`volume=${c.gain}dB`);
-        if (c.fadeIn) chain.push(`afade=t=in:st=${f6(pre)}:d=${f3(c.fadeIn)}`);
-        if (c.fadeOut) chain.push(`afade=t=out:st=${f6(pre + Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        if (c.fadeIn && c.fadeInFrom === undefined) chain.push(`afade=t=in:st=${f6(pre)}:d=${f3(c.fadeIn)}`);
+        if (c.fadeOut && c.fadeOutTo === undefined) chain.push(`afade=t=out:st=${f6(pre + Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        chain.push(...fadeFilters(c, pre));
         if (jin) chain.push(`afade=t=in:st=0:d=${f6(jin.D / fps)}`);
         if (jout) chain.push(`afade=t=out:st=${f6(total - jout.D / fps)}:d=${f6(jout.D / fps)}`);
         const at = Math.round((c.at - pre) * 48000);

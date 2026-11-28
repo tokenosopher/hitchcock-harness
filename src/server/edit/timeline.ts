@@ -11,6 +11,7 @@ import type { CutRenders, RenderInfo, Timeline, TimelineClip, TimelineMarker, Ti
 import { madeOf } from '../types';
 import { probe } from './probe';
 import { renderPart, type RenderPart } from '@/components/edit/sameCut';
+import { frameSize as filmFrame } from '@/lib/frame';
 
 export class CutError extends Error {
   constructor(message: string, readonly status = 400, readonly problems: string[] = []) {
@@ -189,7 +190,7 @@ function lineProblems(c: TimelineClip, kind: TrackKind, cw: string): string[] {
   else if (rows.length > 2) out.push(`${cw}: a subtitle line has at most two rows (one "\\n")`);
   else if (rows.some((r) => !r.trim())) out.push(`${cw}: a row of a subtitle line is empty`);
   if (num(c.in) && c.in !== 0) out.push(`${cw}: a subtitle line has in 0 (out is its length in seconds)`);
-  for (const k of ['speed', 'gain', 'fadeIn', 'fadeOut'] as const) if (c[k] !== undefined) out.push(`${cw}: a subtitle line has no ${k}`);
+  for (const k of ['speed', 'gain', 'fadeIn', 'fadeOut', 'fadeInFrom', 'fadeOutTo'] as const) if (c[k] !== undefined) out.push(`${cw}: a subtitle line has no ${k}`);
   return out;
 }
 
@@ -216,7 +217,7 @@ function planProblems(c: TimelineClip, kind: TrackKind, cw: string): string[] {
   if (c.shot !== undefined && (!Number.isInteger(c.shot) || c.shot < 1)) out.push(`${cw}: shot is a whole number from 1`);
   if ((c.part !== undefined || c.parts !== undefined) && !(c.plan === 'line' && Number.isInteger(c.part) && Number.isInteger(c.parts) && c.part! >= 1 && c.part! <= c.parts!)) out.push(`${cw}: part and parts are whole numbers on a line, part 1 to parts`);
   if (c.timing !== undefined && typeof c.timing !== 'string') out.push(`${cw}: timing is words`);
-  for (const k of ['speed', 'gainPoints', 'dissolve', 'flip'] as const) if (c[k] !== undefined) out.push(`${cw}: a planned clip has no ${k}`);
+  for (const k of ['speed', 'gainPoints', 'dissolve', 'flip', 'fadeInFrom', 'fadeOutTo'] as const) if (c[k] !== undefined) out.push(`${cw}: a planned clip has no ${k}`);
   return out;
 }
 
@@ -234,6 +235,8 @@ function newFieldProblems(c: TimelineClip, kind: TrackKind, cw: string): string[
   }
   if (c.link !== undefined && (typeof c.link !== 'string' || !/^[A-Za-z0-9_.~-]{1,128}$/.test(c.link) || kind === 'captions')) out.push(`${cw}: link is an id (letters, digits, . ~ - _), the same on a picture clip and its sound`);
   if (c.dissolve !== undefined && (kind === 'captions' || !num(c.dissolve) || c.dissolve <= 0 || c.dissolve > 10)) out.push(`${cw}: dissolve must be seconds, more than 0 and at most 10, on a picture or sound clip`);
+  // a fade from or to a level: dB on gain's scale, on a sound clip
+  for (const k of ['fadeInFrom', 'fadeOutTo'] as const) if (c[k] !== undefined && (kind !== 'audio' || !num(c[k]) || c[k]! < -96 || c[k]! > 24)) out.push(`${cw}: ${k} is dB between -96 and 24 (the level the sound fade ${k === 'fadeInFrom' ? 'in starts from' : 'out ends at'}), on a sound clip`);
   return out;
 }
 
@@ -393,8 +396,9 @@ export async function writeNextVersion(film: FilmTarget, input: NewVersion, opts
   const t: Timeline = {
     version,
     fps,
-    width: input.width ?? base?.width ?? 1080,
-    height: input.height ?? base?.height ?? 1920,
+    // a film's first version takes its brief's frame (src/lib/frame.ts); 9:16 when the brief gives none
+    width: input.width ?? base?.width ?? filmFrame(film.aspect).width,
+    height: input.height ?? base?.height ?? filmFrame(film.aspect).height,
     ...(last ? { basedOn: last } : {}),
     note: input.note?.trim() || undefined,
     by: input.by ?? 'user',

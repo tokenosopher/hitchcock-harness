@@ -6,6 +6,7 @@ import { harnessConfig, STUDIO_MISSING } from '../config';
 import { readBrief } from '../films/read/brief';
 import { Warnings } from '../films/util';
 import type { ShowPath } from './writes';
+import type { Aspect } from '@/lib/frame';
 
 export interface FilmTarget {
   slug: string;
@@ -13,6 +14,7 @@ export interface FilmTarget {
   dir: string;                  // absolute film folder, through the assets link
   title: string;
   show: ShowPath;               // absolute → "assets/films/<slug>/…"
+  aspect?: Aspect;              // the brief's aspect ratio: the cut's frame follows it (src/lib/frame.ts)
 }
 
 /** The studio folder's assets folder is not there (setup.sh makes it). */
@@ -36,7 +38,7 @@ export async function filmTarget(slug: string, repo = harnessConfig().filmRepo):
     return undefined;
   }
   const brief = await readBrief({ dir, warn: new Warnings() });
-  return { slug, repo, dir, title: brief?.title ?? slug, show: showPathFor(repo, dir) };
+  return { slug, repo, dir, title: brief?.title ?? slug, show: showPathFor(repo, dir), ...(brief?.aspect ? { aspect: brief.aspect } : {}) };
 }
 
 /** Paths inside the repo read "assets/films/…" (never the volume path); the real folder behind the link maps back. */

@@ -24,6 +24,7 @@ import { shotsOf, type TakeShots } from '@/components/edit/shots';
 import { filmRel, shotDetailsHref, takeFromParam } from '@/components/lib/shotHref';
 import { sentence, type Mention, type PromptSection } from '@/components/lib/shotDetails';
 import { useFilmPage, filmPath } from '@/components/pages/common';
+import { isWide } from '@/lib/frame';
 import { useJson } from '@/components/pages/postCommon';
 import { cn } from '@/lib/utils';
 import { fullName, pageOfPanel, pageShots, previzFor, tagName, useModel, type Model, type PageShot } from './model';
@@ -215,6 +216,7 @@ export function ShotDetailsPage() {
   const onHotInput = (orders: number[], on: boolean) => setHot(on ? new Set(orders) : new Set());
 
   if (!state) return <Loading error={error} />;
+  const wide = isWide(state.film.aspect);
   if (!rel) return <Loading error="That is not the address of a take" />;
   if (!found && !ts && cuts.loading) return <Loading error={error} />;
   if (!found && !ts && !rec) return <Loading error={`No take ${rel} in this film`} />;
@@ -279,17 +281,18 @@ export function ShotDetailsPage() {
         <div role="tablist" aria-label="The take's shots"
           className="mb-3.5 grid flex-none gap-1.5 max-[760px]:-mx-4 max-[760px]:flex max-[760px]:overflow-x-auto max-[760px]:px-4 max-[760px]:[scrollbar-width:none]"
           style={phone ? undefined : { gridTemplateColumns: `minmax(0, 116px) repeat(${Math.max(1, count)}, minmax(0, 92px))` }}>
-          <StripTile on={sel === 0} label="Whole take" d={secs} img={shots[0] ? thumbAt(shots[0]) : undefined} whole phone={phone} onClick={() => select(0, true)} pick={pickProps(() => tellShot(undefined))} />
+          <StripTile on={sel === 0} label="Whole take" d={secs} img={shots[0] ? thumbAt(shots[0]) : undefined} whole phone={phone} wide={wide} onClick={() => select(0, true)} pick={pickProps(() => tellShot(undefined))} />
           {shots.map((s) => (
-            <StripTile key={s.i} on={sel === s.i} label={s.label} d={s.t0 !== undefined ? s.t1! - s.t0 : undefined} img={thumbAt(s)} phone={phone} title={`Shot ${s.label}${s.name ? ` · ${s.name}` : ''}`}
+            <StripTile key={s.i} on={sel === s.i} label={s.label} d={s.t0 !== undefined ? s.t1! - s.t0 : undefined} img={thumbAt(s)} phone={phone} wide={wide} title={`Shot ${s.label}${s.name ? ` · ${s.name}` : ''}`}
               onClick={() => select(s.i, true)} pick={pickProps(() => tellShot(s))} />
           ))}
           {!count && <span className="self-center text-[12px] text-mute">{waiting ? 'Finding the cuts in this take…' : 'The take has not been cut into its shots.'}</span>}
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[184px_minmax(0,1fr)_280px] gap-[22px] max-[1180px]:grid-cols-[150px_minmax(0,1fr)_240px] max-[760px]:flex max-[760px]:flex-col max-[760px]:gap-4">
-          <div className="scroll flex min-h-0 flex-col gap-2.5 overflow-auto pb-5 max-[760px]:overflow-visible max-[760px]:p-0">
-            <ShotPlayer ref={player} path={videoPath} shots={shots} sel={cur} total={ts?.seconds} phone={phone} onTell={tellPlayer} onShot={(i) => select(i, false)}
+        {/* a landscape film: the player across the top, the prompt and the inputs under it */}
+        <div className={cn('grid min-h-0 flex-1 gap-[22px] max-[760px]:flex max-[760px]:flex-col max-[760px]:gap-4', wide ? 'grid-cols-[minmax(0,1fr)_280px] max-[1180px]:grid-cols-[minmax(0,1fr)_240px]' : 'grid-cols-[184px_minmax(0,1fr)_280px] max-[1180px]:grid-cols-[150px_minmax(0,1fr)_240px]')}>
+          <div className={cn('scroll flex min-h-0 flex-col gap-2.5 overflow-auto pb-5 max-[760px]:overflow-visible max-[760px]:p-0', wide && 'col-span-2 w-full max-w-[min(640px,calc((100dvh-260px)*16/9))] overflow-visible')}>
+            <ShotPlayer ref={player} aspect={state.film.aspect} path={videoPath} shots={shots} sel={cur} total={ts?.seconds} phone={phone} onTell={tellPlayer} onShot={(i) => select(i, false)}
               badge={cur ? `Shot ${cur.label}${cur.t0 !== undefined ? ` · ${(cur.t1! - cur.t0).toFixed(1)} s` : ''}` : `Whole take${secs ? ` · ${secs.toFixed(1)} s` : ''}`}
               standing={found?.t.stopped ? `No clip: the video service ${found.t.stopped === 'blocked' ? 'refused' : 'failed on'} this take.` : found && !found.t.path ? 'Being made: the clip appears when it lands.' : undefined} />
             {!matched && rec && count > 0 && (
@@ -324,12 +327,12 @@ export function ShotDetailsPage() {
   );
 }
 
-function StripTile({ on, label, d, img, whole, phone, title, onClick, pick }: { on: boolean; label: string; d?: number; img?: string; whole?: boolean; phone: boolean; title?: string; onClick: () => void; pick: ReturnType<typeof pickProps> }) {
+function StripTile({ on, label, d, img, whole, phone, wide, title, onClick, pick }: { on: boolean; label: string; d?: number; img?: string; whole?: boolean; phone: boolean; wide?: boolean; title?: string; onClick: () => void; pick: ReturnType<typeof pickProps> }) {
   return (
     <button type="button" role="tab" aria-selected={on} title={title} {...pick} onClick={(e) => { if (!e.altKey) onClick(); }}
       className={cn('flex min-w-0 cursor-pointer items-center gap-[7px] rounded-[9px] border p-[5px] text-left transition-[border-color,background-color] duration-200',
-        on ? 'border-ink bg-raised' : 'border-edge bg-panel hover:border-edge-strong', phone && (whole ? 'w-[98px] flex-none' : 'w-[78px] flex-none'), PICK)}>
-      {img ? <img alt="" src={img} className="aspect-[9/16] w-[30px] flex-none rounded-[4px] bg-black object-cover" /> : <span className="aspect-[9/16] w-[30px] flex-none rounded-[4px] bg-tile" />}
+        on ? 'border-ink bg-raised' : 'border-edge bg-panel hover:border-edge-strong', phone && (wide ? (whole ? 'w-[124px] flex-none' : 'w-[104px] flex-none') : whole ? 'w-[98px] flex-none' : 'w-[78px] flex-none'), PICK)}>
+      {img ? <img alt="" src={img} className={cn('flex-none rounded-[4px] bg-black object-cover', wide ? 'aspect-video w-[48px]' : 'aspect-[9/16] w-[30px]')} /> : <span className={cn('flex-none rounded-[4px] bg-tile', wide ? 'aspect-video w-[48px]' : 'aspect-[9/16] w-[30px]')} />}
       <span className="flex min-w-0 flex-col gap-[3px]">
         <span className={cn('font-semibold leading-none', whole ? 'text-[12.5px] leading-[1.1]' : 'text-[14px]')}>{label}</span>
         {d !== undefined && <span className="whitespace-nowrap font-mono text-[10.5px] text-mute">{d.toFixed(1)} s</span>}

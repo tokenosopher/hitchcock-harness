@@ -20,8 +20,12 @@ import {
   type StepBy, type WorkingCut,
 } from '@/components/edit/history';
 import type { FilmTarget } from '../actions/film';
+import { frameSize, frameRule, type Aspect, type FrameRule } from '@/lib/frame';
+import { readBrief } from '../films/read/brief';
+import { Warnings } from '../films/util';
+import { probe } from './probe';
 import type { Timeline, TimelineMarker, TimelineTrack, TimelineVersionRef } from '../types';
-import { CutError, listVersions, logWrite, readVersion, readVersions, validateTimeline, writeNextVersion, type NewVersion } from './timeline';
+import { CutError, listVersions, logWrite, readVersion, readVersions, resolveSrc, validateTimeline, writeNextVersion, type NewVersion } from './timeline';
 
 export type WorkingErrorCode = 'stale' | 'no-cut' | 'bad-history' | 'missing-state' | 'no-undo' | 'no-redo' | 'no-step' | 'bad-request';
 
@@ -66,6 +70,11 @@ export interface CutStore {
   saveVersion(input: NewVersion): Promise<Timeline>;
   readNames(): Promise<Record<string, { name: string; at: string }>>;
   writeNames(n: Record<string, { name: string; at: string }>): Promise<void>;
+  /** The film's aspect as its brief says it now (read afresh: the brief can change while the server runs), for the
+   *  frame rule (src/lib/frame.ts). Undefined: the brief gives none. */
+  aspect(): Promise<Aspect | undefined>;
+  /** The picture size of a clip's source, when it can be read (the disk store probes the file). */
+  sizeOf?(src: string): Promise<{ width: number; height: number } | undefined>;
 }
 
 const tmpOf = (f: string) => `${f}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
@@ -125,6 +134,12 @@ export function diskStore(film: FilmTarget): CutStore {
       return j && typeof j === 'object' && !Array.isArray(j) && !('__unreadable' in j) ? (j as Record<string, { name: string; at: string }>) : {};
     },
     writeNames: (n) => writeAtomic(at(NAMES_REL), `${JSON.stringify(n, null, 1)}\n`),
+    aspect: async () => (await readBrief({ dir: film.dir, warn: new Warnings() }).catch(() => undefined))?.aspect,
+    async sizeOf(src) {
+      const file = resolveSrc(film, src);
+      const v = file ? (await probe(file).catch(() => undefined))?.video : undefined;
+      return v ? { width: v.width, height: v.height } : undefined;
+    },
   };
 }
 
@@ -174,7 +189,7 @@ export function memoryStore(film: FilmTarget, fixture: { current?: unknown; vers
       const base = last ? f.timelines.get(last) : undefined;
       const version = `v${last ? Number(last.slice(1)) + 1 : 1}`;
       const t: Timeline = {
-        version, fps: input.fps ?? base?.fps ?? 24, width: input.width ?? base?.width ?? 1080, height: input.height ?? base?.height ?? 1920,
+        version, fps: input.fps ?? base?.fps ?? 24, width: input.width ?? base?.width ?? frameSize(film.aspect).width, height: input.height ?? base?.height ?? frameSize(film.aspect).height,
         ...(last ? { basedOn: last } : {}), note: input.note?.trim() || undefined, by: input.by ?? 'user', at: new Date().toISOString(),
         tracks: input.tracks, markers: input.markers ?? base?.markers ?? [],
       };
@@ -184,6 +199,7 @@ export function memoryStore(film: FilmTarget, fixture: { current?: unknown; vers
     },
     readNames: async () => copy(f.names),
     writeNames: async (n) => { f.names = copy(n); },
+    aspect: async () => film.aspect,
   };
 }
 /** Sample mode only: forget a sample film's working cut (the test hook). */
@@ -338,10 +354,43 @@ export interface StepInput {
   drop?: string;                  // an Alma drop's name (cut/alma/<drop>.json), kept on the step (alma-drop.ts)
 }
 
+// ---- the frame
+
+/** The frame rule for a cut's content: the brief's aspect read now; the sources' sizes probed only when it would ask. */
+export async function frameRuleOf(s: CutStore, c: Pick<CutContent, 'width' | 'height' | 'tracks'>): Promise<FrameRule> {
+  const aspect = await s.aspect();
+  const first = frameRule(c, aspect);
+  if (first.kind !== 'ask' || !s.sizeOf) return first;
+  const srcs = [...new Set(c.tracks.filter((t) => t.kind === 'video').flatMap((t) => t.clips).map((x) => x.src).filter((x): x is string => !!x))];
+  const sizes = new Map<string, { width: number; height: number } | undefined>();
+  for (const src of srcs.slice(0, 200)) sizes.set(src, await s.sizeOf(src));
+  return frameRule(c, aspect, (src) => sizes.get(src));
+}
+
+/** When the pointer's cut can take the brief's frame (no picture in the stored shape), one step that sets it ("frame
+ *  size set to 1920x1080 from the brief") before the change that wrote it. Earlier versions are never touched. */
+async function adoptFrame(s: CutStore, h: CutHistory, by: StepBy): Promise<{ h: CutHistory; w: WorkingCut } | undefined> {
+  const before = await stateAt(s, h);
+  const r = await frameRuleOf(s, before);
+  if (r.kind !== 'adopt') return undefined;
+  const content: CutContent = { ...before, width: r.width, height: r.height };
+  const state = contentHash(content);
+  await s.writeState(state, content);
+  const { history, dropped } = addStep(h, { by, words: r.words, at: new Date().toISOString(), state });
+  const out = await commit(s, history, content);
+  if (dropped.length) await cleanStates(s, history);
+  return { h: history, w: out.working };
+}
+
 /** Checks the new content against the state before it (the base, for clips past their file's end), keeps its
  *  snapshot, then adds the step. The same content as the pointer's adds nothing (`same: true`). */
 async function stepIn(s: CutStore, input: StepInput): Promise<WorkingAnswer & { same?: boolean }> {
-  const { h, w } = await current(s, input.rev);
+  let { h, w } = await current(s, input.rev);
+  // a cut of the wrong frame with no picture in it takes the brief's at this write (a step that sets the size itself does not)
+  if (input.width === undefined && input.height === undefined) {
+    const a = await adoptFrame(s, h, input.by ?? 'user');
+    if (a) ({ h, w } = a);
+  }
   const before = await stateAt(s, h);
   const raw = {
     version: w.version ?? 'v0', at: new Date().toISOString(),
@@ -407,7 +456,9 @@ export function save(s: CutStore, input: SaveInput): Promise<WorkingAnswer & { v
 /** `save` without the queue. `note`, when given, is the version's note as it is (Alma's drop: her own words) in place
  *  of the steps' words. */
 async function saveIn(s: CutStore, input: SaveInput): Promise<WorkingAnswer & { version: string; made: boolean }> {
-  const { h, w } = await current(s, input.rev);
+  let { h, w } = await current(s, input.rev);
+  const a = await adoptFrame(s, h, input.why === 'alma' ? 'alma' : 'user');
+  if (a) ({ h, w } = a);
   const here = h.steps[h.at];
   const newest = await newestOf(s);
   let version: string;

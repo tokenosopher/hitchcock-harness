@@ -7,16 +7,17 @@
 // either end. A press of the mouse does not focus it, so after a drag the arrow keys still move the playhead; Tab does. It looks and lights like the films list's and Alma's edges (shell/Edge.tsx).
 import { memo, useLayoutEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { clampWidth, isDoubleTap, keyWidth, maxWidth, parseWidth, TAP_SLOP, VIEWER_W } from './viewerWidth';
+import { clampWidth, isDoubleTap, keyWidth, maxWidth, parseWidth, TAP_SLOP, VIEWER_W, widthKey } from './viewerWidth';
 
 const LABEL = 'The width of the viewer';
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
 
-const readStored = (): number | undefined => { try { return parseWidth(window.localStorage.getItem(VIEWER_W.key)); } catch { return undefined; } };
-const store = (w: number | undefined): void => {
+// a landscape film's width is kept under its own key; a portrait film's as always
+const readStored = (key: string): number | undefined => { try { return parseWidth(window.localStorage.getItem(key)); } catch { return undefined; } };
+const store = (key: string, w: number | undefined): void => {
   try {
-    if (w === undefined) window.localStorage.removeItem(VIEWER_W.key);
-    else window.localStorage.setItem(VIEWER_W.key, String(w));
+    if (w === undefined) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, String(w));
   } catch { /* a private window: the width lasts for the visit */ }
 };
 
@@ -27,6 +28,8 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
   const self = useRef<HTMLDivElement>(null);
   // the width asked for; the column shows it within the limits of the moment (the CSS clamp, viewerWidth.ts)
   const want = useRef<number>(VIEWER_W.initial);
+  const wide = aspect > 1;
+  const key = widthKey(aspect);
   const drag = useRef<Drag | undefined>(undefined);
   const tap = useRef<{ t: number; x: number } | undefined>(undefined);
   const easing = useRef(0);
@@ -58,8 +61,8 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
 
   // the remembered width, before the column is first painted
   useLayoutEffect(() => {
-    const w = readStored();
-    if (w !== undefined) put(w); else say();
+    const w = readStored(key);
+    if (w !== undefined) put(w); else { if (wide) want.current = max(); say(); }
     return () => {
       window.clearTimeout(easing.current);
       // gone in the middle of a drag (the page left): the pointer is the page's again
@@ -70,8 +73,10 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
 
   const back = (): void => {
     ease(240);
+    store(key, undefined);
+    // a landscape film's goes back to its widest: the column's own default (viewerWidth.ts colWidthCss)
+    if (wide) { want.current = max(); colRef.current?.style.removeProperty('--viewer-w'); say(); return; }
     put(VIEWER_W.initial);
-    store(undefined);
   };
 
   const down = (e: React.PointerEvent<HTMLDivElement>): void => {
@@ -104,7 +109,7 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
     if (d.moved) {
       const w = clampWidth(d.w0 + d.x - d.x0, d.max);
       put(w, d.max);
-      store(w);
+      store(key, w);
       tap.current = undefined;
       return;
     }
@@ -113,7 +118,7 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
     const t = performance.now();
     if (isDoubleTap(tap.current, t, e.clientX)) { tap.current = undefined; back(); } else tap.current = { t, x: e.clientX };
   };
-  const key = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     const m = max();
     const w = keyWidth(e.key, e.shiftKey, clampWidth(want.current, m), m);
     if (w === undefined) return;
@@ -122,14 +127,14 @@ export const ViewerEdge = memo(function ViewerEdge({ colRef, aspect, className }
     e.stopPropagation();
     ease(140);
     put(w, m);
-    store(w);
+    store(key, w);
   };
 
   return (
     <div className={cn('relative w-0 flex-none self-stretch', className)}>
       <div ref={self} role="separator" tabIndex={0} aria-orientation="vertical" aria-label={LABEL} aria-valuemin={VIEWER_W.min} data-viewer-edge=""
         title={`${LABEL}. Drag to resize, double click to put it back.`}
-        onPointerDown={down} onMouseDown={(e) => e.preventDefault()} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onKeyDown={key} onFocus={() => say()}
+        onPointerDown={down} onMouseDown={(e) => e.preventDefault()} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onKeyDown={onKey} onFocus={() => say()}
         className="group sticky top-14 z-20 -ml-px h-[calc(100dvh-56px)] w-3 cursor-col-resize touch-none outline-none">
         {/* over the timeline column's own border, beside the picture as it stays put: unseen until hovered, white while
             dragged or focused by the keyboard */}

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 
-const FFMPEG = '/opt/homebrew/bin/ffmpeg';
+const FFMPEG = process.env.HARNESS_FFMPEG || 'ffmpeg';
 const root = mkdtempSync(path.join(os.tmpdir(), 'cancel-render-test-'));
 const repo = path.join(root, 'repo');
 process.env.HARNESS_FILM_REPO = repo;

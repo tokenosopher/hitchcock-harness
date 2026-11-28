@@ -13,6 +13,7 @@ import { mediaUrl } from '@/components/media/Media';
 import { endF, pictureSegments, speedOf, startF } from './model';
 import { dissolveJoins, placeClip, picturePieces, videoLayout, type FullBase, type FullInfo, type Piece, type Placed } from './fullsize';
 import { levelAt } from './controls';
+import { fadeDb } from './fades';
 
 interface Props {
   tl: Timeline;
@@ -125,9 +126,10 @@ function useAudioMix(tl: Timeline, solo?: Set<string>) {
      *  counted), under its own fades (silent outside them, as ffmpeg's afade) and its share of a cross-fade. */
     const levelOf = (e: Heard, share: number) => {
       const len = e.to - e.from, pos = f - e.from;
-      const fi = (e.c.fadeIn ?? 0) * fps, fo = (e.c.fadeOut ?? 0) * fps;
+      // fades from silence straight in amplitude (afade); a fade from or to a level straight in dB (fades.ts)
+      const fi = e.c.fadeInFrom === undefined ? (e.c.fadeIn ?? 0) * fps : 0, fo = e.c.fadeOutTo === undefined ? (e.c.fadeOut ?? 0) * fps : 0;
       const fade = Math.max(0, Math.min(1, fi > 0 ? pos / fi : 1, fo > 0 ? (len - pos) / fo : 1));
-      return Math.pow(10, levelAt(e.c, srcAt(e)) / 20) * fade * share;
+      return Math.pow(10, (levelAt(e.c, srcAt(e)) + fadeDb(e.c, pos / fps)) / 20) * fade * share;
     };
     const drive = (v: Voice, e: Heard, level: number) => {
       wire(v);

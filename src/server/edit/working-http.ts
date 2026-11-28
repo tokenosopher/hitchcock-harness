@@ -3,7 +3,7 @@
 // { error, code?, rev?, problems?, working?, history? }: a stale rev (409, code "stale") brings the current working cut
 // and history with it, so the page can show them without another GET.
 import { connection } from 'next/server';
-import { isMock, mockCut } from '@/fixtures/mock';
+import { isMock, mockCut, mockFilms } from '@/fixtures/mock';
 import { filmTargetOf } from './timeline';
 import { errorResponse, NO_STORE, routeFilm } from './http';
 import { diskStore, memoryStore, peekWorking, WorkingError, type CutStore } from './working';
@@ -13,7 +13,8 @@ export type Ctx = { params: Promise<{ film: string }> };
 /** The film's store; a sample film without a cut is a 404 WorkingError. */
 export async function storeFor(slug: string): Promise<CutStore> {
   if (isMock()) {
-    const s = memoryStore(filmTargetOf(slug, '/nonexistent-sample-film', '/nonexistent-sample-film'), mockCut(slug));
+    const aspect = mockFilms().find((f) => f.slug === slug)?.aspect;
+    const s = memoryStore({ ...filmTargetOf(slug, '/nonexistent-sample-film', '/nonexistent-sample-film'), ...(aspect ? { aspect } : {}) }, mockCut(slug));
     if (!s) throw new WorkingError('no-cut', `no cut fixture for "${slug}" under MOCK=boards`, 404);
     return s;
   }

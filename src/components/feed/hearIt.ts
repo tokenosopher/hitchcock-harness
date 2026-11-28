@@ -135,7 +135,7 @@ export function windowOf(m: Pick<HearMoment, 'at' | 'ends'>, filmEnd?: number): 
 }
 
 /** One sound of the clip: a stretch of a file, where it starts in the clip (`at`, seconds from the clip's start). */
-export interface HearPiece { src: string; in: number; out: number; at: number; gainDb: number; fadeIn: number; fadeOut: number; speed: number; gainPoints?: TimelineClip['gainPoints']; what: string }
+export interface HearPiece { src: string; in: number; out: number; at: number; gainDb: number; fadeIn: number; fadeOut: number; speed: number; gainPoints?: TimelineClip['gainPoints']; fadeInFrom?: number; fadeOutTo?: number; what: string }
 
 const clipLen = (c: Pick<TimelineClip, 'in' | 'out' | 'speed'>): number => (c.out - c.in) / (c.speed && c.speed > 0 ? c.speed : 1);
 
@@ -147,14 +147,20 @@ function playing(tracks: TimelineTrack[]): TimelineTrack[] {
 }
 
 /** A clip cut to the window, or nothing when it does not reach into it. Its fades shorten by what is cut off. */
-function crop(c: { src: string; in: number; out: number; at: number; gain?: number; fadeIn?: number; fadeOut?: number; speed?: number; gainPoints?: TimelineClip['gainPoints'] }, w: HearWindow, what: string): HearPiece | undefined {
+function crop(c: { src: string; in: number; out: number; at: number; gain?: number; fadeIn?: number; fadeOut?: number; fadeInFrom?: number; fadeOutTo?: number; speed?: number; gainPoints?: TimelineClip['gainPoints'] }, w: HearWindow, what: string): HearPiece | undefined {
   const speed = c.speed && c.speed > 0 ? c.speed : 1;
   const a = c.at, b = c.at + clipLen(c);
   const s0 = Math.max(a, w.start), e0 = Math.min(b, w.end);
   if (e0 - s0 < 0.01) return undefined;
+  const g = c.gain ?? 0, fi = c.fadeIn ?? 0, fo = c.fadeOut ?? 0;
+  const fadeIn = Math.max(0, fi - (s0 - a)), fadeOut = Math.max(0, fo - (b - e0));
+  // a fade from or to a level is straight in dB: cut short, it starts (or ends) at its level where the window cuts it
+  const from = c.fadeInFrom !== undefined && fadeIn > 0 ? c.fadeInFrom + (g - c.fadeInFrom) * ((s0 - a) / fi) : undefined;
+  const to = c.fadeOutTo !== undefined && fadeOut > 0 ? c.fadeOutTo + (g - c.fadeOutTo) * ((b - e0) / fo) : undefined;
   return {
-    src: c.src, in: c.in + (s0 - a) * speed, out: c.in + (e0 - a) * speed, at: s0 - w.start, gainDb: c.gain ?? 0,
-    fadeIn: Math.max(0, (c.fadeIn ?? 0) - (s0 - a)), fadeOut: Math.max(0, (c.fadeOut ?? 0) - (b - e0)), speed,
+    src: c.src, in: c.in + (s0 - a) * speed, out: c.in + (e0 - a) * speed, at: s0 - w.start, gainDb: g,
+    fadeIn, fadeOut, speed,
+    ...(from !== undefined ? { fadeInFrom: from } : {}), ...(to !== undefined ? { fadeOutTo: to } : {}),
     ...(c.gainPoints?.length ? { gainPoints: c.gainPoints } : {}), what,
   };
 }

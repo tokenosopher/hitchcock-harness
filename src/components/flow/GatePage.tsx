@@ -18,6 +18,7 @@ import { IconBookmark } from '@/components/shell/icons';
 import { FromLibrary } from '@/components/library/FromLibrary';
 import { choosePick, pickChoiceId, PickButton, SaveButton } from '@/components/library/PickButton';
 import { choose, unchoose, useChoice } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 import { removeChoiceId, waitMark } from '@/components/lib/remove';
 import { approvalChoiceId } from '@/components/lib/approve';
 import type { LibraryKind, PickBody } from '@/components/library/data';
@@ -120,6 +121,7 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
             ) : (
               <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, `Approve · ${p.chip}`)} title="Puts it in Alma's box; press send there">Approve the sheet</Btn>
             )}
+            {film && <ClearChoice shown={sheetYes} onClear={() => unchoose(film.slug, approvalChoiceId({ id: p.id }))} />}
             <Btn onClick={() => ui.about({ id: p.key, label: p.chip }, `the ${p.id} sheet: a change to it`, `What should change in the ${p.id} sheet…`)}>Ask for a change</Btn>
             {film && <Link href={`/films/${film.slug}/character/${p.id}`} className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium text-sub no-underline hover:text-ink">Open {p.id}</Link>}
           </div>

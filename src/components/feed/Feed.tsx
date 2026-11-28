@@ -18,6 +18,7 @@ import { useJson } from '@/components/pages/postCommon';
 import { cn } from '@/lib/utils';
 import { Who } from './Who';
 import { choose, unchoose, useChoice } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconFile } from '@/components/shell/icons';
 import { refData } from '@/components/lib/refPick';
@@ -191,7 +192,8 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
   const mine = useChoice(film, cid);
   const sel = mine?.answer?.option;
   const about = `${card.ids[0] ? `${card.ids[0]} · ` : ''}${short(card.title, 44)}`;
-  const setSel = (id: string) => choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
+  // the chosen option tapped again is cleared, as the chosen Yes or Go is
+  const setSel = (id: string) => sel === id ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
   const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind === 'go' ? 'go' : 'yes', cost: ask.cost } }));
   const [p, setP] = useState<Phase>({ k: 'idle' });
   const mediaOf = (o: FeedOption): FeedMedia | undefined => optionMediaOf(card, o);
@@ -288,6 +290,7 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
         ) : ask.kind === 'pick' ? (
           <>
             {mine ? chosenMark : <span className="text-[12.5px] text-sub">Tap one to choose it.</span>}
+            <ClearChoice shown={!!mine} onClear={() => unchoose(film, cid)} />
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
           </>
         ) : (
@@ -298,6 +301,7 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
             </Btn>
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
             {mine && <span className="text-[12px] text-mute duration-200 animate-in fade-in-0">Goes with Done picking</span>}
+            <ClearChoice shown={!!mine} onClear={() => unchoose(film, cid)} />
           </>
         )}
         {p.k === 'error' && <span role="alert" className="text-[12px] text-bad">{p.text}</span>}

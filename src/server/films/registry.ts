@@ -10,6 +10,7 @@ import { readBrief } from './read/brief';
 import { readPreviz } from './read/previz';
 import { publishedIn, readPublishedNote } from './read/release';
 import { cells, exists, isoDay, list, listSlow, natCmp, readText, titleCase, VIDEO_RE, Warnings, type FilmCtx } from './util';
+import { isAspect } from '@/lib/frame';
 
 /** `final`: the folder holds the release stage's FINAL files (a Social kit folder with a video in it, or a video named
  *  FINAL, "as posted" or "… Final.mov"). A video without them is a copy, not a release (ASKS 37). */
@@ -309,7 +310,8 @@ async function filmRef(slug: string, dir: string, repo: string, flow: Flow, warn
   for (const [k, rel] of [['spend', 'spend.md'], ['reviewCards', 'review/cards.json'], ['script', 'script.md']] as const)
     if (await exists(path.join(dir, rel))) record[k] = rel;
   const layout = (await exists(path.join(dir, 'generations'))) ? 'generations' : (await exists(path.join(dir, 'blocks'))) ? 'blocks' : undefined;
-  const ratio = previz?.ratio === '9:16' || previz?.ratio === '16:9' ? previz.ratio : brief?.aspect;
+  // the brief's aspect first (the cut's frame follows it), else the previz's
+  const ratio = brief?.aspect ?? (isAspect(previz?.ratio) ? previz.ratio : undefined);
   return {
     slug,
     title: brief?.title ?? titleCase(slug),

@@ -9,11 +9,26 @@
 // meaningful block goes in as its words (pickAt, refBlock.ts), and while picking that block gets the firm ring under
 // the pointer (data-ref-hover), as a marked thing does. Words selected on the page count too: with a selection on the
 // page (the box has given up the cursor to make it), Option-click puts in the block, or the marked thing, with them.
+//
+// From anywhere: Option-click works whether or not the box has the cursor, and takes the cursor
+// to the box (jumpBack.ts remembers where it was, for after the message). Outside the box the timeline keeps Option's
+// own presses: a trim handle (that edge alone), the level line and its points (a level point), a join; and the field
+// being written in keeps its own Option-click.
 import { useEffect, useRef } from 'react';
 import type { InlineRef } from '@/lib/refs';
 import { pickAt } from '@/components/lib/refPick';
+import { rememberFocus } from './jumpBack';
 
 const PICKING = 'refPicking';
+/** What Option does by itself outside the box: the timeline's trim handles, level line and points, joins. */
+const OWN_OPTION = '[data-trim], [data-level-line], [data-level-of], [data-join]';
+/** A field the user is writing in: an Option-click inside it stays its own. */
+const ownField = (t: Element): boolean => { const f = t.closest('input, textarea, select, [contenteditable="true"]'); return !!f && f === document.activeElement; };
+const inField = (): boolean => {
+  const a = document.activeElement as HTMLElement | null;
+  return !!a && (/^(TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable
+    || (a.tagName === 'INPUT' && !/^(range|checkbox|radio|button|submit)$/i.test((a as HTMLInputElement).type)));
+};
 
 export function setPickingMark(on: boolean): void {
   const d = document.documentElement.dataset;
@@ -51,7 +66,7 @@ export function usePickOnPage(box: React.RefObject<HTMLTextAreaElement | null>, 
     let until = 0;
     let hadBox = false;
     const inBox = () => !!box.current && document.activeElement === box.current;
-    const live = (e: MouseEvent) => isArmed.current() || (e.altKey && !e.metaKey && !e.ctrlKey && (inBox() || (!!box.current && pageSelection())))
+    const live = (e: MouseEvent) => isArmed.current() || (e.altKey && !e.metaKey && !e.ctrlKey && !!box.current)
       // Option-Command-click keeps what it did (the timeline takes a clip out of the selection); a mark still picks
       || (e.altKey && inBox());
     const stop = (e: Event) => { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
@@ -61,12 +76,15 @@ export function usePickOnPage(box: React.RefObject<HTMLTextAreaElement | null>, 
       const t = e.target as Element | null;
       // the box, its buttons and an open chip card are never picked
       if (!t || t.closest('[data-ref-skip], [data-ref-card]')) return;
+      // from outside the box, Option's own presses stay the page's (a drag, not a click), and a field keeps its click
+      if (!isArmed.current() && !inBox() && !pageSelection() && (t.closest(OWN_OPTION) || ownField(t))) return;
       const got = pickAt(t);
       // Option with Command or Control picks only what a page names, never the fallback's words
       if (!got || (got.fallback && !isArmed.current() && (e.metaKey || e.ctrlKey))) return;
       stop(e);
       pending = got.ref;
       hadBox = inBox();
+      if (!hadBox) rememberFocus();
       until = Date.now() + 2000;
     };
     // the rest of the same click goes nowhere else; mousedown's default would take the cursor out of the box
@@ -91,7 +109,8 @@ export function usePickOnPage(box: React.RefObject<HTMLTextAreaElement | null>, 
     };
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Alt') return;
-      if (e.type === 'keydown' && (inBox() || (!!box.current && pageSelection()))) { setPickingMark(true); hoverAt(lastAt); }
+      // the ring shows with Option held anywhere but in another field, where Option types the Mac's letters
+      if (e.type === 'keydown' && !!box.current && (inBox() || pageSelection() || !inField())) { setPickingMark(true); hoverAt(lastAt); }
       else if (e.type === 'keyup' && !isArmed.current()) setPickingMark(false);
     };
     const move = (e: PointerEvent) => { lastAt = e.target; hoverAt(e.target); };

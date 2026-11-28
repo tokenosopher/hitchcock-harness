@@ -1,4 +1,5 @@
 'use client';
+import { aspectStyle } from '@/lib/frame';
 // The Release page (14 Nov 2026). Closed until a final is named (board 14: the masters to name one from, the platforms
 // dimmed below); then the film and where it goes (board 15): the final playing with its companions on the left;
 // "Where it goes" with the Next bar, the platforms by wave with their state, and the facts to confirm. The page writes
@@ -67,7 +68,7 @@ export function ClosedRelease({ rel }: { rel: Rel }) {
         <StepIntro step="release" width="full" />
         {rel.view.problems && <p role="alert" className="m-0 text-[12.5px] text-warn">social/release.json does not check out, so nothing can be changed here: {rel.view.problems.slice(0, 2).join(' ')}</p>}
         {masters.length ? (
-          <MasterList masters={masters} media={(r) => filmPath(state, r)} goesOutAs={finalNames(state.film.title).final} editHref={`${base}/edit`}
+          <MasterList aspect={state.film.aspect} masters={masters} media={(r) => filmPath(state, r)} goesOutAs={finalNames(state.film.title).final} editHref={`${base}/edit`}
             onName={async (m) => { const r = await nameFinal(m.path); return r.ok ? undefined : r.error; }} />
         ) : (
           <p className="m-0 rounded-[10px] border border-dashed border-edge px-4 py-3 text-[13px] text-sub">No master yet. Render one on the Edit page (Render master), then name it here.</p>
@@ -253,7 +254,7 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   const abs = (r: string) => `${state.film.folder}/${r}`;
   return (
     <aside data-final-column className="flex w-[300px] flex-none flex-col gap-3 border-r border-line p-4 @max-[759px]/rel:order-2 @max-[759px]/rel:grid @max-[759px]/rel:w-full @max-[759px]/rel:grid-cols-[112px_minmax(0,1fr)] @max-[759px]/rel:content-start @max-[759px]/rel:gap-x-4 @max-[759px]/rel:border-t @max-[759px]/rel:border-r-0 @max-[759px]/rel:px-4 [&>*]:@max-[759px]/rel:col-start-2">
-      <Media path={filmPath(state, final.path)} w={640} t={8} play fit="cover" className="aspect-[9/16] w-full rounded-[12px] border border-edge bg-black @max-[759px]/rel:col-start-1! @max-[759px]/rel:row-span-5 @max-[759px]/rel:self-start" />
+      <Media path={filmPath(state, final.path)} w={640} t={8} play fit="cover" style={aspectStyle(state.film.aspect)} className="aspect-[9/16] w-full rounded-[12px] border border-edge bg-black @max-[759px]/rel:col-start-1! @max-[759px]/rel:row-span-5 @max-[759px]/rel:self-start" />
       <div className="flex items-start gap-2" {...refData(finalRef(final, filmPath(state, final.path)))}>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <b data-final-name className="break-words text-[13px] font-semibold leading-[1.35]">{final.name}</b>
@@ -269,7 +270,7 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
       <Reveal open={change && !out.length}>
         <div className="flex flex-col gap-2 pb-1">
           {!masters ? <span className="text-[12px] text-sub">Reading the masters…</span>
-            : <MasterList masters={masters} media={(r) => filmPath(state, r)} goesOutAs={final.name} editHref={`${base}/edit`} current={final.path}
+            : <MasterList aspect={state.film.aspect} masters={masters} media={(r) => filmPath(state, r)} goesOutAs={final.name} editHref={`${base}/edit`} current={final.path}
                 onName={async (m) => { const r = await nameFinal(m.path); if (r.ok) setChange(false); return r.ok ? undefined : r.error; }} />}
         </div>
       </Reveal>
