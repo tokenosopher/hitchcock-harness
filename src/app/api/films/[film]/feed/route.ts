@@ -7,7 +7,7 @@ import { connection } from 'next/server';
 import { FEED_PLACES, type FeedPlace } from '@/server/types';
 import { getFilmState } from '@/server/films/state';
 import { feedFor, readFeed } from '@/server/films/read/feed';
-import { isMock } from '@/fixtures/mock';
+import { isMock, mockState } from '@/fixtures/mock';
 import { sampleFeed } from '@/fixtures/masters';
 import { leftSampleFeed } from '@/fixtures/left';
 import { elementsSampleFeed } from '@/fixtures/elements';
@@ -35,6 +35,8 @@ export async function GET(req: Request, { params }: RouteContext<'/api/films/[fi
     const cards = rel.filter((c) => (!asked.length || asked.includes(c.place)) && (!id || c.ids.includes(id)));
     return Response.json({ cards, total: rel.length, warnings: [] }, { headers: { 'cache-control': 'no-store' } });
   }
+  // MOCK=boards: any other sample film has no cards file of its own (it is in no registry on disk)
+  if (isMock() && mockState(film)) return Response.json({ cards: [], total: 0, warnings: [] }, { headers: { 'cache-control': 'no-store' } });
   const state = await getFilmState(film);
   if (!state) return Response.json({ error: `No film "${film}" in the registry (or the studio folder is missing)` }, { status: 404 });
   const q = new URL(req.url).searchParams;

@@ -51,7 +51,7 @@ New pages for the takes and the shots, a film that can be landscape, and a relea
 - A trim that stops at its neighbour, and a shot that cannot go into the film, say why.
 - The timeline's fit is never wider than its lane, and a long chip wraps inside its message.
 - A start or end image counts as named in what was sent.
-- The Sound page of a sample film no longer says it is missing.
+- In sample mode, a sample film's Sound page and scene pages no longer report the film missing.
 
 ## 0.3.0 (November 2026)
 
