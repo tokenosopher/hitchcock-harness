@@ -30,6 +30,7 @@ import { StepIntro } from '@/components/intro/StepIntro';
 import { refData } from '@/components/lib/refPick';
 import { platformRef, finalRef } from './refs';
 import { useCompanionAct, type CompanionAct } from './companionAct';
+import { anyPosted, linkToAdd, placePosts, placesOf } from './places';
 
 type Rel = ReturnType<typeof useRelease>;
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -151,10 +152,12 @@ function Row({ file, p, now, href }: { file: ReleaseFile; p: Platform; now: Date
   const first = captionOf(file, p.id).split('\n')[0];
   const empty = p.fields.find(unfilled);
   const line = empty ? `${empty.candidates.length} ${empty.candidates.length === 1 ? 'candidate' : 'candidates'} to pick from` : first;
-  const link = p.send.posted?.link;
+  // a platform posted in several places shows each place's link
+  const links = placesOf(p.kind).length ? placePosts(p).flatMap((x) => (x.posted?.link ? [x.posted.link] : [])) : p.send.posted?.link ? [p.send.posted.link] : [];
+  const toAdd = linkToAdd(p);
   // a post without its link says where to add it
   // the tags, the post's link or "Add the link": a line of their own, so a long one never pushes the row wider
-  const extra = st.tags.length > 0 || !!link || (!!p.send.posted && !link);
+  const extra = st.tags.length > 0 || links.length > 0 || toAdd;
   return (
     <div className="relative">
     <Link href={href} data-platform={p.id} data-row-state={st.state} {...refData(platformRef(p))}
@@ -172,8 +175,8 @@ function Row({ file, p, now, href }: { file: ReleaseFile; p: Platform; now: Date
       {extra && (
         <span data-row-extra className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           {st.tags.map((t) => <TagPill key={t.text} t={t} />)}
-          {link && <span data-link className="min-w-0 max-w-full truncate text-[12px] text-ink-3" title={link}>{link.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-          {p.send.posted && !link && <span data-add-link className="text-[12px] text-ink underline decoration-edge-strong underline-offset-2">Add the link</span>}
+          {links.map((link) => <span key={link} data-link className="min-w-0 max-w-full truncate text-[12px] text-ink-3" title={link}>{link.replace(/^https?:\/\/(www\.)?/, '')}</span>)}
+          {toAdd && <span data-add-link className="text-[12px] text-ink underline decoration-edge-strong underline-offset-2">Add the link</span>}
         </span>
       )}
     </Link>
@@ -245,7 +248,7 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   }, [change, masters, film]);
   if (!state) return null;
   const final = file.final!;
-  const out = file.platforms.filter((p) => p.send.posted).map((p) => appName(p));
+  const out = file.platforms.filter((p) => anyPosted(p)).map((p) => appName(p));
   const ff = rel.view?.finalFile;
   const newer = cutNewerLine(final.version, rel.view?.cut);
   // the file that goes out (outfile.ts, ASKS 56): said only for a final with a smaller file asked for

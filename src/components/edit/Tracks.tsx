@@ -13,14 +13,16 @@ import { StepGlyph } from '@/components/flow/FlowBoard';
 import { useDrawCount } from './drawCount';
 import {
   addTrack, clampAlone, clampRoll, clampTrim, clipName, cutPoints, endF, lenF, moveClip, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, moveClipsToTracks, planTrackMove, partnerOf, pastEnd, pastShot, patchClip, patchTrack, rollEdit, rollPairs, shotFrames, snapDelta, splitClip, startF,
-  speedOf, superseded, toConfirm, toF, totalF, trimAlone, trimClip, trimLimit, type ClipFrames, type ClipRef, type Edit, type NameOf,
+  refuse, speedOf, superseded, toConfirm, toF, totalF, trimAlone, trimClip, type ClipFrames, type ClipRef, type Edit, type NameOf,
 } from './model';
 import { wheelPastEdge } from './swipe';
+import { trimStop } from './trimStop';
 import { addGainPoint, maxDissolveF, moveGainPoint, pointRange, pointsDb, setDissolve, setFade } from './controls';
 import { asFades, fadeDb, fmtLevel } from './fades';
 import { isLine, oneRow } from './subs';
 import { retypeLine } from './subsEdit';
 import { LineField } from './Subtitles';
+import { flagPlaces, markerName } from './bookmarks';
 
 export type Tool = 'select' | 'blade';
 /** What a selection box does: replace the selection, add to it, or take out of it (Option-Command). */
@@ -70,7 +72,7 @@ interface Props {
   /** The 1080p view (ASKS 37): where a picture clip's full-size picture comes from, quiet for the normal case and loud for
    *  the exception: an upscaled take a thin light line along the top, Seedance the line in blue and a tiny label, no full-size
    *  picture an amber dashed top and an amber "480p". `marked`: its take is marked to redo in Seedance (dashed amber). */
-  clipMark?: (c: TimelineClip, t: TimelineTrack) => { kind: 'upscaled' | 'seedance' | 'small'; marked?: boolean } | undefined;
+  clipMark?: (c: TimelineClip, t: TimelineTrack) => { kind: 'upscaled' | 'seedance' | 'full' | 'small'; marked?: boolean } | undefined;
   /** A quiet mark on a picture clip that can be pressed ("1 new take": a take newer than the cut's). */
   clipNote?: (c: TimelineClip, t: TimelineTrack) => { text: string; title: string; onPress: () => void } | undefined;
   /** The tracks listened to alone, and the S button's click: a way of listening, never saved (13 Nov). */
@@ -105,6 +107,15 @@ interface Props {
   retype?: { n: number; ref: ClipRef };
   /** Words in an empty lane, by track id (the timeline from day one: "No shots yet. They come with the shot lists."). */
   laneNote?: Record<string, string>;
+  /** Bookmarks: the flag selected on the ruler (an index in tl.markers), and its click; a drag hands the
+   *  frame it was let go at, the field opened on it (a double-click, or `markerRename` from the page's Enter and menu)
+   *  hands its new words (undefined for Escape), a right-click opens the flag's menu. */
+  markerSel?: number;
+  onMarkerSelect?: (i: number | undefined) => void;
+  onMarkerMove?: (i: number, f: number) => void;
+  markerRename?: { n: number; i: number };
+  onMarkerRenamed?: (i: number, text: string | undefined) => void;
+  onMarkerMenu?: (m: { x: number; y: number; i: number }) => void;
 }
 
 const HEAD = 150;               // track header width (the board's --th)
@@ -156,7 +167,7 @@ type Drag =
   | { kind: 'box'; x0: number; y0: number; x1: number; y1: number; mode: BoxMode; moved: boolean; hit: string[] }
   // `alone` (Option held at the press): that clip is trimmed by itself, its picture or sound left as it is, nothing
   // closing up; a sound may grow over its neighbour. `why`: why it stops, at a limit
-  | { kind: 'head' | 'tail'; ref: ClipRef; ids: Set<string>; x0: number; d: number; moved: boolean; alone?: boolean; why?: string }
+  | { kind: 'head' | 'tail'; ref: ClipRef; ids: Set<string>; x0: number; d: number; moved: boolean; alone?: boolean; why?: string; say?: string }
   | { kind: 'gain'; ref: ClipRef; y0: number; h: number; db0: number; db: number; moved: boolean }
   | { kind: 'fadeIn'; ref: ClipRef; x0: number; f0: number; f: number; max: number; moved: boolean }
   | { kind: 'fadeOut'; ref: ClipRef; x0: number; f0: number; f: number; max: number; moved: boolean }
@@ -174,7 +185,7 @@ const isMove = (d?: Drag): d is MoveDrag => !!d && (d.kind === 'move' || d.kind 
 /** The ramp drawn over a faded end: the line from full sound to none, the lost part darkened. */
 const ramp = (dir: 'in' | 'out') => `linear-gradient(to top ${dir === 'in' ? 'left' : 'right'}, transparent calc(50% - 1px), #fafafa calc(50% - 1px), #fafafa calc(50% + .5px), rgba(0,0,0,.72) calc(50% + .5px))`;
 
-export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, ripple, snap, readOnly, srcSeconds, framesOf, toolbar, notice, zoomCmd, focus, scenes, openScene, clipText, tryIds, clipMark, clipNote, solo, onSolo, pasteTo, onPasteTo, group, onBox, nudge, onMenu, onHeadMenu, renaming, onRenamed, onPeek, nameOf, onPress, point, onPoint, fileDrag, onDropFile, retype, laneNote }: Props) {
+export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, ripple, snap, readOnly, srcSeconds, framesOf, toolbar, notice, zoomCmd, focus, scenes, openScene, clipText, tryIds, clipMark, clipNote, solo, onSolo, pasteTo, onPasteTo, group, onBox, nudge, onMenu, onHeadMenu, renaming, onRenamed, onPeek, nameOf, onPress, point, onPoint, fileDrag, onDropFile, retype, laneNote, markerSel, onMarkerSelect, onMarkerMove, markerRename, onMarkerRenamed, onMarkerMenu }: Props) {
   const fps = tl.fps;
   const total = Math.max(totalF(tl), fps * 10);
   const scroller = useRef<HTMLDivElement>(null);
@@ -193,6 +204,53 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
     // the page's Enter is a command, like its zoom keys
     setEditing(retype.ref);
   }, [retype]);
+
+  // ---- bookmarks on the ruler: a flag pressed goes to its frame and is selected; dragged, it moves (the
+  // playhead going along, so the picture shows where it lands) and is handed over once, at the release, as one step
+  const [flagDrag, setFlagDrag] = useState<{ i: number; x0: number; f0: number; f: number; moved: boolean }>();
+  const [flagName, setFlagName] = useState<{ i: number; text: string }>();
+  const naming = useRef(false);
+  const lastRename = useRef(0);
+  useEffect(() => {
+    if (!markerRename || markerRename.n === lastRename.current) return;
+    lastRename.current = markerRename.n;
+    const m = tl.markers[markerRename.i];
+    if (m) { naming.current = true; setFlagName({ i: markerRename.i, text: m.text }); }
+  }, [markerRename, tl.markers]);
+  const openName = (i: number) => { const m = tl.markers[i]; if (!m || readOnly || !onMarkerRenamed) return; naming.current = true; setFlagName({ i, text: m.text }); };
+  /** The name field closes once: Enter or a click elsewhere keeps the words, Escape keeps the old ones. */
+  const closeName = (keep: boolean) => {
+    if (!naming.current || !flagName) return;
+    naming.current = false;
+    const v = flagName;
+    setFlagName(undefined);
+    onMarkerRenamed?.(v.i, keep ? v.text : undefined);
+  };
+  const flagDown = (e: React.PointerEvent, i: number) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const m = tl.markers[i];
+    if (!m) return;
+    const f0 = toF(m.at, fps);
+    onMarkerSelect?.(i);
+    setFrame(f0);
+    if (readOnly || !onMarkerMove) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setFlagDrag({ i, x0: e.clientX, f0, f: f0, moved: false });
+  };
+  const flagMove = (e: React.PointerEvent) => {
+    const d = flagDrag;
+    if (!d) return;
+    const dx = e.clientX - d.x0;
+    if (!d.moved && Math.abs(dx) < 3) return;
+    const f = Math.max(0, Math.min(totalF(tl), Math.round(d.f0 + dx / live.current.z)));
+    if (f !== d.f || !d.moved) { setFlagDrag({ ...d, f, moved: true }); setFrame(f); }
+  };
+  const flagUp = () => {
+    const d = flagDrag;
+    setFlagDrag(undefined);
+    if (d?.moved && d.f !== d.f0) onMarkerMove?.(d.i, d.f);
+  };
   const fit = Math.max(0.02, (width - HEAD - 24) / total);
   const z = zoom ?? fit;
   // what the zoom's own listeners and animation frames read (they outlive a render)
@@ -582,13 +640,13 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
         dragRef.current = nd; setDrag(nd);
         return;
       }
-      // held at the first or the last frame of its shot: the edge stops there and its tag says so; only
-      // a stop that is the shot's own (the drag going past it), not every limit of a plain trim
+      // held where it cannot grow on (its shot's first or last frame, its file's, or with ripple off the clip next to it,
+      // trimStop.ts): the edge stops there and its tag says why; let go there, the line says more
       const c = clipOf(cur.ref);
       const grow = cur.kind === 'head' ? raw < 0 : raw > 0;
-      const lw = moved && grow && c ? trimLimit(tl, cur.ref, cur.kind, d === 0 ? Math.sign(raw) : raw, ripple, lim(c)) : undefined;
-      const why = lw?.why && lw.d === d && /^(start|end) of shot /.test(lw.why) ? lw.why : undefined;
-      const nd = { ...cur, d, moved, why };
+      const lw = moved && grow && c ? trimStop(tl, cur.ref, cur.kind, d === 0 ? Math.sign(raw) : raw, ripple, lim(c), nameOf) : undefined;
+      const stops = !!lw?.why && lw.d === d;
+      const nd = { ...cur, d, moved, why: stops ? lw!.why : undefined, say: stops ? lw!.say : undefined };
       dragRef.current = nd; setDrag(nd);
     };
     // the edge scrolling: each frame while the pointer is held near an edge or past it, moving or not
@@ -679,6 +737,8 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
         if (e && c && t) onSelect({ trackId: t.id, clipId: c.id }, c, t);
         return;
       }
+      // a trim that could not grow at all because the clip next to it is in the way: never nothing in silence
+      if (!cur.d && (cur.kind === 'head' || cur.kind === 'tail') && cur.say) { onEdit(refuse(cur.say)); return; }
       if (!cur.d) return;
       if (cur.kind === 'move') onEdit(moveClip(tl, cur.ref, cur.d, !!cur.shuffle));
       else if (cur.alone) {
@@ -907,16 +967,51 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
           {/* ruler */}
           <div className="sticky top-0 z-[8] flex h-8 border-b border-line bg-hdr">
             <div className="sticky left-0 z-[7] flex w-[150px] flex-none items-center border-r border-line bg-hdr px-2.5 font-mono text-[10.5px] text-mute">{fps} fps · {step >= fps ? `every ${step / fps} s` : `every ${step} f`}</div>
-            <div className="relative flex-1 cursor-text overflow-hidden" onPointerDown={(e) => { if (e.button === 0) { setFrame(frameAtClient(e.clientX)); begin({ kind: 'scrub' }, e); } }}
+            <div className="relative flex-1 cursor-text overflow-hidden" onPointerDown={(e) => { if (e.button === 0) { onMarkerSelect?.(undefined); setFrame(frameAtClient(e.clientX)); begin({ kind: 'scrub' }, e); } }}
               onContextMenu={(e) => { if (onMenu) { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY, frame: frameAtClient(e.clientX) }); } }}>
               {ticks.map((f) => (
                 <span key={f} className="absolute top-0 h-full border-l border-edge pl-1 pt-1 font-mono text-[10.5px] text-mute" style={{ left: f * z }}>{Math.abs(f * z + 30 - Math.max(playX, 38)) < 70 ? '' : smpte(f / fps, fps)}</span>
               ))}
-              {tl.markers.map((m, i) => (
-                <button key={i} type="button" title={`${smpte(m.at, fps)} · ${m.text}${m.by ? ` · ${m.by === 'alma' ? 'Alma' : 'you'}` : ''}`} aria-label={`Marker at ${smpte(m.at, fps)}: ${m.text}`}
-                  onPointerDown={(e) => { e.stopPropagation(); setFrame(toF(m.at, fps)); }}
-                  className="absolute bottom-0 z-[2] h-3 w-2.5 -translate-x-1/2 cursor-pointer bg-warn [clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)]" style={{ left: toF(m.at, fps) * z }} />
-              ))}
+              {(() => {
+                const seen = new Map<string, number>();
+                return flagPlaces(tl, z).map((p) => {
+                  const m = tl.markers[p.i];
+                  const id = `${m.at}|${m.text}`;
+                  const k = (seen.get(id) ?? 0) + 1;
+                  seen.set(id, k);
+                  const dragging = !!flagDrag?.moved && flagDrag.i === p.i;
+                  const x = dragging ? flagDrag.f * z : p.x;
+                  const on = markerSel === p.i;
+                  const at = smpte(dragging ? flagDrag.f / fps : m.at, fps);
+                  const name = markerName(m);
+                  return (
+                    <span key={`${id}|${k}`}>
+                      <button type="button" data-flag={p.i} aria-pressed={on}
+                        title={`${name} · ${at}${m.by === 'alma' ? ' · Alma' : ''}\nClick: go there · drag: move · double-click: name it · right-click: more`}
+                        aria-label={`Bookmark at ${at}: ${name}`}
+                        onPointerDown={(e) => flagDown(e, p.i)} onPointerMove={flagMove} onPointerUp={flagUp} onPointerCancel={() => setFlagDrag(undefined)}
+                        onDoubleClick={(e) => { e.stopPropagation(); openName(p.i); }}
+                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onMarkerSelect?.(p.i); onMarkerMenu?.({ x: e.clientX, y: e.clientY, i: p.i }); }}
+                        className={cn('group absolute z-[2] flex h-4 -translate-x-1/2 touch-none select-none outline-none items-end justify-center px-[3px] duration-200 animate-in fade-in-0', dragging ? 'cursor-grabbing' : 'cursor-pointer')}
+                        style={{ left: x, bottom: p.row ? 13 : 0 }}>
+                        <span className={cn('h-3 w-2.5 transition-colors duration-150 [clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)]', on ? 'bg-ink' : 'bg-warn group-hover:bg-[#fbbf5a]')} />
+                      </button>
+                      {p.label && !dragging && (
+                        <span className={cn('pointer-events-none absolute z-[1] truncate bg-hdr pl-0.5 pr-1 font-sans text-[10px] leading-[12px] transition-colors duration-150', on ? 'text-ink' : 'text-warn')}
+                          style={{ left: x + 6, bottom: p.row ? 13 : 0, maxWidth: p.labelW }}>{p.label}</span>
+                      )}
+                    </span>
+                  );
+                });
+              })()}
+              {flagName && tl.markers[flagName.i] && (
+                <input autoFocus data-flag-name value={flagName.text} placeholder="Name this bookmark" aria-label="Bookmark name"
+                  onChange={(e) => setFlagName({ ...flagName, text: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); closeName(true); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeName(false); } }}
+                  onBlur={() => closeName(true)} onPointerDown={(e) => e.stopPropagation()}
+                  className="absolute top-[4px] z-[9] h-6 w-[180px] rounded-[6px] border border-edge-strong bg-bg px-2 font-sans text-[12px] text-ink outline-none duration-150 animate-in fade-in-0 focus:border-sub"
+                  style={{ left: Math.max(0, toF(tl.markers[flagName.i].at, fps) * z - 8) }} />
+              )}
               <span className="pointer-events-none absolute top-[5px] z-[3] -translate-x-1/2 rounded-[4px] bg-ink px-1.5 py-px font-mono text-[10.5px] font-medium text-bg" style={{ left: Math.max(playX, 38) }}>{smpte(frame / fps, fps)}</span>
             </div>
           </div>
@@ -1066,7 +1161,7 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
                           </button>
                         )}
                         {mark && <span data-mark={mark.kind} aria-hidden="true" className={cn('pointer-events-none absolute inset-x-0 top-0 z-[2] duration-200 animate-in fade-in-0', mark.kind === 'small' ? 'border-t-2 border-dashed border-warn' : mark.kind === 'seedance' ? 'h-[2px] bg-sky-400' : 'h-px bg-white/40')} />}
-                        {mark && mark.kind !== 'upscaled' && w >= 40 && <span className={cn('pointer-events-none absolute bottom-1 right-1 z-[2] inline-flex h-4 items-center rounded-[4px] bg-black/80 px-1 font-mono text-[9.5px] duration-200 animate-in fade-in-0', mark.kind === 'small' ? 'text-warn' : 'text-sky-300')}>{mark.kind === 'small' ? '480p' : 'Seedance'}</span>}
+                        {mark && mark.kind !== 'upscaled' && w >= 40 && <span className={cn('pointer-events-none absolute bottom-1 right-1 z-[2] inline-flex h-4 items-center rounded-[4px] bg-black/80 px-1 font-mono text-[9.5px] duration-200 animate-in fade-in-0', mark.kind === 'small' ? 'text-warn' : 'text-sky-300')}>{mark.kind === 'small' ? '480p' : mark.kind === 'full' ? '1080p' : 'Seedance'}</span>}
                         {toConfirm(c) && w >= 70 && <span className="pointer-events-none absolute bottom-1 right-1.5 inline-flex h-4 items-center rounded-[8px] border border-dashed border-warn px-1.5 text-[10px] text-warn">to confirm</span>}
                         {toConfirm(c) && w < 70 && w >= 10 && <span className="pointer-events-none absolute right-1 top-1 size-1.5 rounded-full bg-warn" />}
                         {sup && w >= 90 && <span className="pointer-events-none absolute bottom-1 left-1.5 truncate text-[10px] text-mute">{sup}</span>}

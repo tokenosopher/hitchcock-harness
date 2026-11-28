@@ -7,6 +7,7 @@
 // that shows its step under the board and puts its chip in "Alma sees". A box with a live sub-agent shimmers and
 // names the agent in its line. On the phone the flow folds behind a one-line summary and the rows stack; a press on a
 // step folds it again (sliding up) as the step opens, so it never has to be closed by hand.
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
@@ -54,6 +55,8 @@ export interface BoardLines {
   nextG?: Glyph;
   /** Release's line and mark: "0 of 6 posted", dashed until it is reachable. */
   release?: { line: string; g: Glyph };
+  /** The takes that came back and wait to be looked at: "5 new takes", a link to the New takes page. */
+  takes?: { words: string; href: string };
 }
 
 /** `page`: the step opens a page of its own (a chevron, as the Shots box is drawn); its line may then take two lines. */
@@ -86,6 +89,18 @@ function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(
         </span>
       )}
     </button>
+  );
+}
+
+/** The takes that came back: the row's free place after Release, drawn as a page step (its chevron), a link
+ *  to the New takes page. Only while some wait to be looked at. */
+function TakesBox({ words, href }: { words: string; href: string }) {
+  return (
+    <Link href={href} data-new-takes aria-label={`New takes: ${words}`}
+      className="box-border flex min-h-[42px] min-w-0 flex-col justify-center gap-px rounded-lg border border-edge bg-panel px-[9px] pb-1.5 pt-[5px] text-left no-underline transition-[background-color,border-color] duration-200 animate-in fade-in-0 hover:bg-raised motion-reduce:animate-none max-[760px]:hidden">
+      <span className="truncate text-[12.5px] font-medium text-ink">New takes<IconChevronRight size={11} aria-hidden="true" className="float-right mt-[3px] text-sub" /></span>
+      <span className="flex min-w-0 items-center gap-[5px] text-[11px] text-warn"><StepGlyph g="now" /><span className="truncate">{words}</span></span>
+    </Link>
   );
 }
 
@@ -130,6 +145,12 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
         )}
         <svg className={cn('ml-auto flex-none transition-transform duration-200', expanded && 'rotate-180')} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
+      {/* the takes that came back: on the phone, under the folded flow, so they are not folded away with it */}
+      {lines.takes && (
+        <Link href={lines.takes.href} data-new-takes-phone className="mt-2 box-border flex h-11 w-full items-center gap-2 rounded-[10px] border border-edge bg-panel px-3 text-[13px] text-ink no-underline duration-200 animate-in fade-in-0 min-[761px]:hidden">
+          <StepGlyph g="now" /><span className="font-semibold">New takes</span><span className="truncate text-sub">· {lines.takes.words}</span><IconChevronRight size={13} aria-hidden="true" className="ml-auto flex-none text-sub" />
+        </Link>
+      )}
       {/* on the phone it opens and folds by sliding its height and fading, both ways (Reveal's way); folded, it is
           hidden from the keyboard and the screen reader once the slide has run */}
       <div data-flow-fold={expanded ? 'open' : 'folded'}
@@ -163,6 +184,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
           <Box n={N.gate} on={open === 'gate'} tick={tick} onOpen={onOpen} name="Your picks" short={gateLine} g={gateG} gate />
           <Box n={editNode} on={open === 'edit' || open === 'scenes' || open === 'finish' || open === 'sound'} tick={tick} onOpen={onOpen} short={edit.line} g={edit.g} second={lines.next} secondG={lines.nextG} className="col-span-2 max-[760px]:col-span-1" />
           <Box n={N.release} on={open === 'release'} tick={tick} onOpen={onOpen} short={release.line} g={release.g} className="max-[760px]:col-span-2" />
+          {lines.takes && <TakesBox words={lines.takes.words} href={lines.takes.href} />}
         </div>
       </div>
       </div>

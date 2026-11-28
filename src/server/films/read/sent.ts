@@ -32,9 +32,12 @@ export function parseSent(raw: unknown, rel: string, mediaList?: unknown): SentR
     if (!r) continue;
     const k = (asString(r.kind) ?? '').toUpperCase();
     const role = asString(r.role) ?? '';
-    const kind: SentRef['kind'] = (KINDS as readonly string[]).includes(k) ? (k as SentRef['kind']) : /video/.test(role) ? 'VIDEO' : /audio/.test(role) ? 'AUDIO' : 'IMAGE';
-    counters[kind] = (counters[kind] ?? 0) + 1;
-    const n = asNumber(r.n) ?? counters[kind];
+    // a start or end image (kind START / END, role start_image / end_image): a picture the prompt names as "the END
+    // IMAGE", "the first frame" (lib/shotDetails.ts), outside the IMAGE REFERENCE numbers
+    const frame = k === 'START' || k === 'END' ? k : /^start_image$/.test(role) ? 'START' : /^end_image$/.test(role) ? 'END' : undefined;
+    const kind: SentRef['kind'] = frame ? 'IMAGE' : (KINDS as readonly string[]).includes(k) ? (k as SentRef['kind']) : /video/.test(role) ? 'VIDEO' : /audio/.test(role) ? 'AUDIO' : 'IMAGE';
+    if (!frame) counters[kind] = (counters[kind] ?? 0) + 1;
+    const n = asNumber(r.n) ?? (frame ? 1 : counters[kind]);
     const order = asNumber(r.order) ?? i + 1;
     const file = asString(r.file);
     const tag = asString(r.tag);
@@ -43,7 +46,8 @@ export function parseSent(raw: unknown, rel: string, mediaList?: unknown): SentR
     const m = asRecord(listed[order - 1]);
     const desc = m && (!tag || asString(m.tag) === tag) ? asString(m.desc) : undefined;
     refs.push({
-      order, kind, n, label: `${kind} REFERENCE ${n}`, name: `${NAME[kind]} ${n}`, tag, file,
+      order, kind, n, tag, file,
+      ...(frame ? { frame, label: `${frame} IMAGE`, name: frame === 'START' ? 'Start image' : 'End image' } : { label: `${kind} REFERENCE ${n}`, name: `${NAME[kind]} ${n}` }),
       what: file ? whatOf(file, kind, page) : 'not in the upload registry',
       ...(desc ? { desc } : {}),
       ...(r.view === true ? { view: true } : {}), ...(page !== undefined ? { page } : {}),

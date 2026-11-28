@@ -17,7 +17,7 @@ export interface ReleaseView {
   /** The masters on offer, newest first: while no final is named, or with ?masters=1. */
   masters?: MasterOption[];
   /** The final's own file: its size and length. */
-  finalFile?: { bytes?: number; seconds?: number; width?: number; height?: number; fromBytes?: number };   // fromBytes: a smaller file's source size (ASKS 56)
+  finalFile?: { bytes?: number; seconds?: number; width?: number; height?: number; fromBytes?: number; fps?: number };   // fromBytes: a smaller file's source size; fps: read from the file
   /** The final's companions and where each is. */
   companions?: CompanionStatus[];
   /** The cut as it is now ("v238"), and when the final is of another version, its cut against this one (ASKS 49,

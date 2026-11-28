@@ -37,7 +37,7 @@ const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
 const FROM = 'assets/films/the-lighthouse/';
 
-type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-drafting' | 'sample-left-pickups' | 'sample-left-pickupqc' | 'sample-left-landed';
+type Id = 'sample-left-start' | 'sample-left-1080' | 'sample-left-remaster' | 'sample-left-same' | 'sample-left-posting' | 'sample-left-done' | 'sample-left-drafting' | 'sample-left-pickups' | 'sample-left-pickupqc' | 'sample-left-landed' | 'sample-takes-inbox';
 const ref = (slug: Id, title: string, stage: FilmRef['stage']): FilmRef => ({ slug, title, folder: `${repo}/assets/films/${slug}`, repo, flow: 'video-driven', status: 'in-progress', stage, aspect: '9:16' });
 export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-start': ref('sample-left-start', "Sample · what's next: nothing done", 9),
@@ -50,6 +50,8 @@ export const LEFT_SAMPLES: Record<Id, FilmRef> = {
   'sample-left-pickups': ref('sample-left-pickups', 'Sample · three pick-ups being made', 8),
   'sample-left-pickupqc': ref('sample-left-pickupqc', 'Sample · pick-ups with their own checks', 8),
   'sample-left-landed': ref('sample-left-landed', 'Sample · three pick-ups landed, not looked at', 8),
+  // the New takes page: five takes came back one morning (fixtures/takesinbox.ts)
+  'sample-takes-inbox': ref('sample-takes-inbox', 'Sample · five takes came back', 9),
 };
 /** The samples where nothing is approved, ticked or full size yet. */
 const START = (slug: string) => slug === 'sample-left-start' || slug === 'sample-left-pickups' || slug === 'sample-left-pickupqc' || slug === 'sample-left-landed';
@@ -285,5 +287,5 @@ export function leftReleaseSeed(slug: string): ReleaseFile | undefined {
   if (slug === 'sample-left-remaster' || slug === 'sample-left-same') return { ...f, final, platforms: f.platforms.map((p) => ({ ...p, send: {} })) };
   if (slug === 'sample-left-posting') return { ...f, final };
   if (slug === 'sample-left-drafting') return { ...f, final, platforms: [] };
-  return { ...f, final, platforms: f.platforms.map((p, k) => ({ ...p, send: { posted: p.send.posted ?? { at: at(`18:${String(10 + k * 5).padStart(2, '0')}`) } } })) };
+  return { ...f, final, platforms: f.platforms.map((p, k) => ({ ...p, send: { posted: p.send.posted ?? { at: at(`18:${String(10 + k * 5).padStart(2, '0')}`) }, ...(p.send.postedIn ? { postedIn: p.send.postedIn } : {}) } })) };
 }

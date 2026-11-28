@@ -23,6 +23,10 @@ import { StepBar } from '@/components/flow/StepBar';
 import { StepMenu } from '@/components/flow/StepMenu';
 import { placeName, placesLine, viewsLine } from '@/components/flow/Places';
 import { useShots } from '@/components/edit/ShotViews';
+import { useSeenTakes } from '@/components/edit/seenTakes';
+import { countWords, cutSrcs } from '@/components/takes/inbox';
+import { useFilmCut } from '@/components/shots/useShotPlaces';
+import { useDecided } from '@/components/takes/useDecided';
 import type { TakeShots } from '@/components/edit/shots';
 import { WhatsNextReader, type WhatsNext } from '@/components/flow/useWhatsNext';
 import { waitWords } from '@/components/edit/left';
@@ -83,7 +87,17 @@ export function MainPage() {
   const onRead = useCallback((w: WhatsNext) => setWn(w), []);
   // the Shots box counts the shots made, as the Shots page does
   const shots = useShots(film);
-  const lines = useMemo(() => (state && flow ? boardLines(state, flow, wn, shots.loaded ? shots.takes : undefined) : undefined), [state, flow, wn, shots.loaded, shots.takes]);
+  // the takes that came back and wait to be looked at: one quiet box beside Edit, a link to New takes
+  const { looked } = useSeenTakes(film);
+  const { decided, ready: decidedReady } = useDecided(film);
+  const filmCut = useFilmCut(film, state?.updatedAt);
+  const inCut = useMemo(() => cutSrcs(filmCut.tl), [filmCut.tl]);
+  const newTakes = shots.loaded && decidedReady && filmCut.read ? countWords(shots.takes, looked, decided, inCut) : '';
+  const lines = useMemo(() => {
+    if (!state || !flow) return undefined;
+    const l = boardLines(state, flow, wn, shots.loaded ? shots.takes : undefined);
+    return newTakes ? { ...l, takes: { words: newTakes, href: `${base}/takes` } } : l;
+  }, [state, flow, wn, shots.loaded, shots.takes, newTakes, base]);
   if (!state || !flow || toPage) return <Loading error={error} />;
 
   const onOpen = (k: FlowKey) => {

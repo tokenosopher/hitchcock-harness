@@ -41,7 +41,35 @@ export interface FullInfo {
   /** When each of those files was written (ISO), by the same paths: a master older than a file it would use now is
    *  out of date (masters.ts masterAge). */
   times?: Record<string, string>;
+  /** Each take's own size, judged by the file's real picture (a probe), by the clip's src (a take
+   *  made at 1920x1080 can land as "…-480p.mp4"). Only the takes named "…-480p" are here. */
+  sizes?: Record<string, ResClass>;
 }
+
+// ---- a file's size class, by its real picture, not its name (a take made at full size can carry a -480p name)
+
+export type ResClass = '1080p' | '720p' | '480p';
+const RANK: Record<ResClass, number> = { '480p': 0, '720p': 1, '1080p': 2 };
+/** The size class of a picture, by its shorter side (a 1920x1080 take and a 1080x1920 one are both 1080p; 854x480 and
+ *  480x854 are 480p): 1000 and up is 1080p, 700 and up 720p, else 480p. Without a size (no probe), the file's name is
+ *  the hint ("…-1080p.mp4", "…-720p.mp4", "…-480p.mp4"); else undefined. */
+export function resClass(size?: { width: number; height: number }, name?: string): ResClass | undefined {
+  if (size && size.width > 0 && size.height > 0) {
+    const s = Math.min(size.width, size.height);
+    return s >= 1000 ? '1080p' : s >= 700 ? '720p' : '480p';
+  }
+  const m = name ? /-(480|720|1080)p(?:-[a-z0-9]+)?\.[a-z0-9]+$/i.exec(name) : null;
+  return m ? (`${m[1]}p` as ResClass) : undefined;
+}
+/** A picture already at the cut's size class (nothing to upscale): a 1080p file in a 1080p cut. */
+export const atCutSize = (file: ResClass | undefined, cut: { width: number; height: number }): boolean =>
+  !!file && RANK[file] >= RANK[resClass(cut)!];
+/** A take whose own file is already full size, judged by its real picture (not its name). */
+export const madeFull = (info: Pick<FullInfo, 'sizes'> | undefined, src: string): boolean => info?.sizes?.[src] === '1080p';
+/** A take that needs no upscale and no Seedance redo: it has its own full-size file beside it, or it is full size
+ *  itself. A take that is both (a full-size "…-480p" with a "…-1080p" copy beside it) is one take, counted once. */
+export const hasOwnFull = (info: Pick<FullInfo, 'takes' | 'sizes'> | undefined, src: string): boolean =>
+  !!info?.takes[src] || madeFull(info, src);
 
 /** Any full-size picture at all: an upscaled base of a version, a take's own 1080p file, a whole take upscaled, or a
  *  piece's full-size original. The 1080p view and its switch show when this is true (also when the only full-size

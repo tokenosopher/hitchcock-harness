@@ -5,8 +5,10 @@
 // place it stands for, as the Shots page places it (components/shots/places.ts, the one mapping, never a second): a
 // one-shot pick-up of place 1 in Shot 1's column, FIX-close-S6 (which calls its shot "10") in the column the cut has it
 // in. Its numbers are the take's for the whole page, so a click tries it in that place, the cut's clip of it is "in the
-// film" there, and a drag puts it there, as with every other take. A shot whose place is not known, and that the film
-// does not use, is shown in an "Other shots" column at the end; a click on it still tries it where its own number says.
+// film" there, and a drag puts it there, as with every other take. A shot whose place is not known is shown in an "Other
+// shots" column at the end, with why; a click on it still tries it where its own number says. A shot that stands for
+// several places (FIX-year-S1 take 2 for 5 and 6) sits under the first and is named "5–6" (`stands`). Where a place
+// comes from, and in what order the evidence counts, is places.ts's alone (docs/places.md).
 //
 // Copies: before this, pick-up takes were copied by hand under their scene's take 1 as variations (their
 // variation.json says `copyOf`, the pick-up take's file). Once that take is listed in its own right the copy is left
@@ -35,6 +37,9 @@ export interface PickupView {
   alias: Map<string, string>;
   /** Each pick-up take's numbers, for `keep` the next time (a place the cut gave stays when the cut changes). */
   placed: Map<string, Placed>;
+  /** What the shots of pick-ups stand for, by otherKey, where the column alone does not say it: `label` "5–6" for a shot
+   *  that stands for several places, and `note`, how its place was known or why it has none (places.ts says). */
+  stands: Map<string, { label?: string; note?: string; conflict?: string }>;
 }
 
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -73,6 +78,13 @@ function numbersOf(own: { n: number; i: number; tag?: string }[], place: (i: num
     const id = p !== undefined ? parseShotId(p) : undefined;
     return id ?? { n: s.n, tag: s.tag ?? String(s.n) };
   });
+  // two shots that stand for one place (a shot the take was cut in two that its list calls one): told apart by
+  // a letter in the take's numbers, side by side in the place's cell; the page names them by what they stand for
+  if (parts.every((x) => x.tag === String(x.n)) && new Set(parts.map((x) => x.n)).size !== parts.length) {
+    const seen = new Map<number, number>();
+    const many = (n: number) => parts.filter((x) => x.n === n).length > 1;
+    parts.forEach((x, k) => { if (many(x.n)) { const j = seen.get(x.n) ?? 0; seen.set(x.n, j + 1); parts[k] = { n: x.n, tag: `${x.n}${String.fromCharCode(97 + j)}` }; } });
+  }
   const lettered = parts.some((x) => x.tag !== String(x.n));
   const keys = parts.map((x) => (lettered ? x.tag : String(x.n)));
   if (new Set(keys).size !== keys.length) return undefined;
@@ -91,6 +103,7 @@ export function pickupView(input: {
   const listed = input.takes.filter((t) => !alias.has(t.src)).map((t) => (isPickup(t) ? { ...t, name: `${genOf(t.src)} · ${lower(takeLabel(t.name, genOf(t.src)))}` } : t));
   const placed = new Map<string, Placed>();
   const other = new Set<string>();
+  const stands = new Map<string, { label?: string; note?: string; conflict?: string }>();
   let takes = listed;
   if (input.gens) {
     const checks = input.checks ?? {};
@@ -102,7 +115,11 @@ export function pickupView(input: {
     });
     // every shot of every take: the place it stands for, or none (with whether the film uses it)
     const where = new Map<string, { place?: string; inFilm: boolean }>();
-    const put = (m: Made, place?: string) => { const k = otherKey(m.src, m.i); if (!where.has(k) || (place && !where.get(k)!.place)) where.set(k, { ...(place ? { place } : {}), inFilm: m.inFilm }); };
+    const put = (m: Made, place?: string) => {
+      const k = otherKey(m.src, m.i);
+      if (!where.has(k) || (place && !where.get(k)!.place)) where.set(k, { ...(place ? { place } : {}), inFilm: m.inFilm });
+      if (m.label || m.note || m.conflict) stands.set(k, { ...(m.label ? { label: m.label } : {}), ...(m.note ? { note: m.note } : {}), ...(m.conflict ? { conflict: m.conflict } : {}) });
+    };
     for (const s of list.scenes) {
       for (const v of s.versions) for (const p of v.places) for (const m of p.versions) put(m, p.id);
       for (const m of s.other) put(m);
@@ -120,8 +137,9 @@ export function pickupView(input: {
         if (w?.place) return w.place;
         // a place the cut gave before stays when the cut no longer says (the shot was swapped out)
         if (kept && !kept.other.includes(i)) return kept.tags?.[i - 1] ?? String(kept.ids[i - 1]);
-        // the film uses it where it is: it stays in its column; else it is one of the other shots
-        if (w && !w.inFilm) unknown.push(i);
+        // nothing says which place it stands for, the cut included: it is one of the other shots, in the film or not
+        // (before the one rule, one in the film stayed under its own number)
+        unknown.push(i);
         return undefined;
       };
       const nums = numbersOf(own, place);
@@ -143,7 +161,7 @@ export function pickupView(input: {
     return { ...rest, ...(o.ids ? { ids: o.ids } : {}), ...(o.tags ? { tags: o.tags } : {}) };
   });
   const by: BySrc = new Map([...takes, ...copies].filter((t) => t.state === 'ready').map((t) => [t.src, t]));
-  return { takes, by, other, alias, placed };
+  return { takes, by, other, alias, placed, stands };
 }
 
 /** The shots the film uses ("<src>#<n>", components/edit/shots.ts inFilm), each copy's also said as the take it copies. */

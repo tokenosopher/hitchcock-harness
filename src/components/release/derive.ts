@@ -3,8 +3,10 @@
 // would touch, whether a go is allowed and why not, the counts of a field and a posted part, the caption as each
 // platform will post it, the feed preview's cut, the "Next" bar, the waves and the posted count.
 // The pages, the server (GET …/release `derived`) and scripts/release-test.ts import it.
+import { pickedFrame, thumbOffset } from './frames';
 import { factIdsIn, type Aim, type Effect, type Fact, type Field, type Platform, type ReleaseFile } from './file';
 import { factsOf, numWords, partOf, type PartFacts, type PlatformKind, type Sourced } from './platforms';
+import { isPosted, linkToAdd, partlyPosted, placeNames, placePosts, placesOf, postedAt } from './places';
 
 // ---- time
 
@@ -157,6 +159,9 @@ export interface Status {
   lockWhy?: string;
   /** Since when it has been sending (Sending, or Needs you after 20 minutes). */
   since?: string;
+  /** Posted in some of its places, not all: their names, and the ones still to come. Its state is then
+   *  Ready (by hand, the rest still to post), its word "Posted in 1 of 2", its text locked. */
+  partly?: { posted: string[]; toCome: string[] };
 }
 
 /** The app as the user calls it after a post ("1 thing left in Instagram"). */
@@ -178,11 +183,24 @@ export function platformStatus(file: ReleaseFile, pid: string, now: Date): Statu
     const locked = state === 'waiting' || state === 'scheduled' || state === 'sending' || state === 'posted' || !!x.since;
     return { state, word: STATE_WORD[state], tags, locked, ...x };
   };
-  if (s.posted) {
+  if (isPosted(p)) {
     const left = p.upload.after.filter((x) => !x.done).length;
     if (left) tags.push({ text: `${left} ${left === 1 ? 'thing' : 'things'} left in ${appName(p)}`, tone: 'amber' });
-    if (!s.posted.link) tags.push({ text: 'Posted, link to add', tone: 'amber' });
-    return mk('posted', { time: hm(s.posted.at), lockWhy: `This is the text as posted. To remove the post, delete it in ${appName(p)}.` });
+    if (linkToAdd(p)) tags.push({ text: 'Posted, link to add', tone: 'amber' });
+    return mk('posted', { time: hm(postedAt(p)!), lockWhy: `This is the text as posted. To remove the post, delete it in ${appName(p)}.` });
+  }
+  // posted in some of its places: the rest still to post by hand, with the same text
+  const part = partlyPosted(p);
+  if (part) {
+    if (linkToAdd(p)) tags.push({ text: 'Posted, link to add', tone: 'amber' });
+    tags.push({ text: `${placeNames(part.toCome)} to come`, tone: 'amber' });
+    const last = placePosts(p).filter((x) => x.posted).map((x) => x.posted!.at).sort().pop()!;
+    const n = part.posted.length + part.toCome.length;
+    return {
+      state: 'ready', word: `Posted in ${part.posted.length} of ${n}`, time: hm(last), tags, locked: true,
+      lockWhy: `Posted in ${placeNames(part.posted)} with this text. ${placeNames(part.toCome)} ${part.toCome.length > 1 ? 'get' : 'gets'} the same.`,
+      partly: { posted: part.posted.map((x) => x.name), toCome: part.toCome.map((x) => x.name) },
+    };
   }
   const askedAt = s.asked ? Date.parse(s.asked.at) : -Infinity;
   const after = (at: string | undefined) => !!at && Date.parse(at) >= askedAt;
@@ -227,7 +245,9 @@ export function platformStatus(file: ReleaseFile, pid: string, now: Date): Statu
     return mk('to-pick');
   }
   if (p.route === 'hand') {
-    const done = p.upload.hand.filter((x) => x.done).length, m = p.upload.hand.length;
+    // with places the page adds each other place's two steps (sendflow.ts handSteps) until they are written
+    const extra = placesOf(p.kind).slice(1).flatMap((x) => [`again-${x.id}`, `link-${x.id}`]).filter((id) => !p.upload.hand.some((h) => h.id === id)).length;
+    const done = p.upload.hand.filter((x) => x.done).length, m = p.upload.hand.length + extra;
     if (done > 0 && m > 0) tags.unshift({ text: `By hand, step ${Math.min(done + 1, m)} of ${m}`, tone: 'quiet' });
   }
   return mk('ready');
@@ -243,6 +263,7 @@ export function heldWords(p: Platform, st: Status): string {
   if (st.state === 'scheduled') return `${appName(p)} is scheduled for ${st.time} with this text`;
   if (st.state === 'waiting') return `${appName(p)} is waiting for your go with this text`;
   if (st.state === 'posted') return `${appName(p)} was posted with this text`;
+  if (st.partly) return `${appName(p)} was posted in ${nameList(st.partly.posted)} with this text`;
   return `${appName(p)} is going out with this text`;
 }
 
@@ -282,6 +303,7 @@ export function goCheck(file: ReleaseFile, pid: string, now: Date, out?: { makin
   const st = platformStatus(file, pid, now);
   if (st.state === 'posted') return { ok: false, why: `${appName(p)} is already posted.` };
   if (st.state === 'waiting') return { ok: false, why: 'Already asked. Alma shows you the exact text and file first.' };
+  if (st.partly) return { ok: false, why: `${appName(p)} is posted in ${nameList(st.partly.posted)}. Post it in ${nameList(st.partly.toCome)} by hand: follow its steps.` };
   if (st.locked) return { ok: false, why: `${appName(p)} is ${st.word.toLowerCase()}.` };
   if (p.route === 'hand') return { ok: false, why: `${appName(p)} goes by hand: follow its steps.` };
   if (out?.making) return { ok: false, why: `The smaller file is being made${out.making.state === 'running' ? ` (${Math.round(out.making.percent ?? 0)}%)` : ''}. Post now and Schedule wait for it.` };
@@ -318,7 +340,7 @@ export function waves(file: ReleaseFile, now: Date): Wave[] {
       out.push(w);
     }
     w.ids.push(p.id);
-    if (p.send.posted) w.posted++;
+    if (isPosted(p)) w.posted++;
     if (p.id === nx) w.next = true;
   }
   return out;
@@ -326,7 +348,7 @@ export function waves(file: ReleaseFile, now: Date): Wave[] {
 
 /** The posted count in the header: "2 of 6 posted". */
 export function postedCount(file: ReleaseFile): { n: number; of: number; words: string } {
-  const n = file.platforms.filter((p) => p.send.posted).length;
+  const n = file.platforms.filter((p) => isPosted(p)).length;
   return { n, of: file.platforms.length, words: `${n} of ${file.platforms.length} posted` };
 }
 
@@ -337,6 +359,7 @@ export function nextUp(file: ReleaseFile, now: Date): { platform: Platform; stat
     const st = platformStatus(file, p.id, now);
     if (st.state === 'posted' || st.state === 'sending') continue;
     if (st.state === 'scheduled') return { platform: p, status: st, words: `Next: ${p.name}, scheduled for ${st.time}`, at: new Date(p.send.scheduled?.for ?? p.send.asked!.when) };
+    if (st.partly) return { platform: p, status: st, words: `Next: ${p.name} in ${nameList(st.partly.toCome)}, the same text.`, at: waveAt(file, p) };
     const at = waveAt(file, p);
     const when = at.getTime() >= now.getTime() - 60 * 60_000 ? `planned for about ${p.wave.about}${dayWords(at, now) === 'today' ? '' : ` ${dayWords(at, now)}`}` : `planned for about ${p.wave.about}, now past`;
     return { platform: p, status: st, words: `Next: ${p.name}, ${when}.`, at };
@@ -354,6 +377,9 @@ export function deriveAll(file: ReleaseFile, now: Date) {
     next: (() => { const n = nextUp(file, now); return n ? { platform: n.platform.id, words: n.words } : undefined; })(),
     go: Object.fromEntries(file.platforms.map((p) => [p.id, goCheck(file, p.id, now)])),
     captions: Object.fromEntries(file.platforms.map((p) => [p.id, postedParts(file, p.id).map((x) => ({ part: x.part.id, text: x.text }))])),
+    // the cover frame in use on each platform that has one, Alma's or the user's own, and its offset in
+    // whole milliseconds (thumbnailOffset)
+    thumbnails: Object.fromEntries(file.platforms.flatMap((p) => { const o = pickedFrame(p); return o ? [[p.id, { option: o.id, at: o.at, thumbnailOffset: thumbOffset(p)!, ...(o.by ? { by: o.by } : {}) }]] : []; })),
   };
 }
 export type Derived = ReturnType<typeof deriveAll>;
@@ -377,6 +403,7 @@ export function lockedVerb(st: Status): string {
   if (st.state === 'scheduled') return 'is scheduled';
   if (st.state === 'waiting') return 'is waiting for your go';
   if (st.state === 'posted') return 'was posted';
+  if (st.partly) return `was posted in ${nameList(st.partly.posted)}`;
   return 'is going out';
 }
 

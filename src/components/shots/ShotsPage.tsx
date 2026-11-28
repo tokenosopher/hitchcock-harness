@@ -10,7 +10,6 @@ import { StepIntro } from '@/components/intro/StepIntro';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { isWide } from '@/lib/frame';
-import type { Timeline } from '@/server/types';
 import type { ShotList } from '@/server/films/read/shotlist';
 import { usePage } from '@/components/data/ui';
 import { Header } from '@/components/shell/Header';
@@ -22,12 +21,11 @@ import { zoomVideo } from '@/components/media/Lightbox';
 import { useShots } from '@/components/edit/ShotViews';
 import { parseShotId } from '@/components/edit/shotCols';
 import { useFilmPage } from '@/components/pages/common';
-import { useJson } from '@/components/pages/postCommon';
 import { shotDetailsHref } from '@/components/lib/shotHref';
 import { refData } from '@/components/lib/refPick';
 import { cn } from '@/lib/utils';
-import { copiesOf, unCopied } from '@/components/edit/pickupRows';
-import { shotPlaces, shownVersion, takeFolder, versionCounts, type Made, type Place, type SceneShots, type SceneVersion } from './places';
+import { useShotPlaces } from './useShotPlaces';
+import { shownVersion, takeFolder, versionCounts, type Made, type Place, type SceneShots, type SceneVersion } from './places';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -44,22 +42,6 @@ function usePhone(): boolean {
     () => window.matchMedia('(max-width: 760px)').matches,
     () => false,
   );
-}
-interface CutGet { current?: Timeline | null; working?: { rev: number; version?: string; edited?: boolean; equals?: string } | null }
-interface WorkingGet { working?: { rev: number; version?: string; fps: Timeline['fps']; width: number; height: number; tracks: Timeline['tracks']; markers?: Timeline['markers']; note?: string; at: string } }
-
-/** The cut as the Edit page has it now: the working cut when it was edited past the newest version, else that version
- *  (the board's What's next reads it the same way, flow/useWhatsNext.ts). Undefined while it is read or when there is none. */
-function useFilmCut(film: string, changed?: string): { tl?: Timeline; read: boolean } {
-  const { data: cut, error } = useJson<CutGet>(`/api/films/${encodeURIComponent(film)}/cut`, changed);
-  const w = cut?.working ?? undefined;
-  const own = !!w && ((!!w.edited && !w.equals) || (!!w.equals && w.equals !== cut?.current?.version));
-  const { data: wj } = useJson<WorkingGet>(own ? `/api/films/${encodeURIComponent(film)}/cut/working` : undefined, changed);
-  return useMemo(() => {
-    if (!own) return { tl: cut?.current ?? undefined, read: !!cut || !!error };
-    const x = wj?.working;
-    return { tl: x ? { version: `w${x.rev}`, fps: x.fps, width: x.width, height: x.height, at: x.at, tracks: x.tracks, markers: x.markers ?? [] } : undefined, read: !!x };
-  }, [own, cut, error, wj]);
 }
 const reduced = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -458,22 +440,11 @@ export function ShotsPage() {
 function ShotsPageIn() {
   const { film, state, error, base } = useFilmPage();
   const shots = useShots(film);
-  const extra = useJson<ShotList>(state ? `/api/films/${encodeURIComponent(film)}/shotlist` : undefined);
-  const fc = useFilmCut(film, state?.updatedAt);
   const phone = usePhone();
   const router = useRouter();
   const params = useSearchParams();
-  const list = useMemo(() => {
-    if (!state || !extra.data || !fc.read) return undefined;
-    const checks = extra.data.checks ?? {};
-    return shotPlaces({
-      scenes: state.scenes.map((s) => ({ id: s.id, title: s.title, ...(s.shots ? { shots: s.shots } : {}) })),
-      gens: extra.data.gens,
-      takes: shots.takes.map((t) => ({ ...t, ...(checks[takeFolder(t.src)] ? { planned: checks[takeFolder(t.src)] } : {}) })),
-      // a clip of a copy of a pick-up take is a clip of that take
-      cut: unCopied(fc.tl, copiesOf(shots.all)),
-    });
-  }, [state, extra.data, shots.takes, shots.all, fc]);
+  // where every shot stands: the one rule (places.ts), the same call Shot details makes
+  const { list, shotList: extra } = useShotPlaces(film, state, shots.takes, shots.all);
   const titles = useMemo(() => new Map((state?.scenes ?? []).map((s) => [s.id, s.title])), [state]);
   const counts = !list ? '' : list.made ? `${plural(list.scenes.length, 'scene')} planned · ${list.made} made · ${list.inFilm} in the film` : `${plural(list.scenes.length, 'scene')} planned · nothing made yet`;
   usePage(list ? `Shots · ${counts}` : undefined, 'Ask about a shot, or tell Alma what to remake…', ['Which shots are not in the film yet?'], ['What was redone, and why?']);

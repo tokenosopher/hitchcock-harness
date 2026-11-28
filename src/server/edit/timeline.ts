@@ -107,6 +107,9 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
   if (problems.length) return { problems };
   const fps = t.fps!;
   const half = 0.5 / fps;
+  // a clip at a speed such as 1.2 can end half a frame past the next clip's start (62.5 frames): up to one frame of overlap is
+  // rounding, not an overlap (two shots at 1.2 speed sitting on the half-frame line once refused every edit of a film)
+  const overlapOk = 1 / fps;
   const ids = new Set<string>();
   const clipIds = new Set<string>();
   const tracks: TimelineTrack[] = [];
@@ -137,7 +140,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
         if (c.in < 0) problems.push(`${cw}: in must be 0 or more`);
         if (!(c.in < c.out)) problems.push(`${cw}: in (${c.in}) must be before out (${c.out})`);
         if (c.at < 0) problems.push(`${cw}: at must be 0 or more`);
-        if (c.at < prevEnd - half) problems.push(`${cw}: overlaps ${prevId} on the same track (put one of them on another track)`);
+        if (c.at < prevEnd - overlapOk) problems.push(`${cw}: overlaps ${prevId} on the same track (put one of them on another track)`);
         prevEnd = Math.max(prevEnd, clipEnd(c));
         prevId = c.id;
         continue;
@@ -161,7 +164,7 @@ export async function validateTimeline(raw: unknown, film: FilmTarget, opts: { f
       problems.push(...newFieldProblems(c, tr.kind, cw));
       if (!line && tr.kind === 'captions' && !/\.srt$/i.test(c.src!)) problems.push(`${cw}: a captions clip's src is an .srt file`);
       if (!line && tr.kind !== 'captions' && /\.srt$/i.test(c.src!)) problems.push(`${cw}: an .srt goes on a captions track`);
-      if (c.at < prevEnd - half) problems.push(`${cw}: overlaps ${prevId} on the same track (put one of them on another track)`);
+      if (c.at < prevEnd - overlapOk) problems.push(`${cw}: overlaps ${prevId} on the same track (put one of them on another track)`);
       prevEnd = Math.max(prevEnd, clipEnd(c));
       prevId = c.id;
     }

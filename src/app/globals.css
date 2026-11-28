@@ -334,3 +334,21 @@ html[data-ref-picking] [data-ref-hover] {
   outline-offset: -1px;
   transition: outline-color 150ms ease-out;
 }
+
+/* The cover frame's scrubber: a thin line, the part before the thumb lighter, a round
+   thumb that grows a little while held; the input's whole height is the target, for touch. */
+.frame-scrub { touch-action: pan-y; }
+.frame-scrub::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 999px;
+  background: linear-gradient(to right, var(--color-ink-3) 0 var(--pct, 0%), var(--color-edge-strong) var(--pct, 0%) 100%);
+}
+.frame-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 999px;
+  background: var(--color-ink); border: 0; box-shadow: 0 0 0 4px rgba(0, 0, 0, .55); transition: transform 150ms ease-out;
+}
+.frame-scrub:active::-webkit-slider-thumb { transform: scale(1.15); }
+.frame-scrub:focus-visible { outline: none; }
+.frame-scrub:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(0, 0, 0, .55), 0 0 0 6px var(--color-sub); }
+.frame-scrub::-moz-range-track { height: 4px; border-radius: 999px; background: var(--color-edge-strong); }
+.frame-scrub::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--color-ink-3); }
+.frame-scrub::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 999px; background: var(--color-ink); }

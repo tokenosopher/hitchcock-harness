@@ -173,7 +173,8 @@ export function boardRelease(): ReleaseFile {
           { id: 'comment', label: 'First comment', part: 'comment', text: 'Made alone in {days} days with Seedance 2.5 on Higgsfield. Happy to answer how.', own: true, candidates: [] },
         ],
         upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video', at('17:58')), step('title', 'Copy the title', at('17:59')), step('open', 'Open r/aivideo and post', at('18:01')), step('comment', 'Copy the first comment', at('18:03')), step('link', 'Paste the post\'s link', at('18:04'))] },
-        send: { posted: { at: at('18:04'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2/a_letter_in_a_bottle_reaches_a_lighthouse/' } },
+        // posted in both its places: r/aivideo, and the same in r/aivideos just before
+        send: { posted: { at: at('18:04'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2/a_letter_in_a_bottle_reaches_a_lighthouse/' }, postedIn: { aivideos: { at: at('18:03'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7/a_letter_in_a_bottle_reaches_a_lighthouse/' } } },
       },
       {
         id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'hand', wave: { day: 'today', about: '18:00' },
@@ -403,7 +404,7 @@ function moment(slug: string): ReleaseFile | undefined {
       tt.upload.hand = [step('save', 'Save the video', at('18:58')), step('copy', 'Copy the caption', at('18:59')), step('open', 'Open TikTok', at('19:00')),
         step('checks', 'I turned on AI-generated content and turned off auto-captions'), step('link', 'Paste the post\'s link')];
       const rd = f.platforms.find((p) => p.id === 'reddit')!;
-      rd.send = { posted: { at: at('18:04') } };
+      rd.send = { posted: { at: at('18:04') }, postedIn: { aivideos: { at: at('18:03'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7/a_letter_in_a_bottle_reaches_a_lighthouse/' } } };
       rd.upload.hand = rd.upload.hand.map((s) => (s.id === 'link' ? { id: s.id, text: s.text } : s));
       break;
     }
@@ -530,7 +531,7 @@ export function longRelease(): ReleaseFile {
   // a long account name and a long link: Reddit posted
   p('reddit').account = 'your personal account, posting to r/aivideo and r/filmmakers and r/shortfilms';
   p('reddit').fields.forEach((k) => Object.assign(k, { text: k.candidates[0].text, pick: 'a' }));
-  p('reddit').send = { posted: { at: at('16:10'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2zq9/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' } };
+  p('reddit').send = { posted: { at: at('16:10'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2zq9/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' }, postedIn: { aivideos: { at: at('16:08'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7zq2/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' } } };
   // six notes on X's post
   const x = p('x').fields[0];
   Object.assign(x, { text: x.candidates[0].text, pick: 'a' });

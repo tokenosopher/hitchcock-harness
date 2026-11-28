@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
 import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
+import { readVariedShots } from '@/components/edit/variedShots';
 import { FFMPEG, probe } from './probe';
 
 export interface TakeShots {
@@ -36,8 +37,9 @@ export interface TakeShots {
 
 /** `<take folder>/variation.json`, written by Alma when she starts a variation of a take (recipes/edit.md). `from`:
  *  the source take's file as the chip gave it; `note`: the user's words; `failed`: why it could not be made; `copyOf`:
- *  the file of the take this one is a copy of (components/edit/pickupRows.ts). */
-export interface TakeVariation { from: string; note: string; startedAt: string; failed?: string; copyOf?: string }
+ *  the file of the take this one is a copy of (components/edit/pickupRows.ts); `shots`: the only shots it changed ("3",
+ *  "4a", components/edit/variedShots.ts), absent when the whole take is varied. */
+export interface TakeVariation { from: string; note: string; startedAt: string; failed?: string; copyOf?: string; shots?: string[] }
 
 /** A `variation.json` read leniently: undefined unless it names a source. */
 export function readVariation(v: unknown): TakeVariation | undefined {
@@ -50,7 +52,9 @@ export function readVariation(v: unknown): TakeVariation | undefined {
   // a copy of another take put here by hand (pick-up takes copied under their scene's take 1, so they
   // could be switched in before pick-ups were listed); the Takes view leaves it out when that take is listed itself
   const copyOf = str('copyOf');
-  return { from, note: str('note'), startedAt: str('startedAt'), ...(failed ? { failed } : {}), ...(copyOf ? { copyOf } : {}) };
+  // the only shots it changed, as the Takes view names them; absent or none that reads: the whole take
+  const shots = readVariedShots(x.shots);
+  return { from, note: str('note'), startedAt: str('startedAt'), ...(failed ? { failed } : {}), ...(copyOf ? { copyOf } : {}), ...(shots ? { shots } : {}) };
 }
 
 interface Kept { size: number; mtime: number; seconds?: number; cuts: number[] }

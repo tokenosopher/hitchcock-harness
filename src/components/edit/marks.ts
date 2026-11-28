@@ -2,6 +2,7 @@
 // <film>/harness/upscale-marks.json (13 Nov 2026, the user: "I want to be able to just mark them for Seedance, but then
 // talk to her"). Pure: the file's shape, its check, the rule that drops a mark, and the words Alma is given.
 // A mark is the user's note, not a go: nothing reads it to spend anything.
+import { hasOwnFull, type FullInfo } from './fullsize';
 
 export const MARKS_NOTE = 'Takes the user marked on the Edit page to redo at 1080p in Seedance. A mark is not a go: nothing is to be spent on it until the user says so.';
 
@@ -36,9 +37,10 @@ export function cleanMarks(v: unknown, film: string): SeedanceMark[] | undefined
   return out;
 }
 
-/** A take that has its own full-size file now is done: its mark goes. `takes`: each take's own file, by its 480p. */
-export const liveMarks = (list: SeedanceMark[], info: { takes: Record<string, string> } | undefined): SeedanceMark[] =>
-  info ? list.filter((m) => !info.takes[m.src]) : list;
+/** A take that has its own full-size file now is done: its mark goes; so is one that is full size itself (its real
+ *  picture). `takes`: each take's own file, by its 480p. */
+export const liveMarks = (list: SeedanceMark[], info: { takes: Record<string, string>; sizes?: FullInfo['sizes'] } | undefined): SeedanceMark[] =>
+  info ? list.filter((m) => !hasOwnFull(info, m.src)) : list;
 
 /** The bits of a take in the cut that a mark keeps (UpscaleCheck's CheckTake has them). */
 export interface CutTake { src: string; name: string; shots: { from: number; len: number; at: string; scene?: string; n?: number }[] }

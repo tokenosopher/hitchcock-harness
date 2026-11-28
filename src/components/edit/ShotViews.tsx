@@ -13,6 +13,7 @@ import { useNoSwipeBack } from './swipe';
 import type { TakeDrag } from './dragTake';
 import { isPickup, otherKey, pickupView, withAliases } from './pickupRows';
 import { genOf } from '@/components/shots/places';
+import { variedOf } from './variedShots';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const secs = (n: number) => `${(Math.round(n * 10) / 10).toFixed(1)} s`;
@@ -205,10 +206,12 @@ function NewTag({ on }: { on: boolean }) {
  *  ringed; a click watches another and selects it (ASKS 52). A take with no clip is one slim row; a variation sits
  *  under the take it came from (ASKS 51). The line across the takes is the film's playhead: drag it, or click the row
  *  of shot names (ASKS 53). */
-export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, isNew, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge, foreign, markOf, views, viewSrc, onDragTake, other, alias }: {
+export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, isNew, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge, foreign, markOf, views, viewSrc, onDragTake, other, alias, stands }: {
   scene: SceneRef | { id: string; title?: string; takes?: SceneRef['takes'] }; takes: TakeShots[]; by: BySrc; names: Map<string, string>; tl: Timeline;
   /** Where the video is: the shot, and how far through it (0 to 1). The line crosses a long shot slowly, a short one fast. */
-  head?: { n: number; p: number };
+  /** The film's playhead over the takes: the column and how far across it; `other`, over "Other shots" (a pick-up's
+   *  shot the film plays whose place is not known). */
+  head?: { n: number; p: number; other?: boolean };
   watching?: Trying; selShot?: number; base: string;
   /** A shot of a take clicked: its take, the scene's shot number (its column) and, for a shot with a letter, its id
    *  ("7b"), which tells it from the take's other shot of that number. The same for the calls below. */
@@ -243,6 +246,9 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
   other?: Set<string>;
   /** A copy's file → the take it copies: the copy in the film marks that take's shot as in the film. */
   alias?: Map<string, string>;
+  /** What a pick-up's shot stands for where its column alone does not say it ("5–6"), and how that was known
+   *  (pickupRows.ts `stands`, places.ts). */
+  stands?: Map<string, { label?: string; note?: string; conflict?: string }>;
 }) {
   const used = useMemo(() => withAliases(inFilm(tl, by), alias), [tl, by, alias]);
   const isOther = (t: TakeShots, s: Shot) => !!other?.has(otherKey(t.src, s.i));
@@ -401,12 +407,12 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
         </span>
       </div>
       <div ref={box} className="relative flex flex-col gap-1">
-        {head && head.n >= 1 && head.n <= cols && (
+        {head && ((head.other && others > 0) || (!head.other && head.n >= 1 && head.n <= cols)) && (
           // the film's playhead across the takes: a handle at its top; dragged, it moves the playhead (ASKS 53)
           <span data-takes-head="" role={onSeek ? 'slider' : undefined} aria-label={onSeek ? 'The playhead: drag to move through the film' : undefined} aria-valuenow={onSeek ? Math.round(head.p * 100) : undefined}
             onPointerDown={lineDown} onPointerMove={seekMove} onPointerUp={seekUp} onPointerCancel={() => { drag.current = null; }} onContextMenu={lineMenu}
             className={cn('absolute bottom-0 top-[19px] z-[3] w-[11px] -translate-x-[4.75px] touch-none', onSeek ? 'cursor-ew-resize' : 'pointer-events-none')}
-            style={{ left: left(head.n, head.p) }}>
+            style={{ left: head.other && others > 0 ? left(allCols, head.p) : left(head.n, head.p) }}>
             <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-[4.75px] top-[7px] w-[1.5px] rounded-full bg-ink shadow-[0_0_0_1px_rgba(0,0,0,0.6)]" />
             {onSeek && <span aria-hidden="true" data-takes-handle="" className="pointer-events-none absolute left-0 top-0 h-[9px] w-[11px] rounded-[2.5px_2.5px_5px_5px] bg-ink shadow-[0_0_0_1px_rgba(0,0,0,0.6)]" />}
           </span>
@@ -432,7 +438,11 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
           const moved = placed.moved.has(t.src);
           const v = t.variation;
           const srcName = source ? cap(names.get(source.src) ?? source.name) : undefined;
-          const name = v && vn ? `${srcName ?? cap(names.get(t.src) ?? t.name)}, variation ${vn}` : cap(names.get(t.src) ?? t.name);
+          const baseName = v && vn ? `${srcName ?? cap(names.get(t.src) ?? t.name)}, variation ${vn}` : cap(names.get(t.src) ?? t.name);
+          // a variation of only some of its take's shots: those are marked, the rest are the same as the source
+          const vs = v ? variedOf(shots, v.shots) : undefined;
+          const name = vs ? `${baseName} · ${vs.words}` : baseName;
+          const sameAs = srcName ?? 'the take it came from';
           const fresh = !!isNew?.(t);
           // the take's name is the handle that drags the whole take onto the timeline
           const dragsWhole = !!onDragTake && t.state !== 'making' && t.state !== 'failed' && (shots.length > 0 || !!t.seconds);
@@ -443,7 +453,8 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
               className={cn('relative flex min-w-0 flex-col justify-center pr-1.5 text-[12.5px] font-medium leading-tight text-ink', depth > 0 && 'pl-3', dragsWhole && 'cursor-grab active:cursor-grabbing')}
               title={`${t.src.replace(/^assets\/films\/[^/]+\//, '')}${dragsWhole ? '\nDrag onto the timeline to place the whole take' : ''}`}>
               {depth > 0 && <i aria-hidden="true" className="absolute left-0.5 top-[-6px] bottom-1/2 w-1.5 rounded-bl-[4px] border-b border-l border-[#45454d]" />}
-              <span className="line-clamp-2">{name}<NewTag on={fresh} /></span>
+              <span className="line-clamp-2">{baseName}<NewTag on={fresh} /></span>
+              {vs && <span data-varied-shots={vs.words} className="line-in truncate text-[11px] font-normal text-ink">{vs.words}</span>}
               {source && t.state !== 'making' && (
                 <button type="button" data-from={source.src} onClick={() => showSource(source.src)} title={`Show ${srcName}, the take this was made from`}
                   className="max-w-full cursor-pointer truncate text-left text-[11px] font-normal text-ink-3 underline decoration-[#55555e] underline-offset-2 transition-colors duration-150 hover:text-ink">from {srcName}</button>
@@ -488,7 +499,8 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                 // side by side in the column's cell, each named
                 const shotCell = (s: Shot, share: boolean) => {
                 const tag = subTag(s);
-                const label = otherCol ? `#${s.i}` : cellLabel(s, share);
+                const st = stands?.get(otherKey(t.src, s.i));
+                const label = otherCol ? `#${s.i}` : st?.label ?? cellLabel(s, share);
                 const said = otherCol ? (subTag(s) ?? String(s.n)) : label ?? String(s.n);
                 const key = shotKey(t.src, s);
                 const isIn = used.has(key);
@@ -499,31 +511,37 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                 const canOut = isIn && !!onTakeOut && !selecting;
                 const mark = markOf?.(t, s.n, tag);
                 const drags = !!onDragTake && t.state === 'ready';
+                // a variation of only some shots: this shot changed, or is the same as the source take's
+                const changed = !!vs?.changed?.has(s.i);
+                const same = !!vs?.changed && !changed;
                 return (
-                  <div key={share ? key : ck} data-col={share || otherCol ? undefined : s.n} data-other={otherCol ? '' : undefined} className={cn('group/cell relative rounded-[9px] p-0.5 transition-[background-color,opacity] duration-200', !share && hot === i + 1 && 'bg-[#141417]', !share && moved && 'line-in', isOut && !isWatch && 'opacity-45 hover:opacity-90 has-[:focus-visible]:opacity-90')}>
+                  <div key={share ? key : ck} data-col={share || otherCol ? undefined : s.n} data-other={otherCol ? '' : undefined} className={cn('group/cell relative rounded-[9px] p-0.5 transition-[background-color,opacity] duration-200', !share && hot === i + 1 && 'bg-[#141417]', !share && moved && 'line-in', isOut && !isWatch && 'opacity-45 hover:opacity-90 has-[:focus-visible]:opacity-90', same && !isOut && !isWatch && !isIn && 'opacity-50 hover:opacity-90 has-[:focus-visible]:opacity-90')}
+                    data-varied={changed ? 'changed' : same ? 'same' : undefined}>
                     <button type="button" aria-pressed={isWatch} onClick={() => { if (bring) onBring!(t, s.n, tag); else onShot(t, s.n, tag); }} data-shot={key} data-in={isIn ? '' : undefined} data-pick={isPick ? '' : undefined}
-                      draggable={drags || undefined} onDragStart={drags ? (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', `${name} · shot ${said}`); onDragTake!({ t, n: s.n, ...(tag ? { tag } : {}) }); } : undefined}
+                      draggable={drags || undefined} onDragStart={drags ? (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', `${baseName} · shot ${said}`); onDragTake!({ t, n: s.n, ...(tag ? { tag } : {}) }); } : undefined}
                       onDragEnd={drags ? () => onDragTake!(undefined) : undefined}
                       onContextMenu={(e) => menuAt(e, t, s.n, tag)} onKeyDown={(e) => menuKey(e, t, s.n, tag)}
                       data-safe={mark?.safe ? mark.to : undefined} data-warn={mark && !mark.safe ? mark.warnings.length : undefined}
-                      title={`${name} · shot ${otherCol ? `${s.i} of the take (its place in ${scene.id} is not known)` : said} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}${drags ? ' · or drag it onto the timeline to place it' : ''}${mark ? `\n${mark.safe ? `A safe swap for shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}: the same framing and line.` : `Goes in place of shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}.`}${mark.warnings.length ? `\n${mark.warnings.join('\n')}` : ''}` : ''}`}
+                      title={`${baseName} · shot ${otherCol ? `${s.i} of the take (its place in ${scene.id} is not known)` : said} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}${drags ? ' · or drag it onto the timeline to place it' : ''}${mark ? `\n${mark.safe ? `A safe swap for shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}: the same framing and line.` : `Goes in place of shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}.`}${mark.warnings.length ? `\n${mark.warnings.join('\n')}` : ''}` : ''}${st?.note ? `\n${st.note}` : ''}${changed ? `\nChanged in this variation` : same ? `\nThe same as ${sameAs}: this variation changed only ${vs!.words.replace(/ only$/, '')}` : ''}`}
                       className={cn('group @container relative block h-[64px] w-full overflow-hidden rounded-[7px] border bg-panel text-left transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] disabled:cursor-default', drags ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                         isWatch ? 'border-dashed border-ink shadow-[0_0_0_1px_#FAFAFA]' : isIn ? 'border-ink shadow-[0_0_0_1px_#FAFAFA]' : isOut ? 'border-dashed border-edge-strong hover:border-sub' : 'border-edge hover:border-sub')}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- a poster frame from /api/media, cached on disk */}
                       <img alt="" draggable={false} loading="lazy" src={mediaUrl(t.src, { w: 160, t: Math.round(((s.in + s.out) / 2) * 100) / 100 })}
-                        className="absolute inset-y-0 left-0 h-full w-full object-cover object-[50%_28%] transition-opacity duration-200 group-hover:opacity-100 @[84px]:w-[36px] @[84px]:object-center [[data-frame=wide]_&]:w-full [[data-frame=wide]_&]:bg-black [[data-frame=wide]_&]:object-contain" style={{ opacity: isIn || isWatch ? 1 : 0.72 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        className="absolute inset-y-0 left-0 h-full w-full object-cover object-[50%_28%] transition-opacity duration-200 group-hover:opacity-100 @[84px]:w-[36px] @[84px]:object-center [[data-frame=wide]_&]:w-full [[data-frame=wide]_&]:bg-black [[data-frame=wide]_&]:object-contain" style={{ opacity: isIn || isWatch || changed ? 1 : 0.72 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                       {/* a wide cell: the whole frame at the left, the length beside it; a narrow one: the length over the frame */}
                       <span className="absolute bottom-1 left-1 rounded-[4px] bg-black/75 px-1.5 text-[11px] leading-4 text-ink [font-variant-numeric:tabular-nums] @[84px]:bottom-auto @[84px]:left-[44px] @[84px]:top-1/2 @[84px]:-translate-y-1/2 @[84px]:bg-transparent @[84px]:px-0 @[84px]:text-[13px] [[data-frame=wide]_&]:bottom-1 [[data-frame=wide]_&]:left-1 [[data-frame=wide]_&]:top-auto [[data-frame=wide]_&]:translate-y-0 [[data-frame=wide]_&]:bg-black/75 [[data-frame=wide]_&]:px-1.5 [[data-frame=wide]_&]:text-[11px]">{secs(s.out - s.in)}</span>
                       {/* the shot's own name when its column alone does not say it ("7a"); another layout's shot:
                           "safe" with the place it is the same as, else the place it would go, in amber */}
-                      {(label || mark) && (
+                      {(label || mark || changed || same) && (
                         <span className="absolute left-1 top-1 flex max-w-[calc(100%-8px)] items-center gap-0.5">
-                          {label && <span data-shot-tag={label} className="rounded-[4px] bg-black/80 px-1 text-[10px] font-medium leading-[14px] text-ink [font-variant-numeric:tabular-nums]">{label}</span>}
+                          {label && <span data-shot-tag={label} data-conflict={st?.conflict ? '' : undefined} className={cn('rounded-[4px] bg-black/80 px-1 text-[10px] font-medium leading-[14px] [font-variant-numeric:tabular-nums]', st?.conflict ? 'text-warn' : 'text-ink')}>{label}</span>}
                           {mark && (
                             <span data-mark={mark.safe ? 'safe' : 'warn'} className={cn('line-in truncate rounded-[4px] bg-black/80 px-1 text-[10px] leading-[14px] [font-variant-numeric:tabular-nums]', mark.safe ? 'text-ink' : 'text-warn')}>
                               {mark.safe ? `safe → ${mark.to}` : `→ ${mark.to}`}
                             </span>
                           )}
+                          {changed && <span data-varied-mark="changed" className="line-in truncate rounded-[4px] bg-ink px-1 text-[10px] font-medium leading-[14px] text-bg">changed</span>}
+                          {same && <span data-varied-mark="same" className="line-in truncate rounded-[4px] bg-black/80 px-1 text-[10px] leading-[14px] text-ink-3">same</span>}
                         </span>
                       )}
                     </button>
@@ -542,7 +560,7 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                     {onUnpick && (
                       <button type="button" data-unpick={key} tabIndex={isPick ? 0 : -1} aria-hidden={!isPick} disabled={!isPick}
                         onClick={(e) => { e.stopPropagation(); if (isPick) onUnpick(t, s.n, tag); }}
-                        aria-label={`Unselect ${name} shot ${said}`} title="Unselect this shot"
+                        aria-label={`Unselect ${baseName} shot ${said}`} title="Unselect this shot"
                         className={cn('absolute right-1.5 top-1.5 z-[2] flex size-4 items-center justify-center rounded-full bg-ink text-bg transition-[opacity,transform] duration-150 ease-out hover:scale-110 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink focus-visible:ring-offset-1 focus-visible:ring-offset-bg',
                           isPick ? 'cursor-pointer opacity-100' : 'pointer-events-none scale-75 opacity-0')}>
                         <svg width="7" height="7" viewBox="0 0 8 8" aria-hidden="true" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M1 1l6 6M7 1 1 7" /></svg>

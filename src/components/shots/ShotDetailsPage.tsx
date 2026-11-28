@@ -32,6 +32,8 @@ import { ShotPlayer, fmtT, type PlayerHandle } from './ShotPlayer';
 import { ShotPrompt, type NameEvents, type PromptHandle } from './ShotPrompt';
 import { ShotInputs, shortDesc, type InputsHandle } from './ShotInputs';
 import { PICK, pickProps, usePickingRing } from './tell';
+import { takePlaces, useShotPlaces } from './useShotPlaces';
+import { copiesOf } from '@/components/edit/pickupRows';
 
 /** The take a file is, in the film's state: its scene and its record. */
 function findTake(scenes: SceneRef[], rel: string): { sc: SceneRef; t: TakeRef } | undefined {
@@ -72,7 +74,12 @@ export function ShotDetailsPage() {
   const rec = sent.data;
   const m = useModel(rec);
   const cut = useMemo(() => shotsOf(ts), [ts]);
-  const { shots, matched } = useMemo(() => pageShots(m, cut), [m, cut]);
+  // the place each shot stands for in its scene: the one rule (places.ts), the same call the Shots page makes
+  const all = useMemo(() => cuts.data?.takes ?? [], [cuts.data]);
+  const listed = useMemo(() => { const c = copiesOf(all); return all.filter((t) => !c.has(t.src)); }, [all]);
+  const { list: placed } = useShotPlaces(film, state ? { scenes: state.scenes, updatedAt: state.updatedAt } : undefined, listed, all);
+  const placeOfShot = useMemo(() => (ts ? takePlaces(placed, ts.src) : undefined), [placed, ts]);
+  const { shots, matched } = useMemo(() => pageShots(m, cut, (i) => { const w = placeOfShot?.get(i); return w?.label ?? w?.place; }), [m, cut, placeOfShot]);
   // the previz: the take's own when its record names one, else the scene's newest
   const pvFrom: { p: string; from: 'take' | 'scene' } | undefined = rec?.layout?.previzTake ? { p: rec.layout.previzTake, from: 'take' }
     : found?.sc.previzPath ? { p: found.sc.previzPath, from: 'scene' } : undefined;

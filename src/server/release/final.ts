@@ -8,6 +8,7 @@ import path from 'node:path';
 import type { FilmTarget } from '../actions/film';
 import type { FilmMaster, RenderOptions, RenderState, Timeline, TimelineClip } from '../types';
 import { renderFiles } from '../edit/render-files';
+import { probe } from '../edit/probe';
 import { masterStaleness, queueRender, renderStates, variantBase } from '../edit/render';
 import { optionsTag } from '../edit/render-options';
 import { logWrite, readVersion, RENDERS_DIR, resolveSrc, timelineLength } from '../edit/timeline';
@@ -166,10 +167,12 @@ export async function companionStatus(film: FilmTarget, final: ReleaseFinal): Pr
 }
 
 /** The final's own file: its size (a smaller file's: with its source's), and its version's length and picture size. */
-export async function finalFacts(film: FilmTarget, final: ReleaseFinal): Promise<{ bytes?: number; seconds?: number; width?: number; height?: number; fromBytes?: number }> {
+export async function finalFacts(film: FilmTarget, final: ReleaseFinal): Promise<{ bytes?: number; seconds?: number; width?: number; height?: number; fromBytes?: number; fps?: number }> {
   const bytes = await fs.stat(path.join(film.dir, final.path)).then((s) => s.size, () => undefined);
   const t = await readVersion(film, final.version).catch(() => undefined);
   // a smaller file (ASKS 56): the size of the render it was made from, said beside its own
   const small = /-small\.mp4$/.test(final.path) ? (await renderFiles(film).catch(() => [])).find((f) => f.path === final.path)?.small : undefined;
-  return { bytes, ...(t ? { seconds: timelineLength(t), width: t.width, height: t.height } : {}), ...(small ? { fromBytes: small.fromBytes } : {}) };
+  // its frame rate, read from the file itself (the frame-by-frame cover picker), else the cut's
+  const fps = (await probe(path.join(film.dir, final.path)).catch(() => undefined))?.video?.fps ?? t?.fps;
+  return { bytes, ...(t ? { seconds: timelineLength(t), width: t.width, height: t.height } : {}), ...(small ? { fromBytes: small.fromBytes } : {}), ...(fps ? { fps } : {}) };
 }

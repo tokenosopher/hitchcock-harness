@@ -28,6 +28,8 @@ import { parseOp, type ReleaseOp } from '@/components/release/ops';
 import type { ReleaseFile, ReleaseFinal } from '@/components/release/file';
 import type { ReleaseView } from '@/components/release/view';
 import { versionPart } from '@/server/edit/timeline';
+import { probe } from '@/server/edit/probe';
+import { mockMedia } from '@/fixtures/masters';
 import type { RenderKind, RenderOptions, Timeline } from '@/server/types';
 
 type Ctx = { params: Promise<{ film: string }> };
@@ -59,6 +61,13 @@ function mockQueueCompanions(slug: string, final: ReleaseFinal): void {
   }
 }
 
+/** The frame rate of the file a sample final plays (the small test video), as finalFacts reads a real one. */
+async function mockFps(slug: string, rel: string): Promise<{ fps?: number }> {
+  const r = await mockMedia(`assets/films/${slug}/${rel}`).catch(() => undefined);
+  const fps = r ? (await probe(r.real))?.video?.fps : undefined;
+  return fps ? { fps } : {};
+}
+
 async function mockGet(slug: string, now: Date, wantMasters: boolean, light: boolean): Promise<ReleaseView> {
   const st = mockState(slug);
   const file = mockFile(slug);
@@ -69,7 +78,7 @@ async function mockGet(slug: string, now: Date, wantMasters: boolean, light: boo
     film: slug, mock: true, file, derived: file ? deriveAll(file, now) : undefined,
     masters: !legacy && (!file?.final || wantMasters) ? mockMasters(slug) : undefined,
     companions: file?.final ? sampleCompanions(file.final, now, mockLive(slug, file.final)) : undefined,
-    finalFile: fm ? { bytes: fm.bytes, seconds: fm.seconds, width: 1080, height: 1920, ...(fm.fromBytes ? { fromBytes: fm.fromBytes } : {}) } : undefined,
+    finalFile: fm ? { bytes: fm.bytes, seconds: fm.seconds, width: 1080, height: 1920, ...(fm.fromBytes ? { fromBytes: fm.fromBytes } : {}), ...(await mockFps(slug, fm.path)) } : undefined,
     cut: cutView(st?.cut?.current, file?.final, ((mockCut(slug)?.timelines ?? []) as Timeline[]).find((t) => t.version === file?.final?.version)),
     kit: slug === 'sample-release-open' ? { shown: 'assets/final-cuts/2026-11-14 The Lighthouse/Social kit', folder: path.join(/*turbopackIgnore: true*/ harnessConfig().driveRoot, 'final-cuts', '2026-11-14 The Lighthouse', 'Social kit') } : undefined,
     legacy,

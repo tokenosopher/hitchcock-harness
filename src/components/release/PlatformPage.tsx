@@ -92,7 +92,7 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
       <DockProvider value={one ? dock : null}>
         <div ref={setBody} data-platform-page={p.id} className={cn(one ? 'flex flex-col' : 'flex min-h-0 flex-1')}>
           {layout === 'three' && <PlatformLook film={film} state={state} file={file} p={p} />}
-          <PlatformText film={film} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout={layout}
+          <PlatformText film={film} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout={layout} finalFile={rel.view?.finalFile}
             look={layout !== 'three' ? <LookFold film={film} state={state} file={file} p={p} /> : undefined} />
           <SendingIt rel={rel} file={file} p={p} now={now} base={base} layout={layout} />
         </div>

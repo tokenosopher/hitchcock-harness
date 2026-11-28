@@ -12,6 +12,7 @@ import type { FeedCard, PictureMade, Timeline, TimelineClip } from '@/server/typ
 import type { CutGap, RenderPart } from './sameCut';
 import { PENDING_STATE } from './history';
 import { isRemovedAnswer } from '@/components/lib/remove';
+import { isPostedRaw } from '@/components/release/places';
 import { EARLY_NAME, EARLY_SHORT, type EarlyDo, type EarlyId, type EarlyStep } from './early';
 
 export const LEFT_REL = 'harness/left.json';
@@ -87,10 +88,11 @@ export interface LeftAnswer {
   cuts?: Record<string, RenderPart>;
 }
 export interface MasterFileBrief { version: string; path: string; at?: string; picture?: PictureMade }
-/** The release file in brief: the final's version, the platforms and how many are posted. */
-export function releaseBrief(file: { final?: { version: string }; platforms: { send: { posted?: unknown } }[] } | undefined): LeftAnswer['release'] {
+/** The release file in brief: the final's version, the platforms and how many are posted (a platform posted in
+ *  several places counts once every place is). */
+export function releaseBrief(file: { final?: { version: string }; platforms: { kind?: unknown; send: { posted?: unknown; postedIn?: unknown } }[] } | undefined): LeftAnswer['release'] {
   if (!file) return undefined;
-  return { ...(file.final ? { final: { version: file.final.version } } : {}), platforms: file.platforms.length, posted: file.platforms.filter((p) => !!p.send.posted).length };
+  return { ...(file.final ? { final: { version: file.final.version } } : {}), platforms: file.platforms.length, posted: file.platforms.filter((p) => isPostedRaw(p)).length };
 }
 /** The release in brief as the film's state carries it (PostInfo.release, the server's reader and the samples), read
  *  from social/release.json as it is on disk and the ticks file: how many platforms have texts and how many are posted,
@@ -100,11 +102,11 @@ export function postBrief(raw: unknown, ticks?: LeftFile['ticks']): { final?: { 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const r = raw as { final?: { path?: unknown; version?: unknown }; platforms?: unknown };
   const fp = r.final && typeof r.final.path === 'string' ? r.final.path : undefined;
-  const plats = Array.isArray(r.platforms) ? r.platforms.filter((p): p is { send?: { posted?: unknown } } => !!p && typeof p === 'object') : [];
+  const plats = Array.isArray(r.platforms) ? r.platforms.filter((p): p is object => !!p && typeof p === 'object') : [];
   const done = ticks?.posted?.at;
   return {
     ...(fp ? { final: { path: fp, ...(typeof r.final!.version === 'string' ? { version: r.final!.version } : {}) } } : {}),
-    platforms: plats.length, posted: plats.filter((p) => !!p.send && typeof p.send === 'object' && !!p.send.posted).length,
+    platforms: plats.length, posted: plats.filter((p) => isPostedRaw(p)).length,
     ...(done ? { done } : {}),
   };
 }

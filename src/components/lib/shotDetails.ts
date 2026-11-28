@@ -2,7 +2,7 @@
 // (the scene's, one a shot, the ones after the shots), every name in it of an input the take sent ([LANTERN], IMAGE
 // REFERENCE 6, a run "IMAGE REFERENCES 12 TO 18", storyboard panels "PANELS 13 AND 14" by the pages they are on), which
 // inputs each part names, and the part of the previz a shot was drawn from. Pure, no React; the Scene page's "what was
-// sent" panel counts its names with namedCounts too.
+// sent" panel counts and marks its names with namedCounts and promptParts.
 //
 // What the data cannot say: the model got one prompt and every input for the whole take, so "a shot's inputs" means
 // the inputs named in that shot's part of the prompt; and the take's shots are matched to the prompt's shot parts by
@@ -10,7 +10,7 @@
 
 export type RefKind = 'VIDEO' | 'IMAGE' | 'AUDIO';
 /** What this file needs of a sent reference (SentRef has it). */
-export interface RefLite { order: number; kind: RefKind; n: number; label: string; tag?: string; page?: number }
+export interface RefLite { order: number; kind: RefKind; n: number; label: string; tag?: string; page?: number; frame?: 'START' | 'END' }
 
 export interface PromptSection {
   /** "p0", "p1" … in the prompt's order. */
@@ -122,7 +122,12 @@ function panelList(first: string, rest: string): number[] {
 export interface MentionCtx { refs: RefLite[]; perPage: number }
 export const mentionCtx = (text: string, refs: RefLite[]): MentionCtx => ({ refs, perPage: panelsPerPage(text, refs) });
 
-const RX = /\[([^\]\n]{1,60})\]|\b(VIDEO|IMAGE|AUDIO)\s+REFERENCES\s+(\d+)((?:(?:,|,?\s+AND|\s+TO|\s*[-–])\s*\d+)+)|\b(VIDEO|IMAGE|AUDIO)\s+REFERENCE\s+(\d+)\b|\b(panels?)\s+(\d+)((?:(?:,|,?\s+and|,?\s+to|\s*[-–])\s*\d+)*)/gi;
+/** A name of the start or end image: "START IMAGE", "the END IMAGE", "the first frame", "LAST FRAME" (any case). */
+const FRAME_SRC = String.raw`\b(START|END|FIRST|LAST)\s+(?:IMAGE|FRAME)\b`;
+/** The frame a FRAME_SRC word names: START or FIRST the start image, END or LAST the end image. */
+const frameOf = (w: string): 'START' | 'END' => (/^(START|FIRST)$/i.test(w) ? 'START' : 'END');
+
+const RX = new RegExp(String.raw`\[([^\]\n]{1,60})\]|\b(VIDEO|IMAGE|AUDIO)\s+REFERENCES\s+(\d+)((?:(?:,|,?\s+AND|\s+TO|\s*[-–])\s*\d+)+)|\b(VIDEO|IMAGE|AUDIO)\s+REFERENCE\s+(\d+)\b|\b(panels?)\s+(\d+)((?:(?:,|,?\s+and|,?\s+to|\s*[-–])\s*\d+)*)|${FRAME_SRC}`, 'gi');
 
 /** The page a panel is on, as the input that page went as. */
 export function pageOrder(ctx: MentionCtx, panel: number): number | undefined {
@@ -141,28 +146,49 @@ export function mentionsIn(s: string, ctx: MentionCtx): Mention[] {
     } else if (m[2]) {
       const kind = m[2].toUpperCase();
       const ns = panelList(m[3], m[4].replace(/\bAND\b/gi, 'and').replace(/\bTO\b/gi, 'to'));
-      const orders = ctx.refs.filter((r) => r.kind === kind && ns.includes(r.n)).map((r) => r.order);
+      const orders = ctx.refs.filter((r) => r.kind === kind && !r.frame && ns.includes(r.n)).map((r) => r.order);
       out.push({ ...base, kind: 'range', orders });
     } else if (m[5]) {
       const kind = m[5].toUpperCase();
-      const r = ctx.refs.find((x) => x.kind === kind && x.n === Number(m[6]));
+      const r = ctx.refs.find((x) => x.kind === kind && !x.frame && x.n === Number(m[6]));
       out.push(r ? { ...base, kind: 'ref', orders: [r.order] } : { ...base, kind: 'word', orders: [], tag: m[0] });
     } else if (m[7]) {
       const panels = panelList(m[8], m[9]);
       const orders = [...new Set(panels.map((p) => pageOrder(ctx, p)).filter((o): o is number => o !== undefined))];
       out.push({ ...base, kind: 'panels', orders, panels });
+    } else if (m[10]) {
+      // "the END IMAGE", "the first frame": the input sent as that frame; plain words when none was
+      const r = ctx.refs.find((x) => x.frame === frameOf(m[10]));
+      if (r) out.push({ ...base, kind: 'ref', orders: [r.order] });
     }
   }
   return out;
 }
 
 /** How many times the prompt names each input, by its place in the order sent: by its tag, its number, a run of
- *  numbers ("IMAGE REFERENCES 12 TO 18" names each of them) or a panel on its page. */
+ *  numbers ("IMAGE REFERENCES 12 TO 18" names each of them), a panel on its page, or as the start or end image
+ *  ("the END IMAGE", "the first frame"). */
 export function namedCounts(text: string, refs: RefLite[]): Map<number, number> {
   const ctx = mentionCtx(text, refs);
   const n = new Map<number, number>(refs.map((r) => [r.order, 0]));
   for (const m of mentionsIn(text, ctx)) for (const o of m.orders) n.set(o, (n.get(o) ?? 0) + 1);
   return n;
+}
+
+const MENTION = new RegExp(String.raw`\b(VIDEO|IMAGE|AUDIO)\s+REFERENCE\s+(\d+)\b|${FRAME_SRC}`, 'gi');
+
+/** The Scene page's "what was sent" panel: the prompt cut into text and names of one input, each name with the label
+ *  of the input it names ("IMAGE REFERENCE 1"; "END IMAGE" for "the last frame"). */
+export function promptParts(text: string): { text: string; label?: string }[] {
+  const out: { text: string; label?: string }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(MENTION)) {
+    if (m.index > at) out.push({ text: text.slice(at, m.index) });
+    out.push({ text: m[0], label: m[3] ? `${frameOf(m[3])} IMAGE` : `${m[1].toUpperCase()} REFERENCE ${m[2]}` });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at) });
+  return out;
 }
 
 /** Each part's inputs (the set of their orders), and for each input the shot parts that name it (their place among

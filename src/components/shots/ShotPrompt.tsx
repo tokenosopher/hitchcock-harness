@@ -79,7 +79,7 @@ export const ShotPrompt = forwardRef<PromptHandle, {
       label = mn.tag ? tagName(r, m) : r.name;
       const th = thumbOf(m, r.order, pathOf);
       pic = th ? <img alt="" src={th} className="size-[15px] flex-none rounded-[4px] bg-black object-cover" /> : null;
-      if (!first) label = mn.tag ? label : label.toLowerCase();
+      if (!first) label = mn.tag ? label : r.frame ? mn.text.toLowerCase() : label.toLowerCase();
     } else if (mn.kind === 'range') {
       const rs = mn.orders.map((o) => m.byOrder.get(o)!).filter(Boolean);
       label = rs.length ? `${rs[0].name.split(' ')[0]}s ${rs[0].n}–${rs[rs.length - 1].n}` : mn.text;

@@ -722,8 +722,9 @@ export interface SentRef {
   order: number;                // 1-based place in the order sent
   kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
   n: number;                    // its number within its kind
-  label: string;                // "IMAGE REFERENCE 1", as the prompt names it
-  name: string;                 // "Image 1"
+  label: string;                // "IMAGE REFERENCE 1", as the prompt names it; "END IMAGE" for a frame
+  name: string;                 // "Image 1"; "End image"
+  frame?: 'START' | 'END';      // sent as the start or end image (kind START / END, role start_image / end_image)
   tag?: string;                 // "MAREN", "PAGE 2"; none when no media list named it
   file?: string;                // the file that media id was uploaded from, relative to the film folder
   what: string;                 // "C01 element", "P02 prop", "L01 view", "boards v4 · page 2", "voice line"

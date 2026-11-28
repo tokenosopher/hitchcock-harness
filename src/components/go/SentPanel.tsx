@@ -12,11 +12,10 @@ import { fmtDate, repoPath } from '@/components/lib/format';
 import { IconChevronDown } from '@/components/shell/icons';
 import { Media, isVideoPath, mediaUrl } from '@/components/media/Media';
 import { useJson } from '@/components/pages/postCommon';
-import { namedCounts } from '@/components/lib/shotDetails';
+import { namedCounts, promptParts } from '@/components/lib/shotDetails';
 import { shotDetailsHref } from '@/components/lib/shotHref';
 import { cn } from '@/lib/utils';
 
-const MENTION = /\b(VIDEO|IMAGE|AUDIO)\s+REFERENCE\s+(\d+)\b/gi;
 const FOLDED = 245;
 
 /** The settings in one line: "seedance_2_5 · omni_reference · 13 s · 9:16 · 480p draft · audio on · no seed". */
@@ -24,19 +23,6 @@ export function settingsLine(r: SentRecord): string {
   const s = r.settings;
   return [r.model, s.mode, s.duration !== undefined ? `${s.duration} s` : '', s.aspect, s.resolution ? `${s.resolution}${s.draft ? ' draft' : ''}` : '',
     s.audio === undefined ? '' : `audio ${s.audio ? 'on' : 'off'}`, s.seed === null || s.seed === undefined ? 'no seed' : `seed ${s.seed}`].filter(Boolean).join(' · ');
-}
-
-/** The prompt cut into text and references, each reference with its label ("IMAGE REFERENCE 1"). */
-function promptParts(text: string): { text: string; label?: string }[] {
-  const out: { text: string; label?: string }[] = [];
-  let at = 0;
-  for (const m of text.matchAll(MENTION)) {
-    if (m.index > at) out.push({ text: text.slice(at, m.index) });
-    out.push({ text: m[0], label: `${m[1].toUpperCase()} REFERENCE ${m[2]}` });
-    at = m.index + m[0].length;
-  }
-  if (at < text.length) out.push({ text: text.slice(at) });
-  return out;
 }
 
 export function SentPanel({ state, take }: { state: FilmState; take: TakeRef }) {

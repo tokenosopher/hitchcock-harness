@@ -10,7 +10,7 @@
 // Every post is made by hand by the user in this copy: every platform's route is "hand" (a file that says otherwise,
 // or says nothing, is read as "hand"), and `upload.bufferSets` stays empty.
 // States are never stored: derive.ts works them out from this file and the clock.
-import { isKind, type PlatformKind } from './platforms';
+import { factsOf, isKind, type PlatformKind } from './platforms';
 
 export const RELEASE_REL = 'social/release.json';
 export const RELEASE_VERSION = 1;
@@ -117,13 +117,21 @@ export interface Send {
    *  hand never writes them. They are kept so an older file still checks out. */
   scheduled?: { for: string; bufferPostId?: string };
   sending?: { since: string; steps?: { label: string; at?: string }[]; inBuffer?: string; platformHas?: string };
+  /** Posted, and the post's link. A platform posted in several places (platforms.ts `places`): the first
+   *  place's post; the others are in `postedIn`. */
   posted?: { at: string; link?: string };
+  /** The posts in a platform's other places, by place id ("aivideos"), each {at, link?}. Absent until one is posted;
+   *  never the first place (that is `posted`). The platform is posted when every place is (places.ts). */
+  postedIn?: Record<string, { at: string; link?: string }>;
   failed?: { at: string; reason: string; checked?: { at: string; text: string }; fix?: string; fixAction?: { label: string; href?: string; ask?: string }; cleared?: string };
   requested?: { unschedule?: string; stop?: string; check?: string };
 }
 
-/** A frame of the final to pick as the thumbnail (stage 2): `at` its time in seconds, `does` what it shows. */
-export interface ThumbOption { id: string; at: number; does: string }
+/** A frame of the final to pick as the thumbnail (stage 2): `at` its time in seconds, `does` what it shows. `by:
+ *  "user"`: the user's own frame, picked by scrubbing through the final on the page, not one of Alma's;
+ *  its `at` is the start of that frame, rounded up to the millisecond, so `at` × 1000 lands inside it. At most one
+ *  per platform; written by the page only. */
+export interface ThumbOption { id: string; at: number; does: string; by?: 'user' }
 /** The thumbnail choice of a platform that has one: the options Alma offers, the one in use, and where it is set
  *  ("the frame to pick in YouTube"). A pick on one platform is the pick on every platform with a thumbnail (ASKS 55);
  *  `own: true` marks one that keeps its own (its picks do not spread, the others' do not change it). */
@@ -263,7 +271,7 @@ export function validateRelease(raw: unknown): { file?: ReleaseFile; problems: s
     });
     if (x.thumbnail !== undefined) {
       const t = x.thumbnail;
-      const good = obj(t) && Array.isArray(t.options) && t.options.every((o) => obj(o) && str(o.id) && typeof o.at === 'number' && o.at >= 0 && str(o.does))
+      const good = obj(t) && Array.isArray(t.options) && t.options.every((o) => obj(o) && str(o.id) && typeof o.at === 'number' && o.at >= 0 && str(o.does) && (o.by === undefined || o.by === 'user'))
         && (t.where === undefined || str(t.where));
       if (!good) p.push(`${name}: "thumbnail" needs options (an id, its time "at" in seconds, and what it shows).`);
       else if (t.pick !== undefined && !(t.options as { id: string }[]).some((o) => o.id === t.pick)) p.push(`${name}: the thumbnail "${String(t.pick)}" is not one of its options.`);
@@ -284,6 +292,14 @@ export function validateRelease(raw: unknown): { file?: ReleaseFile; problems: s
       if (sd.scheduled !== undefined && !(obj(sd.scheduled) && iso(sd.scheduled.for))) p.push(`${name}: send.scheduled needs "for", a time.`);
       if (sd.sending !== undefined && !(obj(sd.sending) && iso(sd.sending.since))) p.push(`${name}: send.sending needs "since", a time.`);
       if (sd.posted !== undefined && !(obj(sd.posted) && iso(sd.posted.at) && (sd.posted.link === undefined || str(sd.posted.link)))) p.push(`${name}: send.posted needs at (and a link when there is one).`);
+      if (sd.postedIn !== undefined) {
+        const others = isKind(x.kind) ? (factsOf(x.kind).places ?? []).slice(1).map((q) => q.id) : [];
+        if (!obj(sd.postedIn)) p.push(`${name}: send.postedIn must be an object of posts by place.`);
+        else for (const [k, v] of Object.entries(sd.postedIn)) {
+          if (!others.includes(k)) p.push(`${name}: send.postedIn names "${k}", which is not one of its other places${others.length ? ` (${others.join(', ')})` : ''}.`);
+          else if (!(obj(v) && iso(v.at) && (v.link === undefined || str(v.link)))) p.push(`${name}: send.postedIn.${k} needs at (and a link when there is one).`);
+        }
+      }
       if (sd.failed !== undefined && !(obj(sd.failed) && iso(sd.failed.at) && str(sd.failed.reason))) p.push(`${name}: send.failed needs at and the reason.`);
       // stage 3: the sending record's extras
       if (obj(sd.sending) && sd.sending.platformHas !== undefined && !iso(sd.sending.platformHas)) p.push(`${name}: send.sending.platformHas must be a time.`);

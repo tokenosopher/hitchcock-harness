@@ -52,8 +52,10 @@ export interface PageShot {
 }
 
 /** The take's shots, each with its part of the prompt when there are as many parts as shots (matched by count only).
- *  With no clip cut yet, the prompt's shot parts stand for the shots. */
-export function pageShots(m: Model | undefined, cut: Shot[]): { shots: PageShot[]; matched: boolean } {
+ *  With no clip cut yet, the prompt's shot parts stand for the shots. A shot is named by the place it stands for in its
+ *  scene when `placeOf` knows it (places.ts, the one rule: "5–6" for FIX-year-S1 take 2), else by its prompt part's id,
+ *  else by its own number. */
+export function pageShots(m: Model | undefined, cut: Shot[], placeOf?: (i: number) => string | undefined): { shots: PageShot[]; matched: boolean } {
   const parts = m?.shotSecs ?? [];
   if (!cut.length) return { shots: parts.map((s, k) => ({ i: k + 1, label: s.shot ?? String(k + 1), name: sentence(s.title, m?.proper), sec: s })), matched: true };
   const matched = parts.length === cut.length;
@@ -61,7 +63,7 @@ export function pageShots(m: Model | undefined, cut: Shot[]): { shots: PageShot[
     matched,
     shots: cut.map((s) => {
       const sec = matched ? parts[s.i - 1] : undefined;
-      return { i: s.i, label: sec?.shot ?? s.tag ?? String(s.n), name: sec ? sentence(sec.title, m?.proper) : '', sec, t0: s.in, t1: s.out };
+      return { i: s.i, label: placeOf?.(s.i) ?? sec?.shot ?? s.tag ?? String(s.n), name: sec ? sentence(sec.title, m?.proper) : '', sec, t0: s.in, t1: s.out };
     }),
   };
 }

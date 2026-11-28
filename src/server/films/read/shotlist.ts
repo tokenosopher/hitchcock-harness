@@ -1,11 +1,12 @@
 // What the Shots page needs besides the takes and the cut: each generation folder's shot list
-// (<G>-shots.json), the SHOT numbers of its newest prompt, when its list was written, its storyboard's first panel per
-// shot, the planned cuts of each take's check (check.json), and the newest previz of the whole film with its scenes'
-// times. Read only; the page places the shots from these (components/shots/places.ts).
+// (<G>-shots.json), a pick-up's stands record (<G>-stands.json), the SHOT numbers of its newest prompt, when
+// its list was written, its storyboard's first panel per shot, the planned cuts of each take's check (check.json), and
+// the newest previz of the whole film with its scenes' times. Read only; the page places the shots from these (components/shots/places.ts).
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { FilmTarget } from '../../actions/film';
 import type { GenPlan, PlanShot } from '@/components/shots/places';
+import { readStands } from '@/components/shots/stands';
 import { sceneOfFolder } from '../../edit/shots';
 import { storyboardOf } from '../../edit/plan';
 import { probe } from '../../edit/probe';
@@ -49,7 +50,9 @@ async function readGen(film: FilmTarget, root: string, name: string): Promise<Ge
   const scene = sceneOfFolder([root, name]);
   if (!scene) return undefined;
   const shotsFile = path.join(dir, `${name}-shots.json`);
-  const [plan, st] = await Promise.all([readJson(shotsFile).then(readPlan), fs.stat(shotsFile).catch(() => undefined)]);
+  const [plan, st, stands] = await Promise.all([readJson(shotsFile).then(readPlan), fs.stat(shotsFile).catch(() => undefined),
+    // the pick-up's stands record (components/shots/stands.ts, docs/places.md): written by the film's tool at landing
+    readJson(path.join(dir, `${name}-stands.json`)).then(readStands)]);
   const promptDir = path.join(dir, 'prompt');
   const newest = (await files(promptDir)).filter((f) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-prompt-v\\d+\\.txt$`).test(f)).sort(natCmp).pop();
   const prompt = newest ? promptShots(await fs.readFile(path.join(promptDir, newest), 'utf8').catch(() => '')) : [];
@@ -73,6 +76,7 @@ async function readGen(film: FilmTarget, root: string, name: string): Promise<Ge
     ...(first.size ? { board: [...first].map(([shot, src]) => ({ shot, src })) } : {}),
     ...(previz ? { previz } : {}),
     ...(dropped ? { dropped: true } : {}),
+    ...(stands ? { stands } : {}),
   };
 }
 

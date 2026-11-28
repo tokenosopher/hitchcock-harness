@@ -24,6 +24,7 @@ import { clockLen, renderLists, tookWords, type RenderFile, type RenderRow } fro
 import { SoundMark } from './RenderPlayer';
 import { useRenderVariants, useRendersLive, type RendersStore } from './useCut';
 import { textsSaid, useNameFinal, useRelease } from '@/components/release/ui';
+import { anyPosted } from '@/components/release/places';
 
 const when = (iso?: string) => {
   if (!iso) return '';
@@ -188,7 +189,7 @@ export function RendersTab({ film, tl, current, edited, seconds, store, recorded
   const rel = useRelease(film, { light: true });
   const nameFinal = useNameFinal(rel.run, film);
   const relFile = rel.view?.file;
-  const out = relFile?.platforms.filter((p) => p.send.posted).map((p) => p.name) ?? [];
+  const out = relFile?.platforms.filter((p) => anyPosted(p)).map((p) => p.name) ?? [];
   const finalLock = out.length ? `${out.join(' and ')} already ${out.length > 1 ? 'have' : 'has'} the final: it cannot change now.` : undefined;
   // naming the final asks Alma for the platforms' texts when there are none: a quiet line says it went
   const [sent, setSent] = useState<string>();

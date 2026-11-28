@@ -6,7 +6,7 @@
 
 export const INTRO_KEYS = [
   'idea', 'story', 'loc', 'views', 'shots', 'shotlist', 'shotdetails', 'previz', 'faces', 'clothing', 'sheet', 'voices', 'gate', 'elements',
-  'character', 'go', 'scenes', 'scene', 'edit', 'finish', 'sound', 'release', 'platform', 'debrief', 'library',
+  'character', 'go', 'scenes', 'scene', 'newtakes', 'edit', 'finish', 'sound', 'release', 'platform', 'debrief', 'library',
 ] as const;
 
 export type IntroKey = (typeof INTRO_KEYS)[number];
@@ -93,6 +93,11 @@ export const INTROS: Record<IntroKey, Intro> = {
   scene: {
     name: 'this scene',
     text: 'Watch this scene’s takes and pick the keeper. Each take is a separate try; tell me what’s wrong in plain words (“he looks into the camera”). Another take, or a redo of one shot, has its own price and waits for your word.',
+  },
+  newtakes: {
+    name: 'new takes',
+    text: 'Fresh from the oven: every take that came back since you last looked. Each one plays beside what the cut has in its place, so you judge it in context, not in a vacuum. Use it, keep it for later or throw it out; one key each.',
+    phone: 'Fresh from the oven: every take that came back since you last looked. Each one plays beside what the cut has in its place. Use it, keep it for later or throw it out.',
   },
   edit: {
     name: 'the edit',

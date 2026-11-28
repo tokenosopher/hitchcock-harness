@@ -92,7 +92,7 @@ export function PhonePlatform({ rel, file, p, now, state, base }: { rel: Rel; fi
       <StepIntro step="platform" className="px-4 pt-4" />
       <DockProvider value={dock}>
         {/* the whole text, editable as on the Mac: one box per platform part, full width */}
-        <PlatformText film={rel.view?.film ?? ''} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout="one" phone
+        <PlatformText film={rel.view?.film ?? ''} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout="one" phone finalFile={rel.view?.finalFile}
           look={<LookFold film={rel.view?.film ?? ''} state={state} file={file} p={p} phone />} />
         <PlatformSend rel={rel} file={file} p={p} now={now} final={final} base={base} phone layout="one" />
       </DockProvider>

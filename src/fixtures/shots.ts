@@ -14,7 +14,8 @@
 //     shot that redoes the scene's shot 2, in its own generation folder whose shots file (`PICKUP_FILE`) lists one shot
 //     with id "2"; read as the server reads a real one (readShotTags, shotTagsFor), it carries `ids: [2]`.
 //   - S3 has three variations: one of "sample take A" landed, a second of it being made (no video yet), and
-//     one of "sample take B" that could not be made. `landSample` lands the one being made, in this server's memory
+//     one of "sample take B" that could not be made. The landed one changed only shot 2 (its variation.json's
+//     `shots`): the Takes view marks that shot and shows shot 1 as the same as sample take A. `landSample` lands the one being made, in this server's memory
 //     only (the browser tests ask for it through POST …/shots in sample mode); nothing is written to disk.
 // Later test work reuses this: keep it pure and free of randomness.
 import type { TakeShots } from '@/server/edit/shots';
@@ -22,6 +23,7 @@ import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
 import cutFilm from './boards/cut-the-lighthouse.json';
 import { trimSampleShots } from './trim';
 import { gapsSampleShots } from './framegaps';
+import { INBOX_SAMPLE, inboxLanded } from './takesinbox-takes';
 
 interface FixtureClip { id: string; src: string; in: number; out: number; at: number; takeRef?: { scene: string; take: string } }
 interface FixtureCut { current: { tracks: { id: string; kind: string; clips: FixtureClip[] }[] }; sourceSeconds?: Record<string, number> }
@@ -124,7 +126,7 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
     return { seconds, cuts };
   };
   const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const, made: LATE,
-    variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00' } };
+    variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00', shots: ['2'] } };
   const twoV = { from: a.src, note: 'Slower, and hold on her face a moment longer.', startedAt: '2026-11-14T10:58:00' };
   const two: TakeShots = landed
     ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', made: LATE + 3600000, variation: twoV }
@@ -142,13 +144,22 @@ const LANDED_SAMPLE = 'sample-left-landed';
 const ownCut = (slug: string): FixtureCut => JSON.parse(JSON.stringify(cutFilm).split('assets/films/the-lighthouse/').join(`assets/films/${slug}/`)) as FixtureCut;
 const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut, [LANDED_SAMPLE]: ownCut(LANDED_SAMPLE),
   // the 16:9 samples (masters.ts): the same takes, their pictures the 1920x1080 test clip
-  'sample-wide': ownCut('sample-wide'), 'sample-wide-portrait': ownCut('sample-wide-portrait') };
+  'sample-wide': ownCut('sample-wide'), 'sample-wide-portrait': ownCut('sample-wide-portrait'),
+  // the New takes page's sample (fixtures/takesinbox.ts)
+  [INBOX_SAMPLE]: ownCut(INBOX_SAMPLE) };
 const LANDED = Date.UTC(2026, 10, 10, 12);
 const LATER: Record<string, (t: TakeShots) => boolean> = {
   'sample-sound-picks': (t) => t.scene === 'S1' && t.name === 'sample take A',
   [LANDED_SAMPLE]: (t) => ['S1', 'S2', 'S3'].includes(t.scene) && t.name === 'sample take A',
 };
-const madeOf = (film: string, t: TakeShots): TakeShots => (!LATER[film] || t.state === 'making' ? t : { ...t, made: LANDED + (LATER[film](t) ? 10 * 86400000 : 0) });
+// sample-takes-inbox: five takes came back on one morning, each at its own time (fixtures/takesinbox.ts)
+const LATER_AT: Record<string, (t: TakeShots) => number | undefined> = { [INBOX_SAMPLE]: inboxLanded };
+const madeOf = (film: string, t: TakeShots): TakeShots => {
+  if (t.state === 'making') return t;
+  const at = LATER_AT[film];
+  if (at) return { ...t, made: LANDED + (at(t) ?? 0) };
+  return !LATER[film] ? t : { ...t, made: LANDED + (LATER[film](t) ? 10 * 86400000 : 0) };
+};
 const memo = new Map<string, TakeShots[]>();
 // which sample films have their variation being made landed (this server's memory; survives a dev reload)
 const g = globalThis as unknown as { __sampleLanded?: Set<string> };

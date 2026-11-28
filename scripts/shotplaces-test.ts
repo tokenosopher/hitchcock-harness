@@ -192,11 +192,15 @@ ok('FIX-S6c and the storm take find 5, 6, 7 by their prompts; the "-nospot" file
   assert.equal(short(place('S6', '6')), 'FIX-S6c/Take 1');
 });
 
-ok('a take nothing places (FIX-S6: 5 shots, a list of 6, no names in the cut) goes under other takes, with why', () => {
-  const other = scene('S6').other.filter((v) => v.gen === 'FIX-S6');
-  assert.equal(other.length, 5);
-  assert.match(other[0].note!, /could not be matched to places: its shots file lists 6, its prompt 6/);
-  assert.equal(short(place('S6', '1', 1)), 'S6/Take 1');
+ok('FIX-S6: 5 shots for a list of 6 with times (no names in the cut) is matched by time, its third piece holding 3 and 4', () => {
+  // before the one rule all five went under other takes; the times its shots file gives place them in version 1, the
+  // detector's missed cut between 3 and 4 said plainly
+  assert.equal(scene('S6').other.filter((v) => v.gen === 'FIX-S6').length, 0);
+  const v1 = (p: string) => place('S6', p, 1).versions.find((v) => v.gen === 'FIX-S6');
+  assert.deepEqual(['1', '2', '3', '5', '6'].map((p) => v1(p)?.i), [1, 2, 3, 4, 5]);
+  assert.equal(v1('3')!.label, '3–4');
+  assert.match(v1('3')!.note!, /Its shots file says 6 shots, the take was cut into 5: this one holds its shots 3–4/);
+  assert.equal(short(place('S6', '1', 1)), 'FIX-S6/Take 1, S6/Take 1');
 });
 
 ok('the counts: shots made and in the film', () => {

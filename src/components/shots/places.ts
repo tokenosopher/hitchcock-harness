@@ -2,22 +2,31 @@
 // each place with every version made of it, newest first. Pure: from the takes cut into their shots (server/edit/
 // shots.ts), each generation's shot list and prompt (server/films/read/shotlist.ts) and the cut. Nothing is written.
 //
-// How a shot of a take finds its place, in this order:
+// The one rule for which place of its scene a shot stands for: the Shots page, Shot details
+// (useShotPlaces.ts) and the Takes view (edit/pickupRows.ts) all ask this function, and nothing else decides it. How a
+// shot of a take finds its place, in this order:
+//   0. the pick-up's stands record (<G>-stands.json, stands.ts), matched to the shots the take was cut into;
 //   1. a list as long as the shots the take was cut into: its generation's shots file, else its newest prompt's SHOT
 //      headings, else the ids the server already found (the previz take its sent record names);
 //   2. the take's check (check.json) planned fewer cuts than the take has: each planned cut is matched to the nearest
 //      cut found, in order; a planned shot cut in two keeps its longest piece, and the other piece is "a cut the prompt
 //      did not ask for";
+//   2b. a pick-up's shots file of another count, with times in the take: matched by time (FIX-snatch-S10's one-shot
+//      file for a take cut in two: both pieces under its place, said plainly);
 //   3. the cut names the shot ("S6 · FIX-S6b · take 1 · shot 3"): that clip is a version of place 3;
 //   4. otherwise the shot is listed under "other takes of this scene", with why. Nothing is placed by a guess.
-// A shot whose number is not a place of the scene (FIX-close-S6 calls its shot "10"; S6 has 7 places) stands where the
-// cut has it when the cut leaves exactly one place open there, and so does the same shot of the pick-up's other takes;
-// else it goes with the other takes, with why.
+// Then the cut, for a pick-up in the film: where its clip sits among its scene's placed clips. A place said above stands
+// when it fits there; when it does not and the cut leaves places open, the cut's are shown and both are said
+// (`conflict`); a clip nothing placed takes the places open there (FIX-year-S1 take 2 after place 4: 5 and 6). Then
+// another take of the same pick-up stands where it stands.
 // A whole-scene replan (a shots file 1 … N of another length, not a part of an earlier version) is a new version of
 // the scene: the newest version is the scene, the older ones fold under "earlier versions of this scene".
 import type { Timeline, TimelineClip } from '@/server/types';
 import { labelShot, mainTracks } from '@/components/edit/shots';
 import { parseShotId } from '@/components/edit/shotCols';
+import { fitsGap, gapOf, gapWords, matchShots, placeCmp, placesLabel, placeTag, standsOfTake, type Claim, type Inside, type StandsRecord } from './stands';
+
+export { placeCmp, placeTag } from './stands';
 
 export interface PlanShot { id: string; t0?: number; t1?: number }
 /** One generation folder (generations/S6, generations/FIX-S6b): what it plans and how far it went. */
@@ -36,6 +45,8 @@ export interface GenPlan {
   previz?: string;
   /** The pick-up was dropped (its dropped.txt). */
   dropped?: boolean;
+  /** Its stands record (`<G>-stands.json`, stands.ts): which place or places each of its shots stands for. */
+  stands?: StandsRecord;
 }
 /** A take as the server cuts it (edit/shots.ts TakeShots), with its check's planned cuts. */
 export interface TakeIn {
@@ -60,6 +71,15 @@ export interface Made {
   inFilm: boolean;
   /** How its place was known, or why it has none, in words. */
   note?: string;
+  /** Every place it stands for, when more than one (FIX-year-S1 take 2 replaced places 5 and 6 as one clip): it is
+   *  listed under the first. */
+  places?: string[];
+  /** The places as the page names the shot: "5–6"; absent when it is the one place. */
+  label?: string;
+  /** The part of a place it is (an insert, or the start of a place that cuts back to another take). */
+  inside?: Inside;
+  /** The record (or the shots file) and the cut disagree about its place: what each says. The cut's place is shown. */
+  conflict?: string;
 }
 export interface Place {
   id: string;
@@ -92,14 +112,6 @@ export interface ShotsList { scenes: SceneShots[]; made: number; inFilm: number 
 
 // ---------------------------------------------------------------------------------------------------- small parts
 
-/** A shot id as a place: "4", "4a" ("4A" in some files); anything else as written, lowercased. */
-export const placeTag = (raw: string): string => parseShotId(raw)?.tag ?? String(raw).trim().toLowerCase();
-/** Places in order: by number, then letter ("4" before "4a" before "5"). */
-export function placeCmp(a: string, b: string): number {
-  const x = parseShotId(a), y = parseShotId(b);
-  if (!x || !y) return x ? -1 : y ? 1 : a.localeCompare(b);
-  return x.n - y.n || x.tag.localeCompare(y.tag);
-}
 /** The generation folder a take file is in: the folder before `takes/` ("FIX-S6b"). */
 export function genOf(src: string): string {
   const parts = src.split('/');
@@ -148,7 +160,7 @@ export function alignCuts(found: number[], planned: number[], slack = 3): number
 // ---------------------------------------------------------------------------------------------------- the list
 
 interface Version { n: number; gens: string[]; ids: string[]; timing: Map<string, PlanShot>; written?: number; owner: string; added: Map<string, string> }
-interface Entry extends Made { place?: string; version: number; clips: TimelineClip[] }
+interface Entry extends Made { place?: string; version: number; clips: TimelineClip[]; pickup: boolean; how?: string }
 
 export function shotPlaces(input: { scenes: { id: string; title: string; shots?: number }[]; gens: GenPlan[]; takes: TakeIn[]; cut?: Timeline }): ShotsList {
   const { cut } = input;
@@ -202,6 +214,9 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
           ?? newestFirst.find((v) => made(v) && partOf(v)) ?? newestFirst.find(partOf)
           // with no times to compare, fewer shots than the version now is a part of it
           ?? (ids.length < cur.ids.length && !g.plan!.some((p) => p.t0 !== undefined) ? cur : undefined);
+        // a pick-up is never a version of the scene: one with a stands record, or a shots file of under half the scene's
+        // places (FIX-hands-S14 written as 1, 2 for a scene of 6), is a pick-up of those places of the version now
+        if (!into && (g.stands || ids.length * 2 <= cur.ids.length)) into = cur;
         if (!into) {
           const v: Version = { n: versions.length + 1, gens: [g.name], ids, timing: timingOf(g.plan), written: g.written, owner: g.name, added: new Map() };
           versions.push(v); genVersion.set(g.name, v);
@@ -211,7 +226,7 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
       into ??= cur;
       into.gens.push(g.name); genVersion.set(g.name, into);
       // a shot added after another ("4a" after 4) becomes a place of the version; nothing is renumbered
-      for (const id of [...(ids ?? []), ...(g.prompt ?? []).map(placeTag)]) {
+      for (const id of [...(ids ?? []), ...(g.prompt ?? []).map(placeTag), ...(g.stands ? [g.stands.shots, ...Object.values(g.stands.takes ?? {})].flat().flatMap((x) => x.places) : [])]) {
         const p = parseShotId(id);
         if (p && p.tag !== String(p.n) && !into.ids.includes(p.tag) && into.ids.includes(String(p.n))) { into.ids.push(p.tag); into.added.set(p.tag, g.name); }
       }
@@ -233,8 +248,25 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
       const mine = clipsOf(t.src);
       const entry = (s: { i: number; from: number; to: number }, place: string | undefined, note?: string): Entry => {
         const clips = mine.filter((c) => mid(c) >= s.from - 1e-6 && mid(c) < s.to + 1e-6);
-        return { key: `${t.src}#${s.i}@${s.from.toFixed(2)}`, src: t.src, gen, take: label, i: s.i, from: s.from, to: s.to, made: t.made, inFilm: clips.length > 0, clips, place, version: ver.n, ...(note ? { note } : {}) };
+        return { key: `${t.src}#${s.i}@${s.from.toFixed(2)}`, src: t.src, gen, take: label, i: s.i, from: s.from, to: s.to, made: t.made, inFilm: clips.length > 0, clips, place, version: ver.n, pickup: gen !== sid, ...(note ? { note } : {}) };
       };
+      // a claim (stands.ts): its first place is where it is listed, all of them are what it stands for
+      const claimed = (s: { i: number; from: number; to: number }, c: Claim, how: string): Entry => {
+        const e = entry(s, c.places[0], c.note);
+        e.how = how;
+        if (c.places.length > 1) { e.places = c.places; e.label = placesLabel(c.places, ver.ids); }
+        // one listed shot the take was cut in pieces: each piece stands where it does, named "2 · 1/2", "2 · 2/2"
+        if (c.piece) e.label = `${e.label ?? c.places[0]} · ${c.piece.k}/${c.piece.of}`;
+        if (c.inside) e.inside = c.inside;
+        return e;
+      };
+      // 0. the pick-up's stands record, written when it landed: what it stands for, matched to the shots found
+      if (g?.stands) {
+        const dir = takeFolder(t.src).split('/').pop() ?? '';
+        const claims = matchShots(standsOfTake(g.stands, dir), segs);
+        segs.forEach((s, k) => entries.push(claimed(s, claims[k], 'record')));
+        continue;
+      }
       const lists: [string, string[] | undefined][] = [
         ['shots file', g?.plan?.map((p) => placeTag(p.id))],
         ['prompt', g?.prompt?.map(placeTag)],
@@ -263,6 +295,15 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
           }
         }
         continue;
+      }
+      // a pick-up's shots file of another count than the take's shots, with times in the take: matched by time, so a
+      // shot cut in two keeps its place for both pieces (FIX-snatch-S10's one-shot file), never neither
+      if (gen !== sid && g?.plan && g.plan.every((p) => p.t1 !== undefined) && Math.abs((g.plan[0].t0 ?? 0)) < 0.5 && Math.abs(g.plan[g.plan.length - 1].t1! - t.seconds!) < 0.5) {
+        const claims = matchShots(g.plan.map((p) => ({ places: [placeTag(p.id)], t0: p.t0 ?? 0, t1: p.t1 })), segs, 'its shots file');
+        if (claims.some((c) => c.places.length)) {
+          segs.forEach((s, k) => { const e = claimed(s, claims[k], 'shots file'); if (!e.place) e.note = claims[k].note; entries.push(e); });
+          continue;
+        }
       }
       // the cut names its shots: each named clip is a version of that place, the rest of the take is unplaced
       const named = mine.map((c) => ({ c, tag: labelShot(c) })).filter((x): x is { c: TimelineClip; tag: string } => !!x.tag);
@@ -311,9 +352,97 @@ export function shotPlaces(input: { scenes: { id: string; title: string; shots?:
       if (p) { e.place = p; e.note = `Its prompt calls it shot ${said}; another take of ${e.gen} stands in place ${p} in the film, so this one does too.`; }
     }
 
+    // ---- a pick-up's clip in the cut: where it sits among its scene's placed clips. The cut is what the film
+    // is; a place said by the record, the shots file or the prompt stands when it fits there (between the placed clips
+    // before and after it, either included: an insert, a split place, the scene's own shot kept after it), and refines
+    // it; when it does not fit and the cut leaves places open there, the cut's places are shown and the two are told
+    // apart in words. A clip nothing places stands for the places open where it sits, when a placed clip is beside it.
+    const allOf = (e: Entry): string[] => e.places ?? (e.place ? [e.place] : []);
+    const entryOf = (c: TimelineClip) => entries.find((e) => e.clips.includes(c));
+    const placesOfClip = (c: TimelineClip) => { const e = entryOf(c); return e?.place && placesOf(e.version).includes(e.place) ? allOf(e) : undefined; };
+    const setPlaces = (e: Entry, ps: string[]) => {
+      e.place = ps[0];
+      if (ps.length > 1) { e.places = ps; e.label = placesLabel(ps, placesOf(e.version)); } else { delete e.places; delete e.label; }
+    };
+    for (const folder of [...new Set(entries.filter((e) => e.pickup && e.inFilm).map((e) => takeFolder(e.src)))]) {
+      const mineIn = sceneClips.filter((c) => takeFolder(c.src!) === folder);
+      const skip = (c: TimelineClip) => takeFolder(c.src!) === folder;
+      // the take's clips by the gap they sit in: a run of them between the same placed clips shares it
+      const runs: { gap: ReturnType<typeof gapOf>; clips: TimelineClip[] }[] = [];
+      for (const c of mineIn) {
+        const e = entryOf(c);
+        if (!e) continue;
+        const ids = placesOf(e.version);
+        const filled = new Set(entries.filter((x) => x.inFilm && x.version === e.version && takeFolder(x.src) !== folder).flatMap(allOf));
+        const gap = gapOf(sceneClips, sceneClips.indexOf(c), placesOfClip, skip, ids, filled);
+        const last = runs[runs.length - 1];
+        if (last && last.gap.after === gap.after && last.gap.before === gap.before) last.clips.push(c); else runs.push({ gap, clips: [c] });
+      }
+      for (const { gap, clips } of runs) {
+        const es = [...new Set(clips.map(entryOf).filter((e): e is Entry => !!e))];
+        const beside = gap.after !== undefined || gap.before !== undefined;
+        // what the cut alone says: one place each when as many are open as there are shots; for one shot, the run of open
+        // places from the placed clip beside it whose planned length is nearest the clip's (FIX-year-S1 take 2, 5.6 s
+        // after place 4: places 5 and 6, planned 4.6 s, rather than 5 alone, 2.6 s); with no planned times, the open
+        // places when they are two at most, else none
+        const runFor = (e: Entry): string[] | undefined => {
+          const o = gap.open;
+          if (o.length === 1) return o;
+          const timing = versions[e.version - 1].timing;
+          const len = (ps: string[]) => ps.reduce((a, p) => { const t = timing.get(p); return a + (t?.t0 !== undefined && t.t1 !== undefined ? t.t1 - t.t0 : NaN); }, 0);
+          const secs = e.clips.reduce((a, c) => a + (c.out - c.in), 0);
+          const runs = o.map((_, k) => (gap.after !== undefined ? o.slice(0, k + 1) : o.slice(o.length - 1 - k)));
+          if (runs.some((r) => !Number.isFinite(len(r)))) return o.length <= 2 ? o : undefined;
+          return runs.reduce((a, r) => (Math.abs(len(r) - secs) < Math.abs(len(a) - secs) ? r : a));
+        };
+        const byCut = (k: number): string[] | undefined => !beside || !gap.open.length ? undefined
+          : es.length === gap.open.length ? [gap.open[k]] : es.length === 1 ? runFor(es[0]) : undefined;
+        es.forEach((e, k) => {
+          const said = e.place && placesOf(e.version).includes(e.place) ? allOf(e) : [];
+          const cut = byCut(k);
+          if (said.length && fitsGap(gap, said)) {
+            // one shot alone in the gap, said for the first of the places the cut has it replacing: it stands for all of
+            // them (it replaced them as one clip: FIX-year-S1 take 2, its file "5", for 5 and 6)
+            if (es.length === 1 && cut && cut.length > said.length && said.every((p, j) => cut[j] === p)) {
+              setPlaces(e, cut);
+              e.note = `${e.note ? `${e.note} ` : ''}In the cut it sits ${gapWords(gap)}, where places ${placesLabel(cut, placesOf(e.version))} are out of the film: it stands for them.`;
+            }
+            return;
+          }
+          if (said.length) {
+            const from = e.how === 'record' ? 'its stands record' : e.how === 'shots file' || !e.how ? 'its shot list' : e.how;
+            if (cut) {
+              e.conflict = `${cap(from)} says place ${placesLabel(said)}; in the cut it sits ${gapWords(gap)}, so it is shown at ${placesLabel(cut, placesOf(e.version))}.`;
+              setPlaces(e, cut);
+            } else if (e.how === 'record') {
+              e.conflict = `${cap(from)} says place ${placesLabel(said)}; in the cut it sits ${gapWords(gap)}.`;
+            }
+            if (e.conflict) e.note = `${e.note ? `${e.note} ` : ''}${e.conflict}`;
+            return;
+          }
+          if (cut) {
+            setPlaces(e, cut);
+            e.note = `Nothing names its place; in the cut it sits ${gapWords(gap)}, in place of ${cut.length > 1 ? 'places' : 'place'} ${placesLabel(cut, placesOf(e.version))}.`;
+            e.how = 'cut';
+          }
+        });
+      }
+    }
+    // ---- another take of the same pick-up, cut into as many shots, stands where it stands (FIX-year-S1 take 1 beside
+    // take 2, which the film uses): a pick-up's takes are made for the same places
+    for (const e of entries) {
+      if (!e.pickup || (e.place && placesOf(e.version).includes(e.place))) continue;
+      const count = (src: string) => entries.filter((x) => x.src === src).length;
+      const sib = entries.find((x) => x.gen === e.gen && x.src !== e.src && x.i === e.i && x.version === e.version && x.place && placesOf(x.version).includes(x.place) && count(x.src) === count(e.src));
+      if (!sib) continue;
+      setPlaces(e, allOf(sib));
+      if (sib.inside) e.inside = sib.inside;
+      e.note = `Another take of ${e.gen}, ${sib.take.toLowerCase()}, stands for place ${sib.label ?? sib.place}${sib.inFilm ? ' in the film' : ''}, so this one does too.`;
+    }
+
     // ---- assemble
     const newest = (a: Made, b: Made) => (b.made ?? 0) - (a.made ?? 0) || b.take.localeCompare(a.take, undefined, { numeric: true }) || b.gen.localeCompare(a.gen) || a.i - b.i;
-    const strip = (e: Entry): Made => { const { place: _p, version: _v, clips: _c, ...m } = e; void _p; void _v; void _c; return m; };
+    const strip = (e: Entry): Made => { const { place: _p, version: _v, clips: _c, pickup: _k, how: _h, ...m } = e; void _p; void _v; void _c; void _k; void _h; return m; };
     const boardOf = (v: Version, id: string): Place['board'] => {
       const from = [v.added.get(id), v.owner, ...v.gens].filter((x): x is string => !!x);
       for (const n of from) {

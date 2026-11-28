@@ -161,7 +161,9 @@ export async function mockMedia(p: string | null): Promise<Resolved | undefined>
   const sample = path.join(process.cwd(), 'src/fixtures/media/sample-render.mp4');
   // so does a sample take's own full-size file (the FIX-bottle take's 1080p, on every sample film that lists it)
   const take1080 = p === SAMPLE_TAKE_1080 || (!!p && /^assets\/films\/sample-[a-z0-9-]+\/blocks\/[^/]+\/takes\/[^/]+-1080p\.mp4$/.test(p));
-  const file = take1080 ? process.env.MOCK_TAKE_FILE ?? sample : p?.endsWith(`/${masterPath}`) ? process.env.MOCK_MASTER_FILE ?? sample
+  // the New takes page's sample: every take of it plays the small test video, so the pair can be played
+  const inbox = !!p && /^assets\/films\/sample-takes-inbox\/(?:blocks|generations)\/[^\0]+\.mp4$/.test(p) && !p.split('/').includes('..');
+  const file = take1080 || inbox ? process.env.MOCK_TAKE_FILE ?? sample : p?.endsWith(`/${masterPath}`) ? process.env.MOCK_MASTER_FILE ?? sample
     : render ? process.env.MOCK_RENDER_FILE ?? sample
     : own && !own.split('/').includes('..') ? path.join(process.env.MOCK_MEDIA_DIR!, own) : undefined;
   // the 16:9 samples: every picture of theirs, the master too, is the 1920x1080 test clip
