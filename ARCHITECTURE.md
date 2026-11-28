@@ -62,7 +62,7 @@ Browser (Next.js pages)  ⇄  Harness server (Node, this Mac)  ⇄  claude -p   
 
 **New takes** (`src/components/takes/`, `src/server/edit/seenTakes.ts`, `takeDecisions.ts`, `src/server/films/read/landed.ts`). Takes the user has looked at are kept by the server (`harness/takes-seen.json`), so the "new" marks agree on every device; the New takes page lists every take that came back and is not looked at or decided, plays it beside the cut at its place, and keeps Use, Keep for later and Reject in `harness/takes-decided.json`. What is known of a take comes from its card, its README, its spend row and Alma's findings record (`<G>-findings.json`).
 
-**Sound picks heard in the film** (`src/components/feed/hearIt.ts`, `SoundChoice.tsx`, `src/server/edit/hear.ts`). A pick among sound files plays each option on the card, and "In the film" renders the moment of the current cut with each option laid in at its place (a lay file, or the card's own places) into `harness/hear/`, never into the film folder.
+**Sound picks heard in the film** (`src/components/feed/hearIt.ts`, `SoundChoice.tsx`, `src/server/edit/hear.ts`). A pick among sound files plays each option on the card, and "In the film" renders the moment of the current cut with each option laid in at its place (the sound designer's plan for a card of sound tries; else the card's own places or a lay file) into `harness/hear/`, never into the film folder.
 
 **The library** (`src/server/library/store.ts`). Faces, voices, characters and locations saved across films, one folder each with a `meta.json`, copied (never moved) out of the film folders.
 

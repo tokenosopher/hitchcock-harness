@@ -2,6 +2,57 @@
 
 What changed in each version of Hitchcock Harness, newest first.
 
+## 0.4.0 (November 2026)
+
+New pages for the takes and the shots, a film that can be landscape, and a release that offers its texts as options. Every video is now a 480p draft first, with the 1080p the last paid step.
+
+### New
+
+- **The New takes page.** Every take that came back and you have not looked at yet, played beside what the cut has in its place, with Alma's check of it. Use it, keep it for later or reject it, one key each. A take you have seen is no longer marked "new" on any of your devices.
+- **The Shots page.** Every shot of the film, scene by scene, in the order it plays, with every version made of it.
+- **Shot details.** One shot with everything that went into it: the prompt cut into its parts, each picture and clip sent with it (open any of them full screen, unfold a long description) and the previz.
+- **A film can be landscape.** Click 9:16 on the New film form to make it 16:9; Alma can also set 21:9 or square 1:1 in the film's brief. The cut, the renders and the pages take that shape.
+- **Sound picks heard in the film.** On a card of sound tries, each try plays with a waveform, and "In the film" plays the moment of the cut with that try laid in, with play, pause, a seek bar and full screen.
+- **Drag a shot or a whole take** from the Takes view onto the timeline; its picture and sound stay linked.
+- **A speed control** for a clip on the Edit page, and every clip action in its right-click menu.
+- **Bookmarks** on the Edit page: press M to drop one, and [ or ] to jump between them.
+- **Move several clips at once** onto another track.
+- **A sound fade can start from a level or end at one**, not only from or to silence.
+- **Cancel a render**, queued or running, from the Renders tab.
+- **Pick any frame of the final as a platform's cover**, beside the frames Alma offers.
+- **Release texts as options.** Alma writes two or three texts for each part of a platform's post; tap one to put it in the box, then change it as you like.
+- **Reddit in two places**: r/aivideo and r/aivideos, each with its own link box and steps.
+- **The loudness version of the final.** When the final master is rendered, Alma also asks for a copy at -14 LUFS, the loudness social apps expect, and proposes it as the final with both readings.
+- **Clear choice** on a card in Waiting for you takes back a tap, and **Remove** takes an entry off the list unanswered, sent with Done picking.
+- **Option-click anything on any page** to put it in Alma's box, with the cursor there.
+- **Experiments and their write-up.** A take or a redo made on purpose to learn how the tools behave is written down before it is sent, with what it tests and what it costs, and its result after; when the final is made, Alma writes what the film's experiments showed (`studio/templates/experiments.md`).
+
+### Changed
+
+- **Every video is a 480p draft first.** A take, a redo, a pick-up or a test goes out as a 480p draft. The 1080p is the last paid step, once the cut is finished: each draft the cut uses is finalized to 1080p. Higgsfield's upscaler is only for a take that cannot be finalized.
+- **Alma keeps the chat free.** She hands every longer task to a helper agent and answers you at once; a helper may land a take and check it.
+- **What's next** offers no approve while redos are still being made, and a cut is approved on the Edit page. Posting waits for you there once the final is named.
+- **Naming the final** asks Alma for the release texts. The small 480p copy for the phone is made only when you ask for it on the Release page.
+- **A sheet's yes** in Waiting for you is a one-tap choice, one question per sheet, with the picked voice beside the sheet.
+- **The Takes view** lists every pick-up take as a row of its scene, marks a variation that changed only some shots, and shows the playhead over "Other shots".
+- **Where a shot stands** is decided by one rule everywhere: a pick-up's record says which place of its scene each of its shots replaces (the studio's landing tool writes it), and the cut checks it.
+- **The Story page** shows the script's scenes in the order of its headings.
+- **A prop used in several places** is listed once.
+- **A long card subtitle** is drawn as paragraphs and lists, folded.
+- **Blender** runs at most three renders at once.
+- **A take's corrected cuts** (`cuts.json` in its folder) and **a pick-up's record** have templates in `studio/templates/`.
+- **A later fix** in `studio/flow-fixes.md` says where to look.
+
+### Fixed
+
+- Shots of a 25 fps take meet on the frame of a 24 fps cut.
+- A take's size is read from its picture, not its file name.
+- A cut write allows up to a frame of overlap on a track, and a refused write says why.
+- A trim that stops at its neighbour, and a shot that cannot go into the film, say why.
+- The timeline's fit is never wider than its lane, and a long chip wraps inside its message.
+- A start or end image counts as named in what was sent.
+- The Sound page of a sample film no longer says it is missing.
+
 ## 0.3.0 (November 2026)
 
 The film rules move to Film Flow v3.3, and the app follows them.

@@ -21,13 +21,15 @@ Run each once. Run it again only after a fix.
   whose row in `tests/map.mjs` covers a changed file, and every check you changed. When nothing matches, it runs the
   quick tier. `-- --base HEAD` tests only what is not committed yet.
 - **`test:slow`** runs every check, with the slow ones: `render-test` (makes real renders with ffmpeg, about a minute),
-  `files-test`, `ondemand-test` and `alma-drop-test`.
+  `files-test`, `ondemand-test`, `alma-drop-test`, and the ffmpeg checks `cancel-render-test`, `fadefrom-test`,
+  `frame-render-test` and `realres-test`.
 
 The checks run four at a time, the longest first, each with `HARNESS_ALMA_DRYRUN=1`, so none reaches a real Alma.
 `--plan` says what would run and runs nothing. The log goes to a folder under the system's temp folder (`TEST_OUT` to
 choose); the last line names it.
 
-`render-test` needs ffmpeg and the studio's Python: `studio/.venv` (made by `setup.sh`), or `HARNESS_PYTHON`.
+`render-test` needs ffmpeg and the studio's Python: `studio/.venv` (made by `setup.sh`), or `HARNESS_PYTHON`. The
+ffmpeg checks take ffmpeg from the PATH, or from `HARNESS_FFMPEG`.
 
 ## When you add or change a check
 
