@@ -22,6 +22,8 @@ import { makingFor } from '@/components/lib/making';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
+import { voiceRefOf } from '@/components/shell/refItems';
 
 /** A voice option's name: "3" and "option-3" both read "option 3". */
 const opt = (id: string) => (/^\d+$/.test(id) ? `option ${id}` : id.replace('option-', 'option '));
@@ -132,7 +134,7 @@ export function VoicesPage() {
                       const isPick = pick?.candidateId === o.id;
                       const choose = () => { setOpt({ c: c.id, o: o.id }); ui.addChip({ id: `voice:${c.id}`, label: `${c.id} · ${opt(o.id)}`, ref: o.path }); };
                       return (
-                        <div key={o.id} role="button" tabIndex={0} aria-pressed={opt1?.c === c.id && opt1.o === o.id} onClick={choose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } }}
+                        <div key={o.id} {...refData(voiceRefOf(state, c.id, r.id, o.id, opt(o.id), o.path))} role="button" tabIndex={0} aria-pressed={opt1?.c === c.id && opt1.o === o.id} onClick={choose} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(); } }}
                           className={cn('flex cursor-pointer flex-col gap-2 rounded-[9px] border p-3 text-left', isPick ? 'border-ink outline outline-1 outline-offset-2 outline-ink' : 'border-edge bg-well hover:border-sub')}>
                           <span className="text-[13px] font-medium">{capital(opt(o.id))}</span>
                           {r.prediction === o.id && <span className="w-max rounded-[4px] border border-ink px-1.5 text-[10.5px] font-semibold">Alma: this one</span>}

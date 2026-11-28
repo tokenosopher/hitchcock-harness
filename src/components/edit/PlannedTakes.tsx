@@ -73,10 +73,10 @@ export function PlannedTakes({ scene, title, picture, lines, making, hot, onShot
         <span className="flex items-center text-[12px] text-mute">No take yet</span>
         {boards ? shots.map(({ c }) => (
           <button key={c.id} type="button" onClick={() => onShot(c)} aria-label={`${scene} shot ${c.shot}`}
-            className={cn('relative aspect-[9/16] max-h-[96px] cursor-pointer overflow-hidden rounded-[7px] border border-dashed bg-black transition-colors duration-150', hot === c.shot ? 'border-ink' : 'border-edge-strong hover:border-sub')}>
+            className={cn('relative aspect-[9/16] max-h-[96px] [[data-frame=wide]_&]:aspect-[var(--film-aspect)] [[data-frame=wide]_&]:max-h-[64px] cursor-pointer overflow-hidden rounded-[7px] border border-dashed bg-black transition-colors duration-150', hot === c.shot ? 'border-ink' : 'border-edge-strong hover:border-sub')}>
             {c.src && (
               // eslint-disable-next-line @next/next/no-img-element -- the shot's board, a still from /api/media
-              <img alt="" src={mediaUrl(c.src, { w: 160 })} className="absolute inset-0 size-full object-cover opacity-70" loading="lazy" />
+              <img alt="" src={mediaUrl(c.src, { w: 160 })} className="absolute inset-0 size-full object-cover opacity-70 [[data-frame=wide]_&]:object-contain" loading="lazy" />
             )}
           </button>
         )) : (

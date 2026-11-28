@@ -29,6 +29,7 @@ export function proxyLabel(r: RenderState | undefined, version: string, now: num
   if (r.state === 'queued') return `480p of ${r.version} queued`;
   if (r.state === 'running') return `Rendering the 480p of ${r.version} · ${Math.round(r.percent ?? 0)}%`;
   if (r.state === 'failed') return `480p of ${r.version} failed${r.error ? `: ${r.error.slice(0, 80)}` : ''}`;
+  if (r.state === 'cancelled') return `480p of ${r.version} cancelled`;
   // the live job's times, else what the version file recorded when the render landed (renders.proxy)
   const at = r.finishedAt ?? done?.at;
   const secs = r.seconds ?? done?.seconds;
@@ -50,7 +51,7 @@ export function ProxyPill({ store, version, done, edited, onOpen, planned }: { s
   const now = useNow();
   const r0 = useRendersLive(store).proxy;
   const r = planned ? undefined : r0;
-  const none = !r || r.state === 'none' || (r.state === 'done' && !r.path);
+  const none = !r || r.state === 'none' || r.state === 'cancelled' || (r.state === 'done' && !r.path);
   const label = planned ? 'No 480p yet' : proxyLabel(r, version, now, done, edited);
   return (
     <button type="button" onClick={onOpen} title={planned ?? (none ? 'The 480p is made when you ask for it: Renders, under the timeline' : 'Every rendered file is under the timeline, in Renders')} data-proxy-pill data-proxy-state={none ? 'none' : r!.state}

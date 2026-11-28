@@ -14,7 +14,10 @@
 // a plain text box: a chip is its label in the words, drawn as a pill by a copy of the text behind them, and is one
 // piece (the cursor never stops inside it; a deletion that reaches it takes it out whole). Alma receives each chip
 // as a <harness-ref …/> tag in its place (src/lib/refs.ts).
+// Option-click from anywhere takes the cursor to the box with the thing in it; once the message is sent, or
+// on Esc, the cursor goes back where it was (jumpBack.ts), so the timeline's keys work again at once.
 import { usePathname } from 'next/navigation';
+import { flushSync } from 'react-dom';
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useUI, useDraft, useDraftRefs } from '@/components/data/ui';
 import { useThread } from '@/components/data/thread';
@@ -37,6 +40,7 @@ import { allItems, filterItems, type RefItem } from './refItems';
 import { RefList } from './RefList';
 import { RefCard, useHoverCard } from './RefCard';
 import { setPickingMark, usePickOnPage } from './refPicking';
+import { escBack, forgetJump, goBack, noteTyped } from './jumpBack';
 
 export const DEFAULT_PLACEHOLDER = 'Pick, or tell Alma what to change…';
 
@@ -78,7 +82,7 @@ function Backdrop({ parts, at, innerRef }: { parts: DraftPart[]; at?: { start: n
 }
 
 export function Composer({ film, compact }: { film: string; compact?: boolean }) {
-  const { setDraft, setDraftRefs, command, undoDraft, redoDraft, hint, pinned, chips, addChip, removeChips, playhead, composerRef } = useUI();
+  const { setDraft, setDraftRefs, command, focusBox, undoDraft, redoDraft, hint, pinned, chips, addChip, removeChips, playhead, composerRef } = useUI();
   const draft = useDraft();
   const refs = useDraftRefs();
   const { send, stop, workingSince } = useThread();
@@ -182,7 +186,20 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
     window.dispatchEvent(new Event('hh:alma-show'));
   }
 
-  usePickOnPage(composerRef, () => armedNow.current, (r, hadBox) => putIn(r, undefined, hadBox), () => setArmed(false));
+  // From outside the box the thing goes at the end of the words and the cursor after it, now, in the click
+  usePickOnPage(composerRef, () => armedNow.current, (r, hadBox) => {
+    if (hadBox) { putIn(r, undefined, true); return; }
+    const len = plainNow.current.length;
+    flushSync(() => putIn(r, [len, len]));
+    focusBox();
+  }, () => setArmed(false));
+  // a press elsewhere by hand (not an Option-click, which the picking takes first) forgets where to go back to
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const down = (e: PointerEvent) => { if (!(e.target instanceof Node && root.current?.contains(e.target))) forgetJump(); };
+    window.addEventListener('pointerdown', down, { capture: true });
+    return () => window.removeEventListener('pointerdown', down, { capture: true });
+  }, []);
 
   // the @ list: open while the words before the cursor end in "@" and a few letters, unless closed there
   const [closedAt, setClosedAt] = useState<number>();
@@ -257,6 +274,8 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
     // a chip a page keeps ("keep:…", the takes marked for Seedance) goes with every message and stays
     const gone = selected.filter((c) => !c.id.startsWith('keep:')).map((c) => c.id);
     if (gone.length) startTransition(() => removeChips(gone));
+    // came here by Option-click: the cursor goes back (the timeline's keys work again)
+    goBack();
     setJustSent(true);
     clearTimeout(justSentTimer.current);
     justSentTimer.current = setTimeout(() => setJustSent(false), 900);
@@ -286,7 +305,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
 
   const pickButton = (
     <button type="button" data-ref-skip="" aria-pressed={armed} aria-label={armed ? 'Stop picking' : 'Pick a thing on the page to put in the message'}
-      title={armed ? 'Stop picking (Esc)' : `Pick a clip, take, panel, card or character on the page to put in the message (or ${opt}-click it while you write)`}
+      title={armed ? 'Stop picking (Esc)' : `Pick a clip, take, panel, card or character on the page to put in the message (or ${opt}-click it, from anywhere)`}
       onMouseDown={(e) => e.preventDefault()} onClick={() => setArmed((a) => !a)}
       className={cn('flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg transition-[background-color,color,box-shadow] duration-150', armed ? 'bg-raised text-ink shadow-[inset_0_0_0_1px_#a1a1aa]' : 'text-sub hover:bg-raised hover:text-ink')}>
       <IconPick />
@@ -294,7 +313,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
   );
 
   return (
-    <div className="flex flex-col gap-2" data-ref-skip="">
+    <div ref={root} className="flex flex-col gap-2" data-ref-skip="" data-composer-root="">
       {armed && (
         <div role="status" className="flex items-center gap-2 px-0.5 text-[12px] text-ink-3 duration-200 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none">
           <IconPick size={13} />
@@ -342,6 +361,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
               const el = e.currentTarget;
               const out = editParts(parts, el.value, el.selectionEnd ?? el.value.length);
               commit(out.parts, out.caret, el.value);
+              noteTyped();
             }}
             onSelect={(e) => {
               // the cursor never stands inside a chip: moving forward it lands after the chip, back before it; a
@@ -386,6 +406,7 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
               const text = e.clipboardData.getData('text/plain');
               if (!text) return;
               e.preventDefault();
+              noteTyped();
               const el = e.currentTarget;
               const before = el.value;
               const at0 = el.selectionStart ?? before.length;
@@ -419,6 +440,13 @@ export function Composer({ film, compact }: { film: string; compact?: boolean })
                 return;
               }
               if (e.key === 'Escape' && armed) { e.preventDefault(); setArmed(false); return; }
+              // came here by Option-click: Esc goes back (with words typed since, a second Esc; the words stay)
+              if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+                const went = escBack(plain.trim() === '' && !hasRefs);
+                if (went) { e.preventDefault(); e.stopPropagation(); }
+                if (went === 'again') say('Esc again to go back');
+                return;
+              }
               // Command-Z when the box holds exactly what a button just wrote: back to what you had typed before it.
               // Typing after the button is undone by the browser first; once the button's own text is all that is
               // left, the next Command-Z is this one. Shift-Command-Z goes forward again.

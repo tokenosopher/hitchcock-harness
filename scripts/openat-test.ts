@@ -5,7 +5,8 @@
 // in its place, what is not found, what waits for the takes or the options). Also the takes newer than the cut's.
 import assert from 'node:assert/strict';
 import type { Timeline, TimelineClip } from '../src/server/types';
-import { findTake, hasOpenAt, newTakes, parseShotAt, readOpenAt, resolveOpenAt, tryOf, withoutOpenAt, type OpenCtx } from '../src/components/edit/openAt';
+import { isNewTake, notNew, type Looked } from '../src/components/edit/seenTakes';
+import { findTake, freshCount, hasOpenAt, newTakes, parseShotAt, readOpenAt, resolveOpenAt, tryOf, withoutOpenAt, type OpenCtx } from '../src/components/edit/openAt';
 import { cutHref, cutOf, cutWords, takeCutOf } from '../src/components/edit/cutLink';
 import { pageHref } from '../src/components/shell/AlmaText';
 import { shotTimeline, type BySrc, type TakeShots } from '../src/components/edit/shots';
@@ -174,6 +175,30 @@ check('newTakes: per shot of the cut, the takes landed after its own, never look
   assert.ok(!seen.has(s1[0].id) && seen.get(s1[1].id)?.count === 1);
   // takes with no landing time are never new
   assert.equal(newTakes(tl, by, takes.map((t) => ({ ...t, made: undefined })), new Set()).size, 0);
+});
+check('a take looked at: the whole take, on every mark; one landed before the list began is not new', () => {
+  const s1 = tl.tracks[0].clips.filter((c) => c.takeRef?.scene === 'S1');
+  // the pick-up (takes[2]) played once: gone from shot 2's mark, which still counts take 2 behind it
+  const one = newTakes(tl, by, takes, new Set([takes[2].src]));
+  assert.ok(one.get(s1[1].id)?.count === 1 && one.get(s1[1].id)?.srcs.join() === takes[1].src, JSON.stringify(one.get(s1[1].id)));
+  // every take counted, newest first
+  assert.deepEqual(newTakes(tl, by, takes, new Set()).get(s1[1].id)?.srcs, [takes[2].src, takes[1].src]);
+  const l = (since: number, seen: string[] = [], keep: string[] = []): Looked => ({ ready: true, since, seen: new Set(seen), keep: new Set(keep), old: new Set() });
+  const late = Math.max(...takes.map((t) => t.made ?? 0));
+  assert.equal(newTakes(tl, by, takes, new Set(), notNew(l(late))).size, 0, 'all landed before the list began');
+  assert.equal(newTakes(tl, by, takes, new Set(), notNew(l(late, [], [takes[1].src]))).size, 2, 'kept new when it began');
+  const t1 = takes[1];
+  assert.equal(isNewTake(t1, l(0)), true);
+  assert.equal(isNewTake(t1, l(0, [t1.src])), false, 'looked at');
+  assert.equal(isNewTake(t1, { ...l(0), since: null }), false, 'the list not begun: nothing new');
+  assert.equal(isNewTake(t1, { ...l(0), ready: false }), false, 'not answered yet');
+  assert.equal(isNewTake({ ...t1, state: 'waiting' }, l(0)), false, 'not ready');
+  assert.equal(isNewTake({ ...t1, made: undefined }, l(0)), false, 'no landing time');
+});
+check('freshCount: the takes the marks name, each once (What\'s next\'s "n new takes to check")', () => {
+  assert.equal(freshCount(newTakes(tl, by, takes, new Set())), 2);
+  assert.equal(freshCount(new Map([['a', { pick: { src: 'x.mp4' } }], ['b', { pick: { src: 'x.mp4' } }]])), 1);
+  assert.equal(freshCount(undefined), 0);
 });
 
 console.log(`\n${n} passed`);

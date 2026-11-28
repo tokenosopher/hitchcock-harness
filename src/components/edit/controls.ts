@@ -4,6 +4,7 @@
 // whole frames at the film's fps; each edit returns the next Timeline and the note its version carries.
 import type { Timeline, TimelineClip, TimelineTrack, TimelineVersionRef } from '@/server/types';
 import { clipName, findClip, partnerOf, speedOf, toF, type ClipRef, type Edit, type NameOf } from './model';
+import { asFades, defaultFadeLevel, fmtLevel, FADE_DB_MAX, FADE_DB_MIN, SMOOTH_S, smoothOffer } from './fades';
 
 const clone = (tl: Timeline): Timeline => JSON.parse(JSON.stringify(tl)) as Timeline;
 const r6 = (x: number) => Math.round(x * 1e6) / 1e6;
@@ -37,20 +38,72 @@ export function setFlip(tl0: Timeline, r: ClipRef, on: boolean, nameOf?: NameOf)
 
 // ---- a fade on one clip alone (the picture's on the picture, the sound's on the sound)
 
-/** Set a clip's fade in or out (seconds; 0 clears it), on that clip only, kept inside the clip with its other fade. */
+/** Set a clip's fade in or out (seconds; 0 clears it), on that clip only, kept inside the clip with its other fade.
+ *  A new fade on a sound clip at a split starts from (or ends at) the level of the clip beside it (fades.ts
+ *  defaultFadeLevel), so the change between the two is smooth; elsewhere from or to silence, as before. A
+ *  head or tail pair of level points that makes a fade is the fade (fades.ts asFades): it is written as the fields. */
 export function setFade(tl0: Timeline, r: ClipRef, kind: 'fadeIn' | 'fadeOut', sec: number, nameOf?: NameOf): Edit | undefined {
   const f = findClip(tl0, r);
   if (!f || f.track.locked || f.track.kind === 'captions') return undefined;
   const fps = tl0.fps;
-  const other = (kind === 'fadeIn' ? f.clip.fadeOut : f.clip.fadeIn) ?? 0;
-  const v = r6(Math.max(0, Math.min(sec, secs(f.clip) - other)));
-  const cur = f.clip[kind] ?? 0;
+  const sound = f.track.kind === 'audio';
+  const was = sound ? asFades(f.clip).clip : f.clip;
+  const other = (kind === 'fadeIn' ? was.fadeOut : was.fadeIn) ?? 0;
+  const v = r6(Math.max(0, Math.min(sec, secs(was) - other)));
+  const cur = was[kind] ?? 0;
   if (Math.abs(v - cur) < 1e-6) return undefined;
+  const lk = kind === 'fadeIn' ? 'fadeInFrom' : 'fadeOutTo';
   const tl = clone(tl0);
-  const c = findClip(tl, r)!.clip;
-  if (v > 0) c[kind] = v; else delete c[kind];
+  const c = putClip(tl, r, was);
+  if (v > 0) c[kind] = v; else { delete c[kind]; delete c[lk]; }
+  if (sound && v > 0 && cur === 0 && c[lk] === undefined) {
+    const lv = defaultFadeLevel(tl, r.trackId, c, kind);
+    if (lv !== undefined) c[lk] = lv;
+  }
   const what = f.track.kind === 'video' ? 'picture' : 'sound';
-  return { tl, note: `${kind === 'fadeIn' ? 'fade in' : 'fade out'} on the ${what} of ${nameFor(f.clip, nameOf)}: ${v > 0 ? `${toF(v, fps)} f` : 'none'}` };
+  const lvl = v > 0 && c[lk] !== undefined ? ` ${kind === 'fadeIn' ? 'from' : 'to'} ${fmtLevel(c[lk])}` : '';
+  return { tl, note: `${kind === 'fadeIn' ? 'fade in' : 'fade out'} on the ${what} of ${nameFor(f.clip, nameOf)}: ${v > 0 ? `${toF(v, fps)} f` : 'none'}${lvl}` };
+}
+
+/** Puts a copy of `c` in the place of the clip `r` in tl (a clone), and answers it. */
+function putClip(tl: Timeline, r: ClipRef, c: TimelineClip): TimelineClip {
+  const tr = tl.tracks.find((t) => t.id === r.trackId)!;
+  const i = tr.clips.findIndex((x) => x.id === r.clipId);
+  tr.clips[i] = JSON.parse(JSON.stringify(c)) as TimelineClip;
+  return tr.clips[i];
+}
+
+/** Set the level a sound clip's fade in starts from (`fadeIn`) or its fade out ends at: dB, or undefined for
+ *  silence. A clip with no such fade gets one of SMOOTH_S seconds (or what fits). */
+export function setFadeLevel(tl0: Timeline, r: ClipRef, kind: 'fadeIn' | 'fadeOut', db: number | undefined, nameOf?: NameOf): Edit | undefined {
+  const f = findClip(tl0, r);
+  if (!f || f.track.locked || f.track.kind !== 'audio') return undefined;
+  const was = asFades(f.clip).clip;
+  const lk = kind === 'fadeIn' ? 'fadeInFrom' : 'fadeOutTo';
+  const lv = db === undefined ? undefined : Math.round(Math.max(FADE_DB_MIN, Math.min(FADE_DB_MAX, db)) * 10) / 10;
+  const other = (kind === 'fadeIn' ? was.fadeOut : was.fadeIn) ?? 0;
+  const len = (was[kind] ?? 0) > 0 ? was[kind]! : r6(Math.min(SMOOTH_S, secs(was) - other));
+  if (len <= 0) return undefined;
+  if (was[kind] === len && was[lk] === lv && was === f.clip) return undefined;
+  const tl = clone(tl0);
+  const c = putClip(tl, r, was);
+  c[kind] = len;
+  if (lv === undefined) delete c[lk]; else c[lk] = lv;
+  return { tl, note: `${kind === 'fadeIn' ? 'fade in' : 'fade out'} on the sound of ${nameFor(f.clip, nameOf)} ${kind === 'fadeIn' ? 'from' : 'to'} ${fmtLevel(lv)}: ${toF(len, tl0.fps)} f` };
+}
+
+/** "Smooth the change": the selected sound clip follows another at a different level; it fades in from that
+ *  level over SMOOTH_S seconds (fades.ts smoothOffer), so the music rises (or falls) at the split instead of jumping. */
+export function smoothChange(tl0: Timeline, r: ClipRef, nameOf?: NameOf): Edit | undefined {
+  const f = findClip(tl0, r);
+  if (!f) return undefined;
+  const o = smoothOffer(tl0, r.trackId, f.clip);
+  if (!o) return undefined;
+  const tl = clone(tl0);
+  const c = putClip(tl, r, asFades(f.clip).clip);
+  c.fadeIn = o.len;
+  c.fadeInFrom = o.from;
+  return { tl, note: `smoothed the change into ${nameFor(f.clip, nameOf)}: fades in from ${fmtLevel(o.from)} over ${toF(o.len, tl0.fps)} f` };
 }
 
 // ---- dissolves (TimelineClip.dissolve, seconds, on the incoming clip; centred on the join; validateTimeline's

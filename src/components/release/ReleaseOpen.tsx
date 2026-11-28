@@ -1,4 +1,5 @@
 'use client';
+import { aspectStyle } from '@/lib/frame';
 // The Release page (14 Nov 2026). Closed until a final is named (board 14: the masters to name one from, the platforms
 // dimmed below); then the film and where it goes (board 15): the final playing with its companions on the left;
 // "Where it goes" with the Next bar, the platforms by wave with their state, and the facts to confirm. The page writes
@@ -26,6 +27,10 @@ import { useIsPhone } from '@/components/shell/useIsPhone';
 import { PhoneReleaseList } from './PhoneRelease';
 import { NoTexts } from './AskAlma';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
+import { platformRef, finalRef } from './refs';
+import { useCompanionAct, type CompanionAct } from './companionAct';
+import { anyPosted, linkToAdd, placePosts, placesOf } from './places';
 
 type Rel = ReturnType<typeof useRelease>;
 const NUM = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
@@ -64,12 +69,12 @@ export function ClosedRelease({ rel }: { rel: Rel }) {
         <StepIntro step="release" width="full" />
         {rel.view.problems && <p role="alert" className="m-0 text-[12.5px] text-warn">social/release.json does not check out, so nothing can be changed here: {rel.view.problems.slice(0, 2).join(' ')}</p>}
         {masters.length ? (
-          <MasterList masters={masters} media={(r) => filmPath(state, r)} goesOutAs={finalNames(state.film.title).final} editHref={`${base}/edit`}
+          <MasterList aspect={state.film.aspect} masters={masters} media={(r) => filmPath(state, r)} goesOutAs={finalNames(state.film.title).final} editHref={`${base}/edit`}
             onName={async (m) => { const r = await nameFinal(m.path); return r.ok ? undefined : r.error; }} />
         ) : (
           <p className="m-0 rounded-[10px] border border-dashed border-edge px-4 py-3 text-[13px] text-sub">No master yet. Render one on the Edit page (Render master), then name it here.</p>
         )}
-        <p className="m-0 text-[12.5px] text-sub">Naming it also makes the copy without subtitles, the phone copy, the subtitle file and the smaller file for posting. Nothing is spent.</p>
+        <p className="m-0 text-[12.5px] text-sub">Naming it also makes the copy without subtitles, the subtitle file and the smaller file for posting. Nothing is spent.</p>
         <div className="flex flex-col gap-2.5 pt-2 opacity-50" aria-label="Platforms, closed">
           <span className="text-[12px] text-sub">Opens when the final is named</span>
           <div className="flex flex-wrap gap-2">
@@ -147,13 +152,15 @@ function Row({ file, p, now, href }: { file: ReleaseFile; p: Platform; now: Date
   const first = captionOf(file, p.id).split('\n')[0];
   const empty = p.fields.find(unfilled);
   const line = empty ? `${empty.candidates.length} ${empty.candidates.length === 1 ? 'candidate' : 'candidates'} to pick from` : first;
-  const link = p.send.posted?.link;
+  // a platform posted in several places shows each place's link
+  const links = placesOf(p.kind).length ? placePosts(p).flatMap((x) => (x.posted?.link ? [x.posted.link] : [])) : p.send.posted?.link ? [p.send.posted.link] : [];
+  const toAdd = linkToAdd(p);
   // a post without its link says where to add it
   // the tags, the post's link or "Add the link": a line of their own, so a long one never pushes the row wider
-  const extra = st.tags.length > 0 || !!link || (!!p.send.posted && !link);
+  const extra = st.tags.length > 0 || links.length > 0 || toAdd;
   return (
     <div className="relative">
-    <Link href={href} data-platform={p.id} data-row-state={st.state}
+    <Link href={href} data-platform={p.id} data-row-state={st.state} {...refData(platformRef(p))}
       className="group grid grid-cols-[28px_minmax(0,1fr)_auto_14px] items-center gap-x-3 gap-y-0.5 rounded-[10px] border border-edge px-3 py-2.5 text-ink no-underline transition-colors duration-150 hover:border-edge-strong hover:bg-raised/40">
       <Mono kind={p.kind} className={extra ? 'row-span-3 self-start mt-0.5' : 'row-span-2'} />
       <span className="flex min-w-0 items-baseline gap-2.5">
@@ -168,8 +175,8 @@ function Row({ file, p, now, href }: { file: ReleaseFile; p: Platform; now: Date
       {extra && (
         <span data-row-extra className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           {st.tags.map((t) => <TagPill key={t.text} t={t} />)}
-          {link && <span data-link className="min-w-0 max-w-full truncate text-[12px] text-ink-3" title={link}>{link.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-          {p.send.posted && !link && <span data-add-link className="text-[12px] text-ink underline decoration-edge-strong underline-offset-2">Add the link</span>}
+          {links.map((link) => <span key={link} data-link className="min-w-0 max-w-full truncate text-[12px] text-ink-3" title={link}>{link.replace(/^https?:\/\/(www\.)?/, '')}</span>)}
+          {toAdd && <span data-add-link className="text-[12px] text-ink underline decoration-edge-strong underline-offset-2">Add the link</span>}
         </span>
       )}
     </Link>
@@ -229,6 +236,8 @@ export function FactField({ f, file, run }: { f: Fact; file: ReleaseFile; run: R
 function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   const { film, state, base } = useFilmPage();
   const nameFinal = useNameFinal(rel.run, film);
+  // Cancel, Make it, Render it on the companions
+  const comp = useCompanionAct(film, file.final, rel.reload);
   const [change, setChange] = useState(false);
   const [masters, setMasters] = useState<MasterOption[]>();
   useEffect(() => {
@@ -239,7 +248,7 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   }, [change, masters, film]);
   if (!state) return null;
   const final = file.final!;
-  const out = file.platforms.filter((p) => p.send.posted).map((p) => appName(p));
+  const out = file.platforms.filter((p) => anyPosted(p)).map((p) => appName(p));
   const ff = rel.view?.finalFile;
   const newer = cutNewerLine(final.version, rel.view?.cut);
   // the file that goes out (outfile.ts, ASKS 56): said only for a final with a smaller file asked for
@@ -248,8 +257,8 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   const abs = (r: string) => `${state.film.folder}/${r}`;
   return (
     <aside data-final-column className="flex w-[300px] flex-none flex-col gap-3 border-r border-line p-4 @max-[759px]/rel:order-2 @max-[759px]/rel:grid @max-[759px]/rel:w-full @max-[759px]/rel:grid-cols-[112px_minmax(0,1fr)] @max-[759px]/rel:content-start @max-[759px]/rel:gap-x-4 @max-[759px]/rel:border-t @max-[759px]/rel:border-r-0 @max-[759px]/rel:px-4 [&>*]:@max-[759px]/rel:col-start-2">
-      <Media path={filmPath(state, final.path)} w={640} t={8} play fit="cover" className="aspect-[9/16] w-full rounded-[12px] border border-edge bg-black @max-[759px]/rel:col-start-1! @max-[759px]/rel:row-span-5 @max-[759px]/rel:self-start" />
-      <div className="flex items-start gap-2">
+      <Media path={filmPath(state, final.path)} w={640} t={8} play fit="cover" style={aspectStyle(state.film.aspect)} className="aspect-[9/16] w-full rounded-[12px] border border-edge bg-black @max-[759px]/rel:col-start-1! @max-[759px]/rel:row-span-5 @max-[759px]/rel:self-start" />
+      <div className="flex items-start gap-2" {...refData(finalRef(final, filmPath(state, final.path)))}>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <b data-final-name className="break-words text-[13px] font-semibold leading-[1.35]">{final.name}</b>
           <span className="text-[12px] text-sub" data-final-facts>{[clock(ff?.seconds), ff?.width ? `${ff.width} × ${ff.height}` : '', mb(ff?.bytes), ff?.fromBytes && ff.bytes !== undefined ? `from ${mb(ff.fromBytes)}` : ''].filter(Boolean).join(', ')}</span>
@@ -264,14 +273,15 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
       <Reveal open={change && !out.length}>
         <div className="flex flex-col gap-2 pb-1">
           {!masters ? <span className="text-[12px] text-sub">Reading the masters…</span>
-            : <MasterList masters={masters} media={(r) => filmPath(state, r)} goesOutAs={final.name} editHref={`${base}/edit`} current={final.path}
+            : <MasterList aspect={state.film.aspect} masters={masters} media={(r) => filmPath(state, r)} goesOutAs={final.name} editHref={`${base}/edit`} current={final.path}
                 onName={async (m) => { const r = await nameFinal(m.path); if (r.ok) setChange(false); return r.ok ? undefined : r.error; }} />}
         </div>
       </Reveal>
       </div>
       <ul className="m-0 flex list-none flex-col p-0">
-        {(rel.view?.companions ?? []).map((c) => <CompanionRow key={c.key} c={c} abs={abs} />)}
+        {(rel.view?.companions ?? []).map((c) => <CompanionRow key={c.key} c={c} abs={abs} busy={comp.busy === c.key} onAct={comp.act} />)}
       </ul>
+      {comp.said && <span key={comp.said} role="status" data-companion-said className="text-[12px] leading-[1.45] text-sub duration-200 animate-in fade-in-0">{comp.said}</span>}
       {rel.view?.kit && (
         <div data-delivery className="flex items-center gap-2 border-t border-line pt-2.5 text-[12.5px]">
           <IconFile size={13} className="flex-none text-sub" />
@@ -283,15 +293,23 @@ function FinalColumn({ rel, file }: { rel: Rel; file: ReleaseFile }) {
   );
 }
 
-function CompanionRow({ c, abs }: { c: CompanionStatus; abs: (rel: string) => string }) {
+function CompanionRow({ c, abs, busy, onAct }: { c: CompanionStatus; abs: (rel: string) => string; busy?: boolean; onAct?: (key: CompanionStatus['key'], what: CompanionAct) => Promise<void> }) {
   const right = c.state === 'done' || c.state === 'same' ? mb(c.bytes) || (c.bytes ? `${Math.round(c.bytes / 1000)} KB` : '')
-    : c.state === 'running' ? `rendering ${Math.round(c.percent ?? 0)}%` : c.state === 'queued' ? 'waiting to render' : c.state === 'failed' ? 'did not render' : 'not made';
+    : c.state === 'running' ? `rendering ${Math.round(c.percent ?? 0)}%` : c.state === 'queued' ? 'waiting to render' : c.state === 'failed' ? 'did not render' : c.state === 'cancelled' ? 'cancelled' : 'not made';
+  // a quiet button in the place of Copy path: Cancel while it renders, Make it / Render it when it is not made
+  const act: { what: CompanionAct; label: string } | undefined = !onAct || c.key === 'srt' ? undefined
+    : c.state === 'queued' || c.state === 'running' ? { what: 'cancel', label: 'Cancel' } : c.state === 'none' ? { what: 'make', label: 'Make it' } : c.state === 'cancelled' ? { what: 'make', label: 'Render it' } : undefined;
   const small = c.bytes !== undefined && c.bytes < 1e6 ? `${Math.max(1, Math.round(c.bytes / 1000))} KB` : right;
   return (
     <li data-companion={c.key} data-companion-state={c.state} className="flex items-center gap-2 border-b border-line py-1.5 text-[12.5px] last:border-b-0">
       <span className="min-w-0 flex-1 truncate">{c.label}{c.state === 'same' && <span className="text-sub"> · the final itself</span>}</span>
       <span key={c.state} className={cn('flex-none text-[12px] tabular-nums duration-200 animate-in fade-in-0', c.state === 'failed' ? 'text-warn' : 'text-sub')} title={c.error}>{small}</span>
-      {(c.state === 'done' || c.state === 'same') && c.path ? <CopyPath path={abs(c.path)} /> : <span className="w-[92px] flex-none" />}
+      {(c.state === 'done' || c.state === 'same') && c.path ? <CopyPath path={abs(c.path)} />
+        : act ? (
+          <button type="button" key={act.what} disabled={busy} onClick={() => void onAct!(c.key, act.what)} data-companion-act={act.what}
+            title={act.what === 'cancel' ? 'Stops this render; nothing is written. You can ask for it again.' : 'Asks the app’s render queue for it; nothing is spent'}
+            className="inline-flex h-7 w-[92px] flex-none cursor-pointer items-center justify-center rounded-md px-2 text-[12px] text-sub transition-colors duration-150 animate-in fade-in-0 hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-40">{act.label}</button>
+        ) : <span className="w-[92px] flex-none" />}
     </li>
   );
 }

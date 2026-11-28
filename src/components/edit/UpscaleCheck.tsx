@@ -17,7 +17,7 @@ import { useUIActions } from '@/components/data/ui';
 import { liveMarks, markOf, marksLabel, marksText, refreshMarks, shotLabel, type CutTake, type SeedanceMark } from './marks';
 import { lenF, startF } from './model';
 import { sceneOf, shotNo, type BySrc } from './shots';
-import type { FullInfo, Piece } from './fullsize';
+import { hasOwnFull, madeFull, type FullInfo, type Piece } from './fullsize';
 
 type Cut = { takes: CutTake[]; version: string; fps: number };
 
@@ -110,7 +110,8 @@ export function SeedanceMarksLink({ film, seedance, takes, version, fps }: { fil
 }
 
 export interface CheckShot { clip: TimelineClip; from: number; len: number; at: string; scene?: string; n?: number; still: string; kind: Piece['kind']; label: string }
-export interface CheckTake { src: string; name: string; shots: CheckShot[]; own: boolean }
+/** `own`: the take needs no redo (its own full-size file, or full size itself); `full`: made at full size itself. */
+export interface CheckTake { src: string; name: string; shots: CheckShot[]; own: boolean; full?: boolean }
 
 /** The film's shots in film order, each with a still from its full-size picture, grouped by take in the order the
  *  takes first appear. */
@@ -131,7 +132,7 @@ export function checkTakes(tl: Timeline, pieces: Piece[], by: BySrc, names: Map<
   const takes = new Map<string, CheckTake>();
   for (const s of shots) {
     const src = s.clip.src ?? '';
-    if (!takes.has(src)) takes.set(src, { src, name: names.get(src) ?? s.clip.takeRef?.take ?? src.split('/').pop() ?? src, shots: [], own: !!info.takes[src] });
+    if (!takes.has(src)) takes.set(src, { src, name: names.get(src) ?? s.clip.takeRef?.take ?? src.split('/').pop() ?? src, shots: [], own: hasOwnFull(info, src), ...(madeFull(info, src) ? { full: true } : {}) });
     takes.get(src)!.shots.push(s);
   }
   return { shots, takes: [...takes.values()] };
@@ -190,7 +191,7 @@ export function UpscaleCheck({ tl, takes, shots, marks, onToggle, frame, fps, la
                   <span className="truncate font-mono text-[11px] text-mute">{t.src.split('/').pop()}</span>
                 </span>
                 {t.own ? (
-                  <span className="text-[12px] text-sub">Seedance · its own full-size file</span>
+                  <span className="text-[12px] text-sub">{t.full ? '1080p · made at full size' : 'Seedance · its own full-size file'}</span>
                 ) : (
                   <button type="button" role="switch" aria-checked={on} onClick={() => onToggle(t.src)}
                     className={cn('inline-flex h-7 cursor-pointer items-center gap-2 rounded-[14px] border px-2.5 text-[12px] transition-colors duration-200', on ? 'border-warn text-warn' : 'border-edge-strong text-sub hover:text-ink')}>
@@ -204,10 +205,10 @@ export function UpscaleCheck({ tl, takes, shots, marks, onToggle, frame, fps, la
               <div className="flex flex-wrap gap-2">
                 {t.shots.map((s) => (
                   <button key={s.clip.id} type="button" data-shot={s.clip.id} onClick={() => onPlay(s)} title={`${shotName(s)} · ${secs(s.len, fps)} · ${s.kind === 'small' ? '480p · not upscaled' : s.label}`}
-                    className={cn('flex w-[84px] cursor-pointer flex-col gap-1 rounded-[7px] border bg-transparent p-1 text-left transition-colors duration-200',
+                    className={cn('flex w-[84px] [[data-frame=wide]_&]:w-[132px] cursor-pointer flex-col gap-1 rounded-[7px] border bg-transparent p-1 text-left transition-colors duration-200',
                       cur?.clip.id === s.clip.id ? 'border-ink' : on ? 'border-dashed border-warn' : 'border-edge hover:border-sub')}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- a WebP still from /api/media */}
-                    <img alt="" src={s.still} loading="lazy" className="aspect-[9/16] w-full rounded-[4px] bg-black object-cover" />
+                    <img alt="" src={s.still} loading="lazy" className="aspect-[9/16] w-full rounded-[4px] bg-black object-cover [[data-frame=wide]_&]:aspect-[var(--film-aspect)] [[data-frame=wide]_&]:object-contain" />
                     <span className="truncate text-[11px] text-ink">{shotName(s)}</span>
                     <span className={cn('truncate font-mono text-[10px]', s.kind === 'small' ? 'text-warn' : 'text-mute')}>{secs(s.len, fps)} · {s.kind === 'small' ? '480p' : s.label}</span>
                   </button>

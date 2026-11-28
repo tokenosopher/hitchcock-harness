@@ -35,6 +35,10 @@ export function textBlocks(paras: string[]): TextBlock[] {
   return out;
 }
 
+/** A card's line under its title that is more than a line: it has a line break, or runs past about three lines of the
+ *  card. It is then drawn as the card's text. */
+export const longSub = (sub: string): boolean => /\n/.test(sub.trim()) || sub.trim().length > 320;
+
 const SIZE = 13;
 const LEADING = 1.55;
 const LINE = SIZE * LEADING;

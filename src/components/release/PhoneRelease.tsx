@@ -23,6 +23,8 @@ import { useState } from 'react';
 import { PhoneBar, phoneMain } from './PhoneBar';
 import { Mono, StateWords, type useRelease } from './ui';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
+import { platformRef } from './refs';
 
 type Rel = ReturnType<typeof useRelease>;
 
@@ -60,7 +62,7 @@ function PhoneRow({ file, p, now, href, next }: { file: ReleaseFile; p: Platform
   const sub = [`by hand${thread ? `, ${thread}` : ''}`, ...st.tags.map((t) => t.text)];
   const route = st.tags.find((t) => /^By hand, step/.test(t.text)) ? sub.slice(1) : sub;
   return (
-    <Link href={href} data-phone-row={p.id} data-row-state={st.state}
+    <Link href={href} data-phone-row={p.id} {...refData(platformRef(p))} data-row-state={st.state}
       className={cn('flex min-h-[60px] items-center gap-3 rounded-[12px] border px-3 py-2.5 text-ink no-underline transition-colors duration-150 active:bg-raised', next ? 'border-edge-strong bg-panel' : 'border-edge')}>
       <Mono kind={p.kind} className="size-8" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -83,14 +85,14 @@ export function PhonePlatform({ rel, file, p, now, state, base }: { rel: Rel; fi
       <div className="flex flex-col gap-1.5 px-4 pt-3">
         {/* the flow's way back (BackLink.tsx), 44 px on the phone */}
         <BackLink back={{ label: 'Back to Release', href: `${base}/release${qs}` }} phone className="w-fit" />
-        <h1 className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{p.name} by hand</h1>
+        <h1 {...refData(platformRef(p))} className="m-0 text-[22px] font-semibold tracking-[-0.02em]">{p.name} by hand</h1>
         <span className="text-[13px] text-sub">from {p.account}</span>
         <div data-state-line className="pt-1"><StateWords st={st} big className="flex-wrap whitespace-normal" /></div>
       </div>
       <StepIntro step="platform" className="px-4 pt-4" />
       <DockProvider value={dock}>
         {/* the whole text, editable as on the Mac: one box per platform part, full width */}
-        <PlatformText film={rel.view?.film ?? ''} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout="one" phone
+        <PlatformText film={rel.view?.film ?? ''} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout="one" phone finalFile={rel.view?.finalFile}
           look={<LookFold film={rel.view?.film ?? ''} state={state} file={file} p={p} phone />} />
         <PlatformSend rel={rel} file={file} p={p} now={now} final={final} base={base} phone layout="one" />
       </DockProvider>

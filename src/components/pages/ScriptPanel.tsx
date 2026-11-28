@@ -32,6 +32,17 @@ import { IconClock, IconLink, IconLock, IconPen } from './storyIcons';
 import { almaFetch } from '@/components/data/almaOutbox';
 import { markSent } from '@/components/data/choices';
 import { storySent } from '@/components/lib/sent';
+import { refData } from '@/components/lib/refPick';
+import { capWords } from '@/components/lib/refBlock';
+import type { InlineRef } from '@/lib/refs';
+
+/** A spoken line or a direction of the script as a thing for Alma's message box (Option-click): its scene, its number
+ *  among the scene's lines (a direction has none), the speaker and the words shown, of the version on screen. */
+function lineRefOf(scene: string, r: { id: string; kind: string; n?: number; speaker?: string }, words: string, version?: string): InlineRef {
+  const spoken = r.kind === 'line';
+  return { kind: 'line', label: `${scene} · ${spoken ? `line ${r.n}` : 'direction'}`, scene, item: r.id, ...(spoken && r.n !== undefined ? { line: r.n, title: r.speaker } : {}), page: 'story',
+    words: capWords(words), ...(version ? { section: `script ${version}` } : {}) };
+}
 
 /** "v4" → 4; drafts ("Draft 2") sort before the numbered versions of the same day. */
 const order = (v: string) => (/^v(\d+(?:\.\d+)?)/.exec(v) ? 100 + parseFloat(v.slice(1)) : parseFloat(/\d+/.exec(v)?.[0] ?? '0'));
@@ -456,7 +467,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits, version }: { st
               <div key={sc.id} className="contents">
               {cardsAt((c) => c.place.before === sc.id)}
               <div data-scene={sc.id} className={cn('border-line px-4 pb-3.5', !lastBlock && 'border-b')}>
-                <button type="button" onClick={() => ui.addChip({ id: `scene:${sc.id}`, label: `${sc.id} · ${sc.title}` })}
+                <button type="button" onClick={() => ui.addChip({ id: `scene:${sc.id}`, label: `${sc.id} · ${sc.title}` })} {...refData({ kind: 'scene', label: sc.id, scene: sc.id, title: sc.title, page: 'story' })}
                   className="sticky top-14 z-[1] -mx-4 mb-1.5 flex min-h-11 max-[760px]:top-0 w-[calc(100%+2rem)] cursor-pointer items-baseline gap-2 bg-panel px-4 pb-1.5 pt-3.5 text-left">
                   <span className="font-mono text-[12px] text-sub">{sc.id}</span>
                   <span className="text-[14px] font-semibold">{sc.title}</span>
@@ -524,7 +535,7 @@ export function ScriptPanel({ state, film, tasks, base, onEdits, version }: { st
                     if (readOnly && shown !== current) return <div key={r.id} className="contents"><div className={cn(grid, 'py-1.5 pr-2 text-[13.5px] leading-[1.6]')}>{num}{who}{body}</div>{inside}</div>;
                     return (
                       <div key={r.id} className="contents">
-                      <button type="button" data-row={k} data-line={r.kind === 'line' ? r.id : undefined}
+                      <button type="button" data-row={k} data-line={r.kind === 'line' ? r.id : undefined} {...refData(lineRefOf(sc.id, r, text, shown))}
                         aria-label={lockedV ? undefined : `${label(sc.id, r, sc.rows)}${r.kind === 'line' ? `, ${r.speaker}` : ''}: change its words`}
                         onClick={() => (lockedV ? ui.addChip({ id: `line:${r.id}`, label: `${sc.id} · ${r.kind === 'line' ? `line ${r.n}` : 'direction'}`, ref: r.id }) : open(sc.id, i, r))}
                         className={cn(grid, 'group relative cursor-pointer rounded-md py-1.5 pr-9 text-left max-[760px]:min-h-11 text-[13.5px] leading-[1.6] outline-none transition-[background-color,box-shadow] duration-150 hover:bg-raised focus-visible:bg-tile focus-visible:shadow-[0_0_0_2px_#A1A1AA]',

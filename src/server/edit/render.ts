@@ -26,10 +26,12 @@ import { clipLength, CutError, cutFilm, frameOf, isVersion, logWrite, readVersio
 import { parseSrt, type Cue } from '@/components/edit/subs';
 import { baseFor, dissolveJoins, madeWords, picturePieces, pictureMade, videoLayout, type FullBase, type FullInfo, type Join, type Piece, type Placed } from '@/components/edit/fullsize';
 import { shotTimeline } from '@/components/edit/shots';
+import { fadeFilters } from '@/components/edit/fades';
 import type { PictureMade } from '../types';
 import { readFullSize } from './fullsize';
 import { masterAge, masterLogRel, masterNo, masterRel, newestMaster, type MasterAge } from '@/components/edit/masters';
 import { storedShots } from './shots';
+import { adopt, checkCancelled, jobScope, RenderCancelled, stopJob, type JobProcs } from './render-job';
 
 const CAPTION_SCRIPT = path.join(process.cwd(), 'scripts', 'caption-cards.py');
 
@@ -395,8 +397,9 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
         // exactly as before dissolves existed
         chain = [`atrim=start=${f6(c.in)}:end=${f6(c.out)}`, 'asetpts=PTS-STARTPTS', 'aresample=48000', 'aformat=sample_fmts=fltp:channel_layouts=stereo', ...levels(c, c.in), ...atempo(speed), `atrim=end=${f3(len)}`];
         if (c.gain) chain.push(`volume=${c.gain}dB`);
-        if (c.fadeIn) chain.push(`afade=t=in:st=0:d=${f3(c.fadeIn)}`);
-        if (c.fadeOut) chain.push(`afade=t=out:st=${f3(Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        if (c.fadeIn && c.fadeInFrom === undefined) chain.push(`afade=t=in:st=0:d=${f3(c.fadeIn)}`);
+        if (c.fadeOut && c.fadeOutTo === undefined) chain.push(`afade=t=out:st=${f3(Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        chain.push(...fadeFilters(c, 0));
         const ms = Math.round(c.at * 1000);
         if (ms > 0) chain.push(`adelay=${ms}:all=1`);
       } else {
@@ -409,8 +412,9 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
         chain = [`atrim=start=${f6(srcStart)}:end=${f6(c.out + post * speed)}`, 'asetpts=PTS-STARTPTS', 'aresample=48000', 'aformat=sample_fmts=fltp:channel_layouts=stereo', ...levels(c, srcStart), ...atempo(speed),
           ...(silent > 1e-6 ? [`adelay=${Math.round(silent * 48000)}S:all=1`] : []), `apad=whole_dur=${f6(total)}`, `atrim=end=${f6(total)}`];
         if (c.gain) chain.push(`volume=${c.gain}dB`);
-        if (c.fadeIn) chain.push(`afade=t=in:st=${f6(pre)}:d=${f3(c.fadeIn)}`);
-        if (c.fadeOut) chain.push(`afade=t=out:st=${f6(pre + Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        if (c.fadeIn && c.fadeInFrom === undefined) chain.push(`afade=t=in:st=${f6(pre)}:d=${f3(c.fadeIn)}`);
+        if (c.fadeOut && c.fadeOutTo === undefined) chain.push(`afade=t=out:st=${f6(pre + Math.max(0, len - c.fadeOut))}:d=${f3(c.fadeOut)}`);
+        chain.push(...fadeFilters(c, pre));
         if (jin) chain.push(`afade=t=in:st=0:d=${f6(jin.D / fps)}`);
         if (jout) chain.push(`afade=t=out:st=${f6(total - jout.D / fps)}:d=${f6(jout.D / fps)}`);
         const at = Math.round((c.at - pre) * 48000);
@@ -466,7 +470,7 @@ export async function buildGraph(film: FilmTarget, t: Timeline, kind: RenderKind
  *  10 ms blocks, each at the level of the curve at its middle; the curve linear in dB between the points and flat
  *  outside them, written as one sum (no nesting, so a long list stays one short expression per point). `from` is
  *  the source second the stream starts at. Nothing when the clip has no points. */
-function levels(c: TimelineClip, from: number): string[] {
+export function levels(c: Pick<TimelineClip, 'gainPoints'>, from: number): string[] {
   const p = c.gainPoints;
   if (!p?.length) return [];
   const s = `(t+${f6(from + 0.005)})`;
@@ -479,7 +483,7 @@ function levels(c: TimelineClip, from: number): string[] {
 }
 
 /** atempo takes 0.5–2 per stage; chain stages for slower or faster clips. */
-function atempo(speed: number): string[] {
+export function atempo(speed: number): string[] {
   if (Math.abs(speed - 1) < 1e-6) return [];
   const out: string[] = [];
   let s = speed;
@@ -491,8 +495,10 @@ function atempo(speed: number): string[] {
 
 // ---- the queue (one render at a time for the whole server; survives dev reloads on globalThis)
 
-/** `checked`: a 480p refused by the check a new version gets (checkVersion), not by a render that ran. */
-interface Job extends RenderState { film: string; checked?: boolean }
+/** `checked`: a 480p refused by the check a new version gets (checkVersion), not by a render that ran. `procs`: the
+ *  processes it spawned while it runs, and whether it was asked to stop (render-job.ts). `committing`: its files are
+ *  being copied into cut/renders/ (too late to cancel: it ends done in a moment). */
+interface Job extends RenderState { film: string; checked?: boolean; procs?: JobProcs; committing?: boolean }
 interface Queue { jobs: Map<string, Job>; waiting: string[]; running?: string }
 const g = globalThis as unknown as { __cutRenderQueue?: Queue };
 const Q: Queue = (g.__cutRenderQueue ??= { jobs: new Map(), waiting: [] });
@@ -519,8 +525,8 @@ export async function queueRender(slug: string, version: string, kind: RenderKin
   let n = 1;
   if (done.state === 'done') {
     // a master made again: only when the one there is out of date, as the next number beside it
-    // "Try again" on a master made again that failed asks again too
-    const retrying = !!opts.force && live?.state === 'failed' && (masterNo(live.path ?? '')?.n ?? 1) > 1;
+    // "Try again" on a master made again that failed asks again too, and "Render it" on one cancelled
+    const retrying = !!opts.force && (live?.state === 'failed' || live?.state === 'cancelled') && (masterNo(live.path ?? '')?.n ?? 1) > 1;
     if (!((opts.again || retrying) && kind === 'master' && !tag)) return done;
     if ((await masterStaleness(film, version)).state !== 'stale') return done;
     n = (masterNo(done.path ?? '')?.n ?? 1) + 1;
@@ -607,10 +613,51 @@ async function variantFromFiles(film: FilmTarget, version: string, kind: RenderK
 }
 
 const strip = (j: Job): RenderState => {
-  const { film: _film, checked: _checked, ...rest } = j;
-  void _film; void _checked;
+  const { film: _film, checked: _checked, procs: _procs, committing: _committing, ...rest } = j;
+  void _film; void _checked; void _procs; void _committing;
   return rest;
 };
+
+/** What cancelling a render answers: whether it was stopped, its state now, and in words. */
+export interface CancelAnswer { cancelled: boolean; state: RenderState; said: string }
+
+/** Cancels a render, named as POST …/cut/render names it (version, kind, options). Queued: taken
+ *  out of the queue, it never runs. Running: the ffmpeg it spawned (the ChildProcess kept on the job, nothing else) gets
+ *  SIGTERM, then SIGKILL on the same object after a few seconds; its scratch folder (its partial files) is removed as
+ *  after any render, nothing is written into cut/renders/, and the queue moves on. Either way its state is 'cancelled'
+ *  and it can be asked for again like any other. Done, not there, or already over: said plainly, nothing changes. */
+export async function cancelRender(slug: string, version: string, kind: RenderKind, opts: { options?: RenderOptions } = {}): Promise<CancelAnswer> {
+  const film = await cutFilm(slug);
+  const tag = opts.options ? optionsTag(opts.options) || undefined : undefined;
+  const key = keyOf(slug, version, kind, tag);
+  const job = Q.jobs.get(key);
+  const what = `the ${kind === 'proxy' ? '480p' : kind === 'master' && !tag ? 'master' : 'render'} of ${version}${tag ? ` (${tag})` : ''}`;
+  if (!job || (job.state !== 'queued' && job.state !== 'running')) {
+    const files = tag ? await variantFromFiles(film, version, kind, tag) : await fromFiles(film, version, kind);
+    const st = files.state === 'done' || !job ? files : strip(job);
+    const said = st.state === 'done' ? `Nothing to cancel: ${what} is already made.` : st.state === 'cancelled' ? `Nothing to cancel: ${what} was cancelled already.`
+      : st.state === 'failed' ? `Nothing to cancel: ${what} failed and is not running.` : `Nothing to cancel: ${what} is not queued or running.`;
+    return { cancelled: false, state: st, said };
+  }
+  const at = new Date().toISOString();
+  if (job.state === 'queued') {
+    Q.waiting = Q.waiting.filter((k) => k !== key);
+    job.state = 'cancelled';
+    job.finishedAt = at;
+    job.percent = undefined;
+    return { cancelled: true, state: strip(job), said: `Cancelled ${what} before it started.` };
+  }
+  if (job.committing) return { cancelled: false, state: strip(job), said: `Too late to cancel: ${what} is writing its file now and is done in a moment.` };
+  if (job.procs) stopJob(job.procs);
+  else job.procs = { children: new Set(), cancelled: true };
+  // the job ends by itself once its ffmpeg has stopped (run(): its scratch removed, its state 'cancelled')
+  const t0 = Date.now();
+  while (job.state === 'running' && Date.now() - t0 < 15000) await new Promise((r) => setTimeout(r, 100));
+  const st = strip(job);
+  return st.state === 'cancelled' ? { cancelled: true, state: st, said: `Cancelled ${what}; nothing was written into cut/renders.` }
+    : st.state === 'running' ? { cancelled: true, state: st, said: `Stopping ${what}; it is cancelled as soon as its ffmpeg has exited.` }
+    : { cancelled: false, state: st, said: `Too late to cancel: ${what} is ${st.state} already.` };
+}
 
 /** The checks a render makes before it starts: the version reads as a timeline and its files are there and long
  *  enough. A clip already past its file's end in the version this one is based on is not new damage (it renders, its
@@ -747,15 +794,20 @@ async function pump(): Promise<void> {
   const key = Q.waiting.shift();
   if (!key) return;
   const job = Q.jobs.get(key);
-  if (!job) return void pump();
+  // a job cancelled while it waited (cancelRender takes it out of the list; this is the safety net)
+  if (!job || job.state !== 'queued') return void pump();
   Q.running = key;
+  // the processes it spawns are kept on it, for a cancel (render-job.ts)
+  const procs: JobProcs = (job.procs ??= { children: new Set(), cancelled: false });
   try {
-    await run(job);
+    await jobScope.run(procs, () => run(job));
   } catch (e) {
-    job.state = 'failed';
+    job.state = procs.cancelled ? 'cancelled' : 'failed';
     job.error = (e as Error).message.slice(0, 2000);
     job.finishedAt = new Date().toISOString();
   } finally {
+    job.procs = undefined;
+    job.committing = undefined;
     Q.running = undefined;
     void pump();
   }
@@ -805,7 +857,10 @@ async function run(job: Job): Promise<void> {
     logLines.push(`length ${smpte(graph.seconds, t.fps)} (${graph.frames} frames at ${t.fps} fps), ${graph.inputs} inputs`, ...graph.summary.map((s) => `  ${s}`),
       `ffmpeg ${graph.args.map((a) => (/[\s'"]/.test(a) ? JSON.stringify(a) : a)).join(' ')}`, `-- filter_complex_script\n${await fs.readFile(path.join(scratch, 'filter.txt'), 'utf8')}`);
     const err = await ffmpeg(graph.args, graph.seconds, (p) => (job.percent = p));
+    checkCancelled();
     if (err) throw new Error(`ffmpeg failed:\n${err}`);
+    // from here its file is being written: a cancel now is too late (cancelRender says so)
+    job.committing = true;
     await w.copyNew(tmpOut, target, `${graph.frames} frames`);
     const seconds = Math.round((Date.now() - t0) / 100) / 10;
     await recordRender(film, job.version, job.kind, { path: rel, at: new Date().toISOString(), hash: timelineHash(t), seconds, ...(graph.picture ? { picture: graph.picture } : {}) });
@@ -814,9 +869,16 @@ async function run(job: Job): Promise<void> {
     job.seconds = seconds;
     logLines.push(`done in ${seconds} s → ${rel}`);
   } catch (e) {
-    job.state = 'failed';
-    job.error = (e as Error).message.slice(0, 2000);
-    logLines.push(`FAILED: ${job.error}`);
+    if (e instanceof RenderCancelled || (job.procs?.cancelled && !job.committing)) {
+      // stopped on request: nothing was copied into cut/renders/; the scratch folder goes below
+      job.state = 'cancelled';
+      job.error = undefined;
+      logLines.push(`CANCELLED at ${Math.round(job.percent ?? 0)}%: stopped on request; nothing written`);
+    } else {
+      job.state = 'failed';
+      job.error = (e as Error).message.slice(0, 2000);
+      logLines.push(`FAILED: ${job.error}`);
+    }
   } finally {
     job.finishedAt = new Date().toISOString();
     if (!skipped) await appendLog(film, w, job.version, logLines.join('\n') + '\n', n).catch(() => undefined);
@@ -836,6 +898,7 @@ async function runVariant(job: Job, film: FilmTarget, t0: Timeline, scratch: str
   const outs = o.small
     ? await makeSmall(job, film, t0, scratch, logLines)
     : await makeVariant(job, o, film, t0, scratch, logLines, base, (p) => (job.percent = Math.min(95, p)));
+  checkCancelled();
   for (const x of outs) {
     try {
       await fs.access(path.join(film.dir, x.to));
@@ -844,6 +907,9 @@ async function runVariant(job: Job, film: FilmTarget, t0: Timeline, scratch: str
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     }
   }
+  // from here its files are being written: a cancel now is too late (cancelRender says so)
+  checkCancelled();
+  job.committing = true;
   for (const x of outs) await w.copyNew(x.from, path.join(film.dir, x.to), x.what);
   job.outputs = outs.map((x) => ({ path: x.to, what: x.what }));
   job.path = outs[0]?.to;
@@ -988,9 +1054,10 @@ const size = (f: string): Promise<number> => fs.stat(f).then((s) => s.size);
 
 /** A file's first sound stream: its codec, its length, and the MD5 of its packets as they are (no decoding). */
 async function soundOf(file: string, scratch: string, name: string): Promise<{ codec: string; seconds: number; md5: string } | undefined> {
+  checkCancelled();
   const j = await new Promise<string | undefined>((resolve) => {
-    execFile(FFPROBE, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name,duration', '-of', 'json', file], { signal: AbortSignal.timeout(30000) },
-      (err, stdout) => resolve(err ? undefined : String(stdout)));
+    adopt(execFile(FFPROBE, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name,duration', '-of', 'json', file], { signal: AbortSignal.timeout(30000) },
+      (err, stdout) => resolve(err ? undefined : String(stdout))));
   });
   const st = j ? (JSON.parse(j) as { streams?: { codec_name?: string; duration?: string }[] }).streams?.[0] : undefined;
   if (!st?.codec_name) return undefined;
@@ -1019,7 +1086,10 @@ async function ffmpeg(args: string[], seconds: number, onPercent: (p: number) =>
 /** ffmpeg as above, with the end of what it printed (where a filter such as ssim prints its summary). */
 function ffmpegRun(args: string[], seconds: number, onPercent: (p: number) => void): Promise<{ error?: string; tail: string }> {
   return new Promise((resolve) => {
+    // a job asked to stop starts nothing more; what it starts is kept on it (render-job.ts)
+    try { checkCancelled(); } catch (e) { resolve({ error: (e as Error).message, tail: '' }); return; }
     const p = spawn(FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    adopt(p);
     let err = '';
     let buf = '';
     p.stdout.on('data', (d: Buffer) => {
@@ -1037,6 +1107,13 @@ function ffmpegRun(args: string[], seconds: number, onPercent: (p: number) => vo
     p.on('error', (e) => resolve({ error: e.message, tail: err }));
     p.on('close', (code) => resolve({ error: code === 0 ? undefined : err || `exit ${code}`, tail: err }));
   });
+}
+
+/** For scripts: the pids of the processes a job has running now, read from the ChildProcess objects kept on it
+ *  (scripts/cancel-render-test.ts checks they exit on a cancel). */
+export function jobChildPids(slug: string, version: string, kind: RenderKind, tag?: string): number[] {
+  const procs = Q.jobs.get(keyOf(slug, version, kind, tag))?.procs;
+  return procs ? [...procs.children].map((p) => p.pid).filter((n): n is number => typeof n === 'number') : [];
 }
 
 /** For scripts: wait until nothing is queued or running. */

@@ -45,7 +45,7 @@ ok('Previz: no previz at all reads as before', !/scene/.test(flowOf(none, []).no
 // Shots when every scene file is written: "n scenes, m shots"
 const sh = clone(base);
 sh.scenes = sh.scenes.slice(0, 2).map((sc, i) => ({ ...sc, sceneFile: `generations/${sc.id}/${sc.id}-scene.md`, shots: 3 + i }));
-ok('Shots: "2 scenes, 7 shots"', flowOf(sh, []).nodes.shots.short === '2 scenes, 7 shots', flowOf(sh, []).nodes.shots.short);
+ok('Shots: "2 scenes planned" (the board adds the shots made from the takes, MainPage.tsx)', flowOf(sh, []).nodes.shots.short === '2 scenes planned', flowOf(sh, []).nodes.shots.short);
 
 // defaultOpen never lands on a step that is not a box
 const fake = (k: string): Flow => {

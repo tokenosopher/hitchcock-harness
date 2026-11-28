@@ -120,8 +120,8 @@ class NotifyHub {
 
   /** userActed for answers to cards and picks (POST …/done, …/answer, …/pick), sent as their page sends them
    *  (lib/sent.ts sentItems; a card of sounds is shown answered by the state at once, so it is not kept aside here). */
-  userAnswered(film: string, answers: { card: string }[], picks: { kind: string; target: string; card?: string }[]): void {
-    const sent = sentItems([...answers.map((a) => ({ label: a.card, answer: { card: a.card } })), ...picks.map((p) => ({ label: p.target, pick: p }))], () => undefined);
+  userAnswered(film: string, answers: { card: string }[], picks: { kind: string; target: string; card?: string }[], approvals: { id: string }[] = [], removals: { key: string }[] = []): void {
+    const sent = sentItems([...answers.map((a) => ({ label: a.card, answer: { card: a.card } })), ...picks.map((p) => ({ label: p.target, pick: p })), ...approvals.map((a) => ({ label: a.id, approve: a })), ...removals.map((r) => ({ label: r.key, remove: r }))], () => undefined);
     this.userActed(film, sent);
   }
 

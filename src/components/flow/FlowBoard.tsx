@@ -7,11 +7,14 @@
 // that shows its step under the board and puts its chip in "Alma sees". A box with a live sub-agent shimmers and
 // names the agent in its line. On the phone the flow folds behind a one-line summary and the rows stack; a press on a
 // step folds it again (sliding up) as the step opens, so it never has to be closed by hand.
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PEOPLE, PLACES, type Flow, type FlowNode, type NodeState } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
-import { IconCheck } from '@/components/shell/icons';
+import { IconCheck, IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
+import { refData } from '@/components/lib/refPick';
+import { stageRefOf } from '@/components/shell/refItems';
 
 /** The four marks of the drawn key: done, yours to look at, being made, not yet. */
 export type Glyph = 'done' | 'now' | 'run' | 'todo';
@@ -52,25 +55,33 @@ export interface BoardLines {
   nextG?: Glyph;
   /** Release's line and mark: "0 of 6 posted", dashed until it is reachable. */
   release?: { line: string; g: Glyph };
+  /** The takes that came back and wait to be looked at: "5 new takes", a link to the New takes page. */
+  takes?: { words: string; href: string };
 }
 
-interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; secondG?: Glyph; className?: string }
+/** `page`: the step opens a page of its own (a chevron, as the Shots box is drawn); its line may then take two lines. */
+interface BoxProps { n: FlowNode; on: boolean; tick: number; onOpen: (k: FlowKey) => void; name?: string; short?: string; g?: Glyph; gate?: boolean; second?: string; secondG?: Glyph; className?: string; page?: boolean }
 
-function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, secondG = 'now', className }: BoxProps) {
+function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(n.state), gate, second, secondG = 'now', className, page }: BoxProps) {
   const line = lineOf(n, short, tick);
   const todo = g === 'todo';
   const liveNow = n.aims.some((a) => a.task.state === 'running');
   return (
     <button type="button" onClick={() => onOpen(n.key)} aria-pressed={on} aria-label={gate ? `Gate, your picks, ${line}` : aria(n, name, second ? `${line}; ${second}` : line)} data-box={n.key}
+      {...refData(stageRefOf(n.key, gate ? `Gate · ${name}` : name, second ? `${line}; ${second}` : line))}
       title={n.aims.length ? n.aims.map((a) => a.task.title).join('\n') : n.status || undefined}
       className={cn('box-border flex min-h-[42px] min-w-0 cursor-pointer flex-col justify-center gap-px rounded-lg border px-[9px] pb-1.5 pt-[5px] text-left transition-[background-color,border-color,box-shadow] duration-200 max-[760px]:min-h-11',
         on ? 'border-ink bg-[#141416] shadow-[inset_0_0_0_1px_#FAFAFA]' : todo ? 'border-dashed border-edge-strong bg-transparent hover:bg-panel' : 'border-edge bg-panel hover:bg-raised',
         liveNow && 'node-live', className)}>
       <span className={cn("truncate text-[12.5px] font-medium @max-[640px]/flow:whitespace-normal", todo && !on ? 'text-sub' : 'text-ink')}>
         {gate && <span className="font-normal text-mute @max-[640px]/flow:hidden">Gate · </span>}{name}
+        {page && <IconChevronRight size={11} aria-hidden="true" className="float-right mt-[3px] text-sub" />}
       </span>
-      <span key={line} className={cn('flex min-w-0 items-center gap-[5px] text-[11px]', line.startsWith('Alma ›') ? 'line-in text-ink-3' : cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub'))}>
-        <StepGlyph g={g} /><span className="truncate @max-[640px]/flow:whitespace-normal @max-[640px]/flow:[overflow-wrap:anywhere]">{line}</span>
+      <span key={line} className={cn('flex min-w-0 gap-[5px] text-[11px]', page ? 'items-start [&>svg]:mt-[3px] [&>span:first-child]:mt-[3px]' : 'items-center', line.startsWith('Alma ›') ? 'line-in text-ink-3' : cn('duration-200 animate-in fade-in-0 motion-reduce:animate-none', g === 'now' ? 'text-warn' : second ? 'text-ink-3' : 'text-sub'))}>
+        <StepGlyph g={g} />
+        {/* a page step's words one part a line, as the Shots box is drawn ("10 scenes planned" over "103 made") */}
+        {page ? <span className="flex min-w-0 flex-col">{line.split(' · ').map((x, i) => <span key={i} className="truncate">{x}</span>)}</span>
+          : <span className="truncate @max-[640px]/flow:whitespace-normal @max-[640px]/flow:[overflow-wrap:anywhere]">{line}</span>}
       </span>
       {second && (
         <span key={second} data-box-second className={cn('flex min-w-0 items-center gap-[5px] text-[11px] duration-200 animate-in fade-in-0 motion-reduce:animate-none', secondG === 'now' ? 'text-warn' : 'text-ink-3')}>
@@ -78,6 +89,18 @@ function Box({ n, on, tick, onOpen, name = n.name, short = n.short, g = glyphOf(
         </span>
       )}
     </button>
+  );
+}
+
+/** The takes that came back: the row's free place after Release, drawn as a page step (its chevron), a link
+ *  to the New takes page. Only while some wait to be looked at. */
+function TakesBox({ words, href }: { words: string; href: string }) {
+  return (
+    <Link href={href} data-new-takes aria-label={`New takes: ${words}`}
+      className="box-border flex min-h-[42px] min-w-0 flex-col justify-center gap-px rounded-lg border border-edge bg-panel px-[9px] pb-1.5 pt-[5px] text-left no-underline transition-[background-color,border-color] duration-200 animate-in fade-in-0 hover:bg-raised motion-reduce:animate-none max-[760px]:hidden">
+      <span className="truncate text-[12.5px] font-medium text-ink">New takes<IconChevronRight size={11} aria-hidden="true" className="float-right mt-[3px] text-sub" /></span>
+      <span className="flex min-w-0 items-center gap-[5px] text-[11px] text-warn"><StepGlyph g="now" /><span className="truncate">{words}</span></span>
+    </Link>
   );
 }
 
@@ -109,7 +132,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
   const release = lines.release ?? { line: N.release.short || 'not yet', g: N.release.state === 'done' ? 'done' as const : 'todo' as const };
   // Scenes, Finish and Sound are inside Edit now: their live sub-agents make the Edit box shimmer
   const editNode: FlowNode = { ...N.edit, aims: [...N.edit.aims, ...N.scenes.aims, ...N.finish.aims, ...N.sound.aims] };
-  const box = (k: FlowKey) => <Box key={k} n={N[k]} on={open === k} tick={tick} onOpen={onOpen} short={lines.box?.[k] ?? N[k].short} />;
+  const box = (k: FlowKey) => <Box key={k} n={N[k]} on={open === k} tick={tick} onOpen={onOpen} short={lines.box?.[k] ?? N[k].short} page={k === 'shots'} />;
 
   return (
     <section aria-label="Flow" className="@container/flow border-b border-line px-6 pb-3 pt-2.5 max-[760px]:px-4 max-[760px]:pb-4 max-[760px]:pt-3.5">
@@ -122,6 +145,12 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
         )}
         <svg className={cn('ml-auto flex-none transition-transform duration-200', expanded && 'rotate-180')} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
+      {/* the takes that came back: on the phone, under the folded flow, so they are not folded away with it */}
+      {lines.takes && (
+        <Link href={lines.takes.href} data-new-takes-phone className="mt-2 box-border flex h-11 w-full items-center gap-2 rounded-[10px] border border-edge bg-panel px-3 text-[13px] text-ink no-underline duration-200 animate-in fade-in-0 min-[761px]:hidden">
+          <StepGlyph g="now" /><span className="font-semibold">New takes</span><span className="truncate text-sub">· {lines.takes.words}</span><IconChevronRight size={13} aria-hidden="true" className="ml-auto flex-none text-sub" />
+        </Link>
+      )}
       {/* on the phone it opens and folds by sliding its height and fading, both ways (Reveal's way); folded, it is
           hidden from the keyboard and the screen reader once the slide has run */}
       <div data-flow-fold={expanded ? 'open' : 'folded'}
@@ -132,7 +161,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
         <div className="flex min-h-[22px] flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <span className="lbl">The flow</span>
           {/* the press is 24 px tall around the 22 px chip drawn (QC round two); the row does not move */}
-          <button type="button" onClick={() => onOpen('story')} aria-pressed={open === 'story'} aria-label={aria(story, 'Story', story.status)} data-box="story"
+          <button type="button" onClick={() => onOpen('story')} aria-pressed={open === 'story'} aria-label={aria(story, 'Story', story.status)} data-box="story" {...refData(stageRefOf('story', 'Story', story.status))}
             className="group/story -my-px inline-flex h-6 cursor-pointer items-center text-[11.5px] text-ink-3 max-[760px]:my-0 max-[760px]:h-11">
             <span className={cn('inline-flex h-[22px] items-center gap-1.5 rounded-md border px-2 transition-colors duration-200 max-[760px]:h-11',
               open === 'story' ? 'border-ink bg-[#141416]' : 'border-edge bg-transparent group-hover/story:bg-panel')}>
@@ -155,6 +184,7 @@ export function FlowBoard({ flow, open, onOpen: openStep, lines = {} }: { flow: 
           <Box n={N.gate} on={open === 'gate'} tick={tick} onOpen={onOpen} name="Your picks" short={gateLine} g={gateG} gate />
           <Box n={editNode} on={open === 'edit' || open === 'scenes' || open === 'finish' || open === 'sound'} tick={tick} onOpen={onOpen} short={edit.line} g={edit.g} second={lines.next} secondG={lines.nextG} className="col-span-2 max-[760px]:col-span-1" />
           <Box n={N.release} on={open === 'release'} tick={tick} onOpen={onOpen} short={release.line} g={release.g} className="max-[760px]:col-span-2" />
+          {lines.takes && <TakesBox words={lines.takes.words} href={lines.takes.href} />}
         </div>
       </div>
       </div>

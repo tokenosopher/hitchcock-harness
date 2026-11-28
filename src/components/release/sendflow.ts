@@ -5,7 +5,8 @@
 import type { OutFile } from './outfile';
 import type { Platform, ReleaseFile, Step } from './file';
 import { appName, postedParts, type PostedPart } from './derive';
-import { factsOf, type PlatformKind } from './platforms';
+import { factsOf, type Place, type PlatformKind } from './platforms';
+import { anyPosted, placesOf, postIn } from './places';
 
 // ---- the platforms' own web addresses (no brand artwork, plain links)
 
@@ -34,6 +35,9 @@ export function linkProblem(kind: PlatformKind, link: string): string | undefine
 
 /** Where "Open <app>" goes: the platform's own site, the upload page where a plain web address has one. */
 export function appHome(p: Pick<Platform, 'kind' | 'account' | 'name'>): { label: string; href: string } {
+  // a platform posted in several places opens the first; the others open from their own step
+  const first = placesOf(p.kind)[0];
+  if (first) return { label: `Open ${first.name}`, href: first.url };
   const sub = /\br\/([A-Za-z0-9_]+)/.exec(p.account)?.[1];
   const href: Record<PlatformKind, string> = {
     reddit: sub ? `https://www.reddit.com/r/${sub}/submit` : 'https://www.reddit.com/submit',
@@ -74,7 +78,7 @@ export const WAIT_DROPPED = 'Wait until Alma confirms nothing of it can still go
 
 // ---- by hand
 
-export type HandKind = 'save' | 'copy' | 'open' | 'link' | 'check';
+export type HandKind = 'save' | 'copy' | 'open' | 'link' | 'check' | 'again';
 export interface HandStep {
   id: string;
   /** Alma's words for the step. */
@@ -84,6 +88,8 @@ export interface HandStep {
   part?: PostedPart;
   done?: string;
   n: number;
+  /** A platform posted in several places: the place an `open`, `link` or `again` step is for. */
+  place?: Place;
 }
 /** The steps by hand, Alma's `upload.hand` in her order, each read as one of the mechanics the page knows by its id:
  *  `save` (the final, full size), `copy` (the first posted part) or a part's id (`title`, `comment`, …) or
@@ -99,17 +105,52 @@ export function handSteps(file: ReleaseFile, p: Platform): HandStep[] {
     const link = steps.findIndex((s) => s.id === 'link');
     steps.splice(after >= 0 ? after + 1 : link >= 0 ? link : steps.length, 0, { id: 'copy-reply', text: REPLY_STEP });
   }
+  // several places: Alma's steps are the first place's; after its link, each other place gets one step to
+  // post the same there and one for its link, the page's own until ticked (then written into the list, as the reply's)
+  const places = placesOf(p.kind);
+  const placeOf = (id: string) => places.find((x) => x.id === id);
+  if (places.length > 1) {
+    let at = steps.findIndex((s) => s.id === 'link');
+    at = at >= 0 ? at + 1 : steps.length;
+    for (const pl of places.slice(1)) {
+      for (const add of [{ id: `again-${pl.id}`, text: againWords(pl) }, { id: `link-${pl.id}`, text: linkWords(pl) }]) {
+        const was = steps.findIndex((s) => s.id === add.id);
+        if (was >= 0) { at = was + 1; continue; }
+        steps.splice(at, 0, add);
+        at++;
+      }
+    }
+  }
   return steps.map((s: Step, i): HandStep => {
     const pid = partOfStep(s);
-    const kind: HandKind = s.id === 'save' ? 'save' : s.id === 'open' ? 'open' : s.id === 'link' ? 'link' : pid ? 'copy' : 'check';
-    return { id: s.id, text: s.text, kind, part: kind === 'copy' ? parts.find((x) => x.part.id === pid) : undefined, done: s.done, n: i + 1 };
+    const again = s.id.startsWith('again-') ? placeOf(s.id.slice(6)) : undefined;
+    const linkAt = s.id.startsWith('link-') ? placeOf(s.id.slice(5)) : undefined;
+    const kind: HandKind = s.id === 'save' ? 'save' : s.id === 'open' ? 'open' : s.id === 'link' || linkAt ? 'link' : again ? 'again' : pid ? 'copy' : 'check';
+    const place = again ?? linkAt ?? ((kind === 'open' || kind === 'link') && places.length > 1 ? places[0] : undefined);
+    // a link step names its place: the user pastes each post's link in its own box
+    const text = kind === 'link' && place ? linkWords(place) : s.text;
+    return { id: s.id, text, kind, part: kind === 'copy' ? parts.find((x) => x.part.id === pid) : undefined, done: s.done, n: i + 1, ...(place ? { place } : {}) };
   });
+}
+/** The step to post the same in another place. */
+export const againWords = (pl: Place): string => `Post it in ${pl.name} too: the same video, title and first comment`;
+/** A place's link step. */
+export const linkWords = (pl: Place): string => `Paste the ${pl.name} post's link`;
+/** A step done: ticked; a link step once its place (or the platform) is marked posted; a place's own step once that
+ *  place is. */
+export function stepDone(s: HandStep, p: Pick<Platform, 'kind' | 'send'>): boolean {
+  if (s.done) return true;
+  if (s.kind === 'link') return !!postIn(p, s.place?.id);
+  if (s.kind === 'again') return !!postIn(p, s.place?.id);
+  return false;
 }
 /** The reply's own step by hand, when Alma's steps have none for it. */
 export const REPLY_STEP = 'Copy the reply and post it as a reply to your post.';
-/** The step to do now: the first not done (the link step counts as done once the post is marked posted). */
-export function currentHand(steps: HandStep[], posted: boolean): HandStep | undefined {
-  return steps.find((s) => !(s.done || (posted && s.kind === 'link')));
+/** The step to do now: the first not done (the link step counts as done once the post is marked posted; with
+ *  places, once its place is). `p`: the platform, or whether it is posted. */
+export function currentHand(steps: HandStep[], p: boolean | Pick<Platform, 'kind' | 'send'>): HandStep | undefined {
+  if (typeof p === 'boolean') return steps.find((s) => !(s.done || (p && s.kind === 'link')));
+  return steps.find((s) => !stepDone(s, p));
 }
 /** What a copy step says it copies: "the first line, credit and tags together" for a caption made of several fields. */
 export function copyWhat(file: ReleaseFile, p: Platform, part: PostedPart): string {

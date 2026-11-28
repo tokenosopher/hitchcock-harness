@@ -102,7 +102,7 @@ const n6 = with_({ release: { platforms: 6, posted: 0 } });
 ok('6: no final: "Open Renders"', n6.current === 'final' && step(n6, 'final').facts === 'no final yet' && step(n6, 'final').action?.label === 'Open Renders' && step(n6, 'final').action?.do.kind === 'renders', step(n6, 'final'));
 
 // 7. published
-ok('7: two of six', f6.current === 'posted' && step(f6, 'posted').facts === '2 of 6 posted' && step(f6, 'posted').action?.label === 'Open Release' && step(f6, 'posted').row.kind === 'release', step(f6, 'posted'));
+ok('7: two of six', f6.current === 'posted' && step(f6, 'posted').facts === 'Post to every platform · 2 of 6 posted' && step(f6, 'posted').also?.label === 'Done' && step(f6, 'posted').action?.label === 'Open Release' && step(f6, 'posted').row.kind === 'release', step(f6, 'posted'));
 ok('7: the line under the list until every platform is posted', f6.footer === 'The film is done when it is published on every platform.');
 ok('7: no release file: no texts yet', step(with_({ release: undefined }), 'posted').facts === 'no texts yet' && !step(with_({ release: undefined }), 'posted').done);
 ok('7: no platforms yet', step(with_({ release: { final: { version: 'v239' }, platforms: 0, posted: 0 } }), 'posted').facts === 'no texts yet');
@@ -205,6 +205,36 @@ ok('the same content again: "nothing changed since"', step(same, 'sound').facts.
 const here = whatIsLeft({ ...base, cut: 'v1', history: { ...hist, at: 4 }, ticks: { sound: { at: tk.at, cut: 'v1', state: H(1), step: 5 } } });
 ok('the cut still where it was ticked: nothing more said', step(here, 'sound').facts.endsWith('listened through at v1'), step(here, 'sound').facts);
 ok('without the history: the versions are counted, as before', step(whatIsLeft(base), 'sound').facts.endsWith('· 3 changes since'), step(whatIsLeft(base), 'sound').facts);
+
+// no approve while the cut's next version is being made; new takes are checked first; the film page ticks nothing
+const work = { line: '4 pick-ups being made · S1, S4, S5, S6 at boards', go: false };
+const w1 = with_({ approved: undefined, ticks: {}, work });
+ok('work under way: the approve step is current, says the work, no approve and no tick', step(w1, 'approved').current && step(w1, 'approved').facts === work.line && !step(w1, 'approved').action && !step(w1, 'approved').also && step(w1, 'approved').working?.yours === false, step(w1, 'approved'));
+const w1b = with_({ approved: undefined, ticks: {}, work: { ...work, go: true } });
+ok('work under way with a go waiting: still no approve, the step is yours', !step(w1b, 'approved').action && step(w1b, 'approved').working?.yours === true);
+const w1f = with_({ approved: undefined, ticks: {}, work, fresh: 2 });
+ok('work under way wins over new takes already landed', !step(w1f, 'approved').action && step(w1f, 'approved').facts === work.line);
+const w2 = with_({ approved: undefined, ticks: {}, fresh: 4 });
+ok('landed, not looked at: "4 new takes to check", "Go and check", the approve a quiet second way', step(w2, 'approved').facts === '4 new takes to check' && step(w2, 'approved').action?.label === 'Go and check' && step(w2, 'approved').action?.do.kind === 'check' && step(w2, 'approved').also?.do.kind === 'tick' && step(w2, 'approved').also?.label === 'Approve v239', step(w2, 'approved'));
+const w2s = with_({ approved: undefined, ticks: {}, fresh: 1 });
+ok('one new take: "1 new take to check"', step(w2s, 'approved').facts === '1 new take to check');
+const w3 = with_({ approved: undefined, ticks: {} });
+ok('nothing pending: the approve as before', step(w3, 'approved').action?.label === 'Approve v239' && step(w3, 'approved').action?.do.kind === 'tick' && !step(w3, 'approved').working);
+const wd = with_({ work, fresh: 3 });
+ok('an approved cut stays done while redos are made', step(wd, 'approved').done && !step(wd, 'approved').working);
+const b3 = with_({ approved: undefined, ticks: {}, board: true });
+ok('film page: the approve is "Go and check" to the Edit page\'s step, no tick', JSON.stringify(step(b3, 'approved').action) === JSON.stringify({ label: 'Go and check', do: { kind: 'on-edit', step: 'approved' } }) && !step(b3, 'approved').also, step(b3, 'approved').action);
+const b2 = with_({ approved: undefined, ticks: {}, fresh: 4, board: true });
+ok('film page, landed: "Go and check" opens the new takes, no approve beside it', step(b2, 'approved').action?.do.kind === 'check' && !step(b2, 'approved').also);
+const b1 = with_({ approved: undefined, ticks: {}, work, board: true });
+ok('film page, work under way: no button', !step(b1, 'approved').action && !step(b1, 'approved').also);
+const bs = with_({ ticks: {}, sound: { music: 1, effects: 0 }, board: true });
+ok('film page: sound is "Listen on the Edit page"', JSON.stringify(step(bs, 'sound').action) === JSON.stringify({ label: 'Listen on the Edit page', do: { kind: 'on-edit', step: 'sound' } }), step(bs, 'sound').action);
+const bsub = with_({ subs: { lines: 0, srt: 0, unread: 0 }, board: true });
+ok('film page: subtitles keep "Create subtitles", "No subtitles" goes to the Edit page', step(bsub, 'subs').action?.do.kind === 'subs-ask' && step(bsub, 'subs').also?.do.kind === 'on-edit', step(bsub, 'subs'));
+const bt = with_({ approved: undefined, ticks: { ...base.ticks, approved: { at: '2026-11-14T09:00:00Z', cut: 'v238' } }, board: true });
+ok('film page: a ticked step shows done, its take-back is on the Edit page', step(bt, 'approved').done && !step(bt, 'approved').ticked && step(bt, 'sound').done && !step(bt, 'sound').ticked);
+ok('film page: Release stays as it is', JSON.stringify(step(with_({ board: true }), 'posted').action) === JSON.stringify(step(with_({}), 'posted').action));
 
 console.log(bad ? `${bad} of ${n} failed` : `ok · ${n} checks`);
 process.exit(bad ? 1 : 0);

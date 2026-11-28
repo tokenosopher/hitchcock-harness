@@ -10,6 +10,9 @@
 // after every change until then), with their size and the folder's path. Nothing is deleted from here.
 // Only this tab, the pill and the master button follow a running render's percent (useCut.ts RendersStore), so the
 // page and its timeline are not drawn again on each step.
+// A queued or running render has a quiet
+// "Cancel" (DELETE …/cut/render, one tap, no confirm: it is free to ask again); the row then reads "Cancelled" with
+// "Render it".
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RenderInfo, RenderKind, RenderOptions, RenderState, Timeline } from '@/server/types';
 import { fmtDate } from '@/components/lib/format';
@@ -20,7 +23,8 @@ import { baseName } from './renderAsk';
 import { clockLen, renderLists, tookWords, type RenderFile, type RenderRow } from './renderList';
 import { SoundMark } from './RenderPlayer';
 import { useRenderVariants, useRendersLive, type RendersStore } from './useCut';
-import { useNameFinal, useRelease } from '@/components/release/ui';
+import { textsSaid, useNameFinal, useRelease } from '@/components/release/ui';
+import { anyPosted } from '@/components/release/places';
 
 const when = (iso?: string) => {
   if (!iso) return '';
@@ -185,11 +189,14 @@ export function RendersTab({ film, tl, current, edited, seconds, store, recorded
   const rel = useRelease(film, { light: true });
   const nameFinal = useNameFinal(rel.run, film);
   const relFile = rel.view?.file;
-  const out = relFile?.platforms.filter((p) => p.send.posted).map((p) => p.name) ?? [];
+  const out = relFile?.platforms.filter((p) => anyPosted(p)).map((p) => p.name) ?? [];
   const finalLock = out.length ? `${out.join(' and ')} already ${out.length > 1 ? 'have' : 'has'} the final: it cannot change now.` : undefined;
+  // naming the final asks Alma for the platforms' texts when there are none: a quiet line says it went
+  const [sent, setSent] = useState<string>();
   const makeFinal = async (path: string) => {
     const r = await nameFinal(path);
     setSaid(r.ok ? undefined : r.error);
+    setSent(r.ok ? textsSaid(r.texts, r.file.final?.version) : undefined);
   };
 
   /** "Render it": the 480p of the version on screen. The current one is followed by the page's store (the pill and
@@ -216,9 +223,33 @@ export function RendersTab({ film, tl, current, edited, seconds, store, recorded
     refresh();
   };
 
+  /** "Cancel" on a queued or running render: the server stops it (render.ts cancelRender) and answers its state, shown
+   *  at once where the row's state comes from (the page's store, this tab's other 480p, or the variants). */
+  const cancel = async (r: RenderRow) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/films/${film}/cut/render`, { method: 'DELETE', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ version: r.version, kind: r.kind, ...(r.tag && r.retry?.options ? { options: r.retry.options } : {}) }) });
+      const j = (await res.json().catch(() => ({}))) as { cancelled?: boolean; state?: RenderState; said?: string; error?: string };
+      if (!res.ok) { setSaid(j.error ?? `The server answered ${res.status}`); return; }
+      const st = j.state;
+      if (st) {
+        if (r.tag) put(st);
+        else if (!live && r.kind === 'proxy') other.set(st);
+        else store.set((p) => (p[r.kind]?.version === r.version ? { ...p, [r.kind]: st } : p));
+      }
+      setSaid(j.cancelled ? undefined : j.said);
+    } catch {
+      setSaid('The harness server is not answering; nothing was cancelled');
+    } finally {
+      setBusy(false);
+      if (r.tag) refresh();
+    }
+  };
+
   const row = (r: RenderRow) => (
     <Row key={r.key} r={r} playing={!!r.path && r.path === playing} lit={r.state === 'done' && lit.includes(idOf(r))} aspect={`${tl.width} / ${tl.height}`}
-      mediaOf={mediaOf} absOf={absOf} onPlay={onPlay} onRetry={() => void retry(r)} busy={busy} canRetry={!r.tag ? r.kind === 'proxy' || r.version === current : !!r.retry?.options} onAgain={onRenderAgain}
+      mediaOf={mediaOf} absOf={absOf} onPlay={onPlay} onRetry={() => void retry(r)} onCancel={() => void cancel(r)} busy={busy} canRetry={!r.tag ? r.kind === 'proxy' || r.version === current : !!r.retry?.options} onAgain={onRenderAgain}
       finalPath={relFile?.final?.path} finalLock={finalLock} onFinal={rel.view ? makeFinal : undefined} />
   );
 
@@ -229,6 +260,7 @@ export function RendersTab({ film, tl, current, edited, seconds, store, recorded
         Every file rendered from cut {shown}, newest first. Click one to watch it in the player, with its own sound.{fixture ? ' Sample data: every file plays the same test video.' : ''}
       </span>
       {said && <span className="text-[12px] text-bad duration-200 animate-in fade-in-0">{said}</span>}
+      {sent && <span key={sent} role="status" data-texts-sent className="text-[12px] text-sub duration-200 animate-in fade-in-0">{sent}</span>}
       <div ref={list} className="flex flex-col gap-2">
         {no480 && (files || error) && (
           // a quiet row, not a warning: the 480p is made when asked for
@@ -281,9 +313,9 @@ function OldProxies({ n, bytes, path }: { n: number; bytes: number; path: string
   );
 }
 
-function Row({ r, playing, lit, aspect, mediaOf, absOf, onPlay, onRetry, busy, canRetry, onAgain, finalPath, finalLock, onFinal }: {
+function Row({ r, playing, lit, aspect, mediaOf, absOf, onPlay, onRetry, onCancel, busy, canRetry, onAgain, finalPath, finalLock, onFinal }: {
   r: RenderRow; playing: boolean; lit: boolean; aspect: string; mediaOf: (rel: string, o?: { w?: number; t?: number }) => string; absOf: (rel: string) => string;
-  onPlay: (r: RenderRow) => void; onRetry: () => void; busy: boolean; canRetry: boolean; onAgain: () => void;
+  onPlay: (r: RenderRow) => void; onRetry: () => void; onCancel: () => void; busy: boolean; canRetry: boolean; onAgain: () => void;
   /** The final's path (social/release.json), why it cannot change, and naming this master as the final. */
   finalPath?: string; finalLock?: string; onFinal?: (path: string) => Promise<void>;
 }) {
@@ -334,6 +366,8 @@ function Row({ r, playing, lit, aspect, mediaOf, absOf, onPlay, onRetry, busy, c
               <span className="block h-full bg-sub transition-[width] duration-500 ease-out" style={{ width: `${r.state === 'running' ? pct : 0}%` }} />
             </span>
           </span>
+        ) : r.state === 'cancelled' ? (
+          <span className="text-[12px] text-sub duration-200 animate-in fade-in-0" data-row-cancelled>Cancelled</span>
         ) : r.state === 'failed' ? (
           <span className="text-[12px] leading-[1.45] text-bad" data-row-error>Failed: {r.error ?? `the render stopped without saying why (its log is cut/renders/${r.version}.log)`}</span>
         ) : (r.extra || madeLine || r.made || r.earlier || r.stale) && (
@@ -362,13 +396,18 @@ function Row({ r, playing, lit, aspect, mediaOf, absOf, onPlay, onRetry, busy, c
         {r.path && <span className="truncate font-mono text-[10.5px] text-mute" title={r.path}>{baseName(r.path)}</span>}
       </span>
       <span className="flex flex-none items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-        {r.state === 'failed' && (
+        {(r.state === 'running' || r.state === 'queued') && (
+          // quiet, one tap, no confirm: a cancelled render is asked for again with "Render it"
+          <button type="button" disabled={busy} onClick={onCancel} data-render-cancel title="Stops this render; nothing is written. Render it asks for it again."
+            className={cn(link, 'duration-200 animate-in fade-in-0 disabled:cursor-not-allowed disabled:opacity-40')}>Cancel</button>
+        )}
+        {(r.state === 'failed' || r.state === 'cancelled') && (
           <button type="button" disabled={busy || !canRetry} onClick={onRetry} title={canRetry ? undefined : 'Only the current version’s master is rendered from here'} data-render-retry
-            className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-edge-strong px-2.5 text-[12px] text-ink transition-colors duration-150 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40">Try again</button>
+            className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-edge-strong px-2.5 text-[12px] text-ink transition-colors duration-200 animate-in fade-in-0 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40">{r.state === 'cancelled' ? 'Render it' : 'Try again'}</button>
         )}
         {wholeMaster && isFinal && <span data-render-final className="px-2 text-[12px] text-ink-3 duration-200 animate-in fade-in-0">The final</span>}
         {wholeMaster && !isFinal && onFinal && (
-          <button type="button" disabled={naming || !!finalLock} title={finalLock ?? 'Every platform gets this file. Its copy without subtitles, the 480p preview and the subtitle file are made too; nothing is spent.'} data-make-final
+          <button type="button" disabled={naming || !!finalLock} title={finalLock ?? 'Every platform gets this file. Its copy without subtitles, the smaller file for posting and the subtitle file are made too; nothing is spent.'} data-make-final
             onClick={async () => { setNaming(true); await onFinal(r.path!); setNaming(false); }}
             className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-edge-strong px-2.5 text-[12px] text-ink transition-colors duration-200 animate-in fade-in-0 hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40">Make this the final</button>
         )}

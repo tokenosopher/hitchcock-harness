@@ -9,14 +9,16 @@
 // each pick. "Hear it in the cut" opens the Edit page with the try in question in the sound's place, the playhead a
 // second before it.
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FeedCard, FeedSound } from '@/server/types';
-import { PlayButton, PlayLine } from '@/components/media/Sound';
-import { choose, useChoices } from '@/components/data/choices';
+import { choose, unchoose, useChoices } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
+import { Reveal } from '@/components/shell/Reveal';
 import type { PickBody } from '@/components/library/data';
 import { cn } from '@/lib/utils';
 import { kindWord, placeLine, stripOf, tryLabel } from './soundPick';
 import { CutButton } from './CutButton';
+import { FilmButton, HearInFilm, RingPlay, useHearData, Wave, type HearData, type HearHandle } from './SoundChoice';
 
 type ToRepo = (rel: string) => string;
 
@@ -32,7 +34,7 @@ function Strip({ s }: { s: FeedSound }) {
   );
 }
 
-function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: FeedCard; s: FeedSound; toRepo: ToRepo; from: string; open: boolean }) {
+function SoundRow({ film, card, s, toRepo, from, open, data }: { film: string; card: FeedCard; s: FeedSound; toRepo: ToRepo; from: string; open: boolean; data?: HearData }) {
   const cid = `pick:sfx:${s.name}`;
   const mine = useChoices(film).find((c) => c.id === cid);
   const sel = mine?.pick?.candidate;
@@ -42,8 +44,17 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
     const body: PickBody = { kind: 'sfx', target: s.name, candidate, ...(s.prediction ? { prediction: String(s.prediction) } : {}), ...(words.trim() ? { note: words.trim() } : {}), card: card.key, from };
     choose(film, { id: cid, label: `${scene ? `${scene} · ` : ''}${s.name} · ${candidate === 'none' ? 'none of these' : `try ${candidate}`}`, pick: body });
   };
+  // the chosen try tapped again is cleared, as "Clear choice" does; the note goes with it
+  const clear = () => { setNote(''); unchoose(film, cid); };
+  const tap = (candidate: string) => (sel === candidate ? clear() : set(candidate));
+  // the last choice, kept while its line fades out after a clear
+  const [lastSel, setLastSel] = useState(sel);
+  if (sel && sel !== lastSel) setLastSel(sel);
   const answered = s.answer ?? (s.picked && !open ? { option: String(s.picked.n), note: s.picked.note } : undefined);
   const eff = s.effect;
+  // heard in the film at its place in the plan
+  const moment = card.hear?.moments.find((x) => x.id === s.name);
+  const hearRef = useRef<HearHandle>(null);
   return (
     <div data-sound={s.name} className="flex min-w-0 flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -68,10 +79,10 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
           const on = sel === String(t.n);
           const kept = answered?.option === String(t.n);
           return (
-            <div key={t.n} data-try={t.n} className={cn('flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on || kept ? 'border-sub bg-raised' : 'border-edge')}>
-              {t.file ? <PlayButton path={toRepo(t.file)} label={`${s.name} try ${t.n}`} className="mt-0.5" /> : <span className="size-8 flex-none" />}
+            <div key={t.n} data-try={t.n} className={cn('flex min-w-0 items-center gap-2.5 rounded-lg border py-1.5 pl-1.5 pr-2 transition-colors duration-200', on || kept ? 'border-sub bg-raised' : 'border-edge')}>
+              {t.file ? <RingPlay path={toRepo(t.file)} label={`${s.name} try ${t.n}`} /> : <span className="size-11 flex-none" />}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <button type="button" role="radio" aria-checked={on} disabled={!open || !!answered} onClick={() => set(String(t.n))}
+                <button type="button" role="radio" aria-checked={on} disabled={!open || !!answered} onClick={() => tap(String(t.n))}
                   className="flex min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink disabled:cursor-default">
                   {open && !answered && <span aria-hidden="true" className={cn('flex size-3.5 flex-none items-center justify-center rounded-full border', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink" />}</span>}
                   <span className="min-w-0 truncate text-[13px]">{tryLabel(t)}</span>
@@ -79,13 +90,14 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
                   {open && t.n === s.prediction && <span className="flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
                 </button>
                 {t.prompt && <span className={cn('text-[12px] leading-snug text-sub', open && !answered && 'pl-6')} title={t.prompt}><span className="line-clamp-2">{t.prompt}</span></span>}
-                {t.file && <PlayLine path={toRepo(t.file)} idle seconds={t.seconds} className={cn('max-w-[420px]', open && !answered && 'pl-6')} />}
+                {t.file && <Wave path={toRepo(t.file)} label={`${s.name} try ${t.n}`} peaks={data?.peaks[t.file]} seconds={t.seconds ?? data?.seconds[t.file]} className={cn('max-w-[480px]', open && !answered && 'pl-6')} />}
               </div>
+              {moment?.places[String(t.n)] && <FilmButton label={`${s.name} try ${t.n}`} onClick={() => hearRef.current?.play(String(t.n))} />}
             </div>
           );
         })}
         {open && !answered && (
-          <button type="button" role="radio" aria-checked={sel === 'none'} onClick={() => set('none')}
+          <button type="button" role="radio" aria-checked={sel === 'none'} onClick={() => tap('none')}
             className={cn('flex min-w-0 flex-wrap cursor-pointer items-center gap-2.5 rounded-lg border bg-transparent px-3 py-2 text-left text-[13px] text-ink transition-colors duration-200', sel === 'none' ? 'border-sub bg-raised' : 'border-dashed border-edge')}>
             <span aria-hidden="true" className={cn('flex size-3.5 flex-none items-center justify-center rounded-full border', sel === 'none' ? 'border-ink' : 'border-mute')}>{sel === 'none' && <span className="size-1.5 rounded-full bg-ink" />}</span>
             <span className="whitespace-nowrap">None of these</span>
@@ -93,15 +105,22 @@ function SoundRow({ film, card, s, toRepo, from, open }: { film: string; card: F
           </button>
         )}
       </div>
-      {open && !answered && sel && (
-        <div className="flex flex-col gap-1.5 duration-200 animate-in fade-in-0 slide-in-from-top-1">
-          <input value={note} maxLength={500} onChange={(e) => { setNote(e.target.value); set(sel, e.target.value); }}
-            placeholder={sel === 'none' ? 'What should it sound like? (your words for the prompt, optional)' : 'Why this one? (optional, kept with the pick)'}
-            aria-label={sel === 'none' ? `Your words for the next tries of ${s.name}` : `Why try ${sel} of ${s.name}`}
-            className="h-8 w-full max-w-[520px] rounded-lg border border-line bg-panel px-2.5 text-[13px] text-ink placeholder:text-mute" />
-          <span data-chosen className="text-[12px] text-mute">Chosen: {sel === 'none' ? 'none of these' : `try ${sel}`} · goes with Done picking</span>
-        </div>
+      {moment && (
+        <HearInFilm ref={hearRef} film={film} card={card.key} moments={[moment]} data={data} toRepo={toRepo} prediction={s.prediction ? String(s.prediction) : undefined}
+          chosen={sel && sel !== 'none' ? sel : answered?.option} options={s.tries.filter((t) => moment.places[String(t.n)]).map((t) => ({ id: String(t.n), label: `try ${t.n}` }))} />
       )}
+      <Reveal open={open && !answered && !!sel}>
+        <div className="flex flex-col gap-1.5">
+          <input value={note} maxLength={500} onChange={(e) => { setNote(e.target.value); if (sel) set(sel, e.target.value); }}
+            placeholder={lastSel === 'none' ? 'What should it sound like? (your words for the prompt, optional)' : 'Why this one? (optional, kept with the pick)'}
+            aria-label={lastSel === 'none' ? `Your words for the next tries of ${s.name}` : `Why try ${lastSel} of ${s.name}`}
+            className="h-8 w-full max-w-[520px] rounded-lg border border-line bg-panel px-2.5 text-[13px] text-ink placeholder:text-mute" />
+          <span className="flex flex-wrap items-center gap-2">
+            <span data-chosen={sel ? '' : undefined} className="text-[12px] text-mute">Chosen: {lastSel === 'none' ? 'none of these' : `try ${lastSel}`} · goes with Done picking</span>
+            <ClearChoice shown={!!sel} onClear={clear} />
+          </span>
+        </div>
+      </Reveal>
     </div>
   );
 }
@@ -112,10 +131,11 @@ export function SoundPicks({ film, card, toRepo, from, open }: { film: string; c
   const all = useChoices(film);
   const mine = all.filter((c) => c.pick?.kind === 'sfx' && c.pick.card === card.key);
   const left = sounds.filter((s) => !s.answer).length;
+  const data = useHearData(sounds.length ? film : '', card.key);
   if (!sounds.length) return null;
   return (
     <div data-sound-picks className="flex flex-col gap-3">
-      {sounds.map((s) => <SoundRow key={s.name} film={film} card={card} s={s} toRepo={toRepo} from={from} open={open} />)}
+      {sounds.map((s) => <SoundRow key={s.name} film={film} card={card} s={s} toRepo={toRepo} from={from} open={open} data={data} />)}
       {open && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <span className="text-[12.5px] text-sub">{mine.length ? `${mine.length} of ${left} chosen` : `${left === 1 ? 'One sound' : `${left} sounds`} to pick`} · they go with Done picking</span>

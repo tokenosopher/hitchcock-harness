@@ -28,6 +28,7 @@ import { Feed, OtherClips } from '@/components/feed/Feed';
 import { refData } from '@/components/lib/refPick';
 import { shotRefOf, takeRefOf } from '@/components/shell/refItems';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { aspectStyle, isWide } from '@/lib/frame';
 
 const FPS = 24;
 
@@ -102,6 +103,7 @@ export function ScenePage() {
   const { state, error, ui, base, tasks } = useFilmPage();
   const params = useParams<{ scene: string }>();
   const sc = state?.scenes.find((s) => s.id === params.scene);
+  const wide = isWide(state?.film.aspect);
   const inCut = sc ? cutTakeIds(sc, state?.cut) : [];
   const worth = (t: TakeRef): number => (t.verdict === 'good' ? 3 : t.verdict === 'usable' ? 2 : t.verdict === 'redo' ? 0 : 1);
   const landed = sc ? [...sc.takes].filter((t) => t.path).reverse().sort((a, b) => worth(b) - worth(a)) : [];
@@ -212,10 +214,11 @@ export function ScenePage() {
         <QCChip spec={qcSpec('take')} targets={takeCheck(state, sc, misses)} />
       </div>
 
-      <div className="grid grid-cols-[248px_minmax(0,1fr)] max-[1100px]:grid-cols-1">
+      {/* a landscape film: the player across the top, the takes under it */}
+      <div className={cn('grid max-[1100px]:grid-cols-1', wide ? 'grid-cols-1' : 'grid-cols-[248px_minmax(0,1fr)]')}>
         {/* Player */}
-        <div className="flex flex-col gap-3 border-r border-line p-5 max-[1100px]:border-b max-[1100px]:border-r-0">
-          <div className="relative mx-auto flex aspect-[9/16] w-full max-w-[208px] flex-col items-center justify-center gap-1 overflow-hidden rounded-[9px] border border-edge bg-panel">
+        <div className={cn('flex flex-col gap-3 border-line p-5 max-[1100px]:border-b max-[1100px]:border-r-0', wide ? 'border-b' : 'border-r')}>
+          <div style={aspectStyle(state.film.aspect)} className={cn('relative mx-auto flex aspect-[9/16] w-full flex-col', wide ? 'max-w-[560px]' : 'max-w-[208px]', ' items-center justify-center gap-1 overflow-hidden rounded-[9px] border border-edge bg-panel')}>
             {take?.path ? (
               <video key={take.path} ref={videoRef} src={mediaUrl(filmPath(state, take.path))} poster={mediaUrl(filmPath(state, take.path), { w: 640, t: 0.5 })}
                 controls playsInline preload="metadata" className="absolute inset-0 size-full bg-black object-contain"
@@ -382,7 +385,7 @@ export function ScenePage() {
                   <div className="scroll flex gap-1.5 overflow-x-auto pb-1">
                     {frames.map((f) => (
                       <button key={f} type="button" onClick={() => seek(f)} aria-label={`Seek to ${f} s`}
-                        className={cn('relative flex aspect-[9/16] w-[60px] flex-none cursor-pointer items-end justify-center overflow-hidden rounded-[6px] border bg-tile pb-1.5 font-mono text-[10.5px]', Math.abs(pos - f) < 0.05 ? 'border-ink text-ink' : 'border-line text-mute hover:border-sub')}>
+                        style={aspectStyle(state.film.aspect)} className={cn('relative flex aspect-[9/16] flex-none cursor-pointer', wide ? 'w-[96px]' : 'w-[60px]', ' items-end justify-center overflow-hidden rounded-[6px] border bg-tile pb-1.5 font-mono text-[10.5px]', Math.abs(pos - f) < 0.05 ? 'border-ink text-ink' : 'border-line text-mute hover:border-sub')}>
                         {take.path && <Media path={filmPath(state, take.path)} w={160} t={f} missingLabel="" className="absolute inset-0" />}
                         <span className={cn('relative', take.path && 'rounded-[3px] bg-black/60 px-1 text-ink-3')}>{f.toFixed(1)}</span>
                       </button>

@@ -6,14 +6,19 @@
 import { emptyRelease, factIdsIn, type Field, type FieldSnapshot, type Platform, type ReleaseFile, type ReleaseFinal, type ThumbOption, type Thumbnail } from './file';
 import { appName, boxOf, type Box, boxShare, boxText, coverGroup, fillFacts, goCheck, heldWords, lockedVerb, nameList, platformOf, platformStatus, sharedTouch } from './derive';
 import { coverWord } from './platforms';
+import { toMs, USER_DOES, USER_FRAME } from './frames';
 import { handSteps, linkProblem, stoppable, WAIT_DROPPED } from './sendflow';
+import { anyPosted, placeForLink, placesOf, postIn } from './places';
 
 export type ReleaseOp =
   /** Use one of Alma's candidates for a field (on every platform sharing it). */
   | { op: 'pick'; platform: string; field: string; candidate: string }
   /** The user's own text for a field. `only`: unlink it first, so a locked platform sharing it keeps its text.
    *  `tags`: written in the page's Tags box, so the field is marked as tags (it stays in that box whatever its words). */
-  | { op: 'setText'; platform: string; field: string; text: string; only?: boolean; tags?: boolean }
+  | { op: 'setText'; platform: string; field: string; text: string; only?: boolean; tags?: boolean; mine?: boolean }
+  /** The text in the box kept as the option it was edited from: the candidate's text becomes the field's
+   *  text, marked as the user's, on every platform sharing the field; then, with `switchTo`, that candidate is used. */
+  | { op: 'saveOption'; platform: string; field: string; candidate: string; switchTo?: string }
   /** The user's own text for a whole box of several fields (ASKS 57): `part` is the posted part ("caption"), `tags`
    *  its Tags box instead of its text. The first field of the box holds the whole text as the user's own; the box's
    *  other fields become empty own text (an empty field is left out of the posted text), their candidates kept. On
@@ -41,10 +46,15 @@ export type ReleaseOp =
   | { op: 'cancelAsk'; platform: string }
   /** The go, given on Alma's card or the page (the next stage builds the card). */
   | { op: 'go'; platform: string }
-  /** The post's link, pasted. */
-  | { op: 'pasteLink'; platform: string; link: string }
-  /** "I posted it, link later": posted by hand, the link still to come. */
-  | { op: 'postedNoLink'; platform: string }
+  /** The post's link, pasted. A platform posted in several places: `place` is the box it was pasted in;
+   *  the link goes in the place it names (places.ts placeForLink), a link from another place is refused. */
+  | { op: 'pasteLink'; platform: string; link: string; place?: string }
+  /** "I posted it, link later": posted by hand, the link still to come. `place`: in which of its places (default the
+   *  first not posted). */
+  | { op: 'postedNoLink'; platform: string; place?: string }
+  /** A link taken out again, by hand: that place is not posted any more (its box is empty again). `place`:
+   *  which of its places (a platform with one post takes none). */
+  | { op: 'removeLink'; platform: string; place?: string }
   /** One of a note's buttons: its effects applied, the fields before kept for the undo. */
   | { op: 'answer'; platform: string; field: string; note: string; action: string }
   /** Takes back the last answered note. */
@@ -55,12 +65,19 @@ export type ReleaseOp =
   /** `own: true`: this platform keeps its own thumbnail (its picks stay here, the others' do not change it). `own:
    *  false`: it takes the frame the others share again. */
   | { op: 'thumbnailOwn'; platform: string; own: boolean }
+  /** The user's own frame: `at`, its time in the final in seconds (the page sends the frame's start rounded
+   *  up to the millisecond, frames.ts). It becomes the platform's one option marked `by: "user"` (replacing an earlier
+   *  one) and its pick; Alma's options stay as they are. It spreads as a pick does. */
+  | { op: 'pickFrame'; platform: string; at: number }
+  /** "Use for the other platforms too": the frame in use here becomes the pick of every platform with a
+   *  cover frame that is not locked, those keeping their own included, and they all share one cover frame again. */
+  | { op: 'frameToOthers'; platform: string }
   /** Stage 3 (older files only: a post by hand is never scheduled or sent): the user asks Alma to unschedule a
    *  scheduled post, to stop one still going out, or to check on one that is late. Recorded in send.requested (the page says "Unscheduling…"); the words go to Alma as the user's. */
   | { op: 'request'; platform: string; what: 'unschedule' | 'stop' | 'check' };
 
 export type OpName = ReleaseOp['op'];
-export const OP_NAMES: OpName[] = ['pick', 'setText', 'setPartText', 'confirm', 'tick', 'setRoute', 'unlink', 'link', 'nameFinal', 'ask', 'cancelAsk', 'go', 'pasteLink', 'postedNoLink', 'answer', 'undoAnswer', 'pickThumbnail', 'thumbnailOwn', 'request'];
+export const OP_NAMES: OpName[] = ['pick', 'setText', 'saveOption', 'setPartText', 'confirm', 'tick', 'setRoute', 'unlink', 'link', 'nameFinal', 'ask', 'cancelAsk', 'go', 'pasteLink', 'postedNoLink', 'removeLink', 'answer', 'undoAnswer', 'pickThumbnail', 'thumbnailOwn', 'pickFrame', 'frameToOthers', 'request'];
 
 export type OpResult = { ok: true; file: ReleaseFile; said: string } | { ok: false; refused: string };
 
@@ -101,15 +118,24 @@ function unlinkIn(file: ReleaseFile, p: Platform, fid: string): void {
   if (f) delete f.sharedWith;
 }
 
-/** Sets a field's text on every platform of its group. */
-function setGroup(file: ReleaseFile, p: Platform, f: Field, text: string, how: { own?: boolean; pick?: string }): void {
+/** Sets a field's text on every platform of its group. `from`: own text that is an edit of that candidate. */
+function setGroup(file: ReleaseFile, p: Platform, f: Field, text: string, how: { own?: boolean; pick?: string; from?: string }): void {
   for (const q of group(file, p, f)) {
     const g = q.fields.find((x) => x.id === f.id);
     if (!g) continue;
+    keepOwn(g, text, how);
     g.text = text;
     if (how.own) g.own = true; else delete g.own;
     if (how.pick && g.candidates.some((c) => c.id === how.pick)) g.pick = how.pick; else delete g.pick;
   }
+}
+
+/** The user's own words, from no candidate, are kept when something else replaces them (`ownWas`), so the page can
+ *  offer them back as "Your text"; an edit of a candidate (`from`) is not: it is saved to its option or discarded. */
+function keepOwn(g: Field, text: string, how: { own?: boolean; from?: string }): void {
+  if (g.own && !g.from && g.text.trim() && g.text !== text && !(how.own && !how.from)) g.ownWas = g.text;
+  if (how.own && !how.from) delete g.ownWas;
+  if (how.own && how.from && g.candidates.some((c) => c.id === how.from)) g.from = how.from; else delete g.from;
 }
 
 /** Every field of these ids on these platforms and their partners, as they are now (for a note's undo). */
@@ -150,9 +176,37 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (why) return no(why);
       if (op.only && x.f!.sharedWith?.length) unlinkIn(f, x.p, x.f!.id);
       for (const id of factIdsIn(op.text)) if (!f.facts.some((k) => k.id === id)) return no(`{${id}} is not a fact of this release.`);
-      setGroup(f, x.p, x.f!, op.text, { own: true });
+      const from = op.mine ? undefined : (x.f!.pick ?? x.f!.from);
+      setGroup(f, x.p, x.f!, op.text, { own: true, ...(from ? { from } : {}) });
       if (op.tags === true) for (const q of group(f, x.p, x.f!)) { const g = q.fields.find((k) => k.id === x.f!.id); if (g) g.tags = true; }
       return { ok: true, file: f, said: `Wrote their own ${lower(x.f!.label)} for ${names(f, x.p, x.f!)}` };
+    }
+    case 'saveOption': {
+      const x = find(f, op.platform, op.field);
+      if (typeof x === 'string') return no(x);
+      const c = x.f!.candidates.find((k) => k.id === op.candidate);
+      if (!c) return no(`${x.p.name} ${lower(x.f!.label)} has no candidate "${op.candidate}".`);
+      const to = op.switchTo === undefined ? undefined : x.f!.candidates.find((k) => k.id === op.switchTo);
+      if (op.switchTo !== undefined && !to) return no(`${x.p.name} ${lower(x.f!.label)} has no candidate "${op.switchTo}".`);
+      const why = editCheck(f, x.p, x.f!, now);
+      if (why) return no(why);
+      const text = x.f!.text;
+      if (!text.trim()) return no(`The ${lower(x.f!.label)} is empty: there is nothing to keep.`);
+      for (const id of factIdsIn(text)) if (!f.facts.some((k) => k.id === id)) return no(`{${id}} is not a fact of this release.`);
+      // the edit becomes that option, on every platform sharing the field (each keeps its own list of candidates)
+      for (const q of group(f, x.p, x.f!)) {
+        const g = q.fields.find((k) => k.id === x.f!.id);
+        const k = g?.candidates.find((y) => y.id === c.id);
+        if (!g || !k) continue;
+        // a note's button that offered this candidate offers it as it now reads
+        for (const n of g.notes ?? []) for (const a of n.actions) for (const e of a.effect) if (e.kind === 'set' && e.field === g.id && e.text === k.text) e.text = text;
+        k.text = text;
+        k.edited = true;
+      }
+      setGroup(f, x.p, x.f!, to ? to.text : text, { pick: to ? to.id : c.id });
+      return { ok: true, file: f, said: to
+        ? `Kept the changed ${lower(x.f!.label)} as "${c.does}" and used "${to.does}" for ${names(f, x.p, x.f!)}`
+        : `Kept the changed ${lower(x.f!.label)} as "${c.does}" for ${names(f, x.p, x.f!)}` };
     }
     case 'setPartText': {
       const x = find(f, op.platform);
@@ -173,13 +227,18 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (!op.only && (sh.state === 'some' || sh.locked.length)) return no(sh.ask!);
       if (op.only) for (const id of ids) if (x.p.fields.find((k) => k.id === id)?.sharedWith?.length) unlinkIn(f, x.p, id);
       const all = op.only || sh.state !== 'shared' ? [x.p] : [x.p, ...sh.with.map((q) => platformOf(f, q.id)!)];
+      // a box of one field is that field: its text is an edit of the option in use, as with setText
+      const f0 = x.p.fields.find((k) => k.id === ids[0]);
+      const from = ids.length === 1 && !op.back ? (f0?.pick ?? f0?.from) : undefined;
       for (const q of all) ids.forEach((id, i) => {
         const g = q.fields.find((k) => k.id === id);
         if (!g) return;
         const was = op.back?.[id];
         g.text = was ? was.text : i ? '' : op.text;
+        if (!was) keepOwn(g, g.text, { own: true, from });
         if (was ? was.own : true) g.own = true; else delete g.own;
         if (was?.pick) g.pick = was.pick; else delete g.pick;
+        if (was) delete g.from;
         if (op.tags === true && !was) g.tags = true;
       });
       const who = nameList(all.map((q) => q.name));
@@ -265,7 +324,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
         if (st.locked && q.fields.find((k) => k.id === x.f!.id)?.text !== x.f!.text) return no(`${heldWords(q, st)}. Linking would change it.`);
       }
       // the other side (and its own partners) take this text, then all of them share
-      setGroup(f, y.p, y.f!, x.f!.text, { own: x.f!.own, pick: x.f!.pick });
+      setGroup(f, y.p, y.f!, x.f!.text, { own: x.f!.own, pick: x.f!.pick, from: x.f!.from });
       const all = [...new Set([x.p.id, ...(x.f!.sharedWith ?? []), y.p.id, ...(y.f!.sharedWith ?? [])])];
       for (const id of all) {
         const g = platformOf(f, id)?.fields.find((k) => k.id === x.f!.id);
@@ -277,7 +336,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
       // stage 3 (older files): a failed send that may still go out is not asked again until Alma confirms it is gone
-      if (x.p.send.failed && !x.p.send.failed.cleared && !x.p.send.posted) return no(WAIT_DROPPED);
+      if (x.p.send.failed && !x.p.send.failed.cleared && !anyPosted(x.p)) return no(WAIT_DROPPED);
       const g = goCheck(f, x.p.id, now);
       if (!g.ok) return no(g.why);
       if (op.when !== 'now' && (typeof op.when !== 'string' || Number.isNaN(Date.parse(op.when)))) return no('"when" is "now" or a time.');
@@ -318,15 +377,42 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (!LINK.test(link)) return no('That does not look like a link to a post.');
       const bad = linkProblem(x.p.kind, link);
       if (bad) return no(bad);
+      // several places: the link goes in the place it names
+      if (placesOf(x.p.kind).length) {
+        const w = placeForLink(x.p, link, op.place);
+        if ('error' in w) return no(w.error);
+        writePost(x.p, w.place.id, { at: postIn(x.p, w.place.id)?.at ?? at, link });
+        return { ok: true, file: f, said: `${x.p.name} is posted in ${w.place.name}: ${link}` };
+      }
       x.p.send.posted = { at: x.p.send.posted?.at ?? at, link };
       return { ok: true, file: f, said: `${x.p.name} is posted: ${link}` };
     }
     case 'postedNoLink': {
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
+      const places = placesOf(x.p.kind);
+      if (places.length) {
+        const pl = op.place ? places.find((q) => q.id === op.place) : places.find((q) => !postIn(x.p, q.id));
+        if (!pl) return no(op.place ? `${x.p.name} is not posted in "${op.place}".` : `${appName(x.p)} is already marked posted in ${places.map((q) => q.name).join(' and ')}.`);
+        if (postIn(x.p, pl.id)) return no(`${appName(x.p)} is already marked posted in ${pl.name}.`);
+        if (x.p.route !== 'hand') return no(`${appName(x.p)} is not posted by hand: Alma records the post.`);
+        writePost(x.p, pl.id, { at });
+        return { ok: true, file: f, said: `${x.p.name} posted by hand in ${pl.name}, the link to add later` };
+      }
       if (x.p.send.posted) return no(`${appName(x.p)} is already marked posted.`);
       x.p.send.posted = { at };
       return { ok: true, file: f, said: `${x.p.name} posted by hand, the link to add later` };
+    }
+    case 'removeLink': {
+      const x = find(f, op.platform);
+      if (typeof x === 'string') return no(x);
+      if (x.p.route !== 'hand') return no(`${appName(x.p)} is not posted by hand: Alma records the post.`);
+      const places = placesOf(x.p.kind);
+      const pl = places.length ? places.find((q) => q.id === op.place) : undefined;
+      if (places.length && !pl) return no(op.place ? `${x.p.name} is not posted in "${op.place}".` : `Say which: ${places.map((q) => q.name).join(' or ')}.`);
+      if (!postIn(x.p, pl?.id)) return no(`${appName(x.p)} is not marked posted${pl ? ` in ${pl.name}` : ''}.`);
+      writePost(x.p, pl?.id, undefined);
+      return { ok: true, file: f, said: `${x.p.name}${pl ? ` in ${pl.name}` : ''} is not posted any more: its link is taken out` };
     }
     case 'answer': {
       const x = find(f, op.platform, op.field);
@@ -367,6 +453,7 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
           const g = q?.fields.find((k) => k.id === e.field);
           if (!q || !g) continue;
           for (const o of g.sharedWith ?? []) if (!e.platforms.includes(o)) { const oq = platformOf(f, o); if (oq) unlinkIn(f, oq, e.field); }
+          keepOwn(g, e.text, {});
           g.text = e.text;
           delete g.own;
           delete g.pick;
@@ -422,6 +509,48 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       ];
       return { ok: true, file: f, said: `Picked the cover frame "${o.does}" for ${nameList([x.p, ...g.follow].map((q) => q.name))}${rest.length ? `. ${rest.join(' ')}` : ''}` };
     }
+    case 'pickFrame': {
+      const x = find(f, op.platform);
+      if (typeof x === 'string') return no(x);
+      const t = x.p.thumbnail;
+      if (!t) return no(`${appName(x.p)} has no ${coverWord(x.p.kind)} to pick.`);
+      if (typeof op.at !== 'number' || !Number.isFinite(op.at) || op.at < 0) return no('"at" is the frame\'s time in seconds, 0 or more.');
+      const st = platformStatus(f, x.p.id, now);
+      if (st.locked) return no(`${appName(x.p)}'s ${coverWord(x.p.kind)} is locked. ${st.lockWhy ?? ''}`.trim());
+      const g = coverGroup(f, x.p.id, now);
+      const o: ThumbOption = { id: USER_FRAME, at: toMs(op.at), does: USER_DOES, by: 'user' };
+      t.pick = putFrame(t, o);
+      for (const q of g.follow) q.thumbnail!.pick = putFrame(q.thumbnail!, o);
+      const rest = [
+        ...g.held.map((h) => `${h.p.name} ${lockedVerb(h.st)}, so it keeps the frame it has.`),
+        ...(g.own.length ? [`${nameList(g.own.map((q) => q.name))} ${g.own.length > 1 ? 'keep their' : 'keeps its'} own.`] : []),
+      ];
+      const word = g.follow.length ? 'cover frame' : coverWord(x.p.kind);
+      return { ok: true, file: f, said: `Picked your own ${word} at ${o.at} s for ${nameList([x.p, ...g.follow].map((q) => q.name))}${rest.length ? `. ${rest.join(' ')}` : ''}` };
+    }
+    case 'frameToOthers': {
+      const x = find(f, op.platform);
+      if (typeof x === 'string') return no(x);
+      const t = x.p.thumbnail;
+      if (!t) return no(`${appName(x.p)} has no ${coverWord(x.p.kind)} to pick.`);
+      const o = t.options.find((k) => k.id === t.pick);
+      if (!o) return no(`${appName(x.p)} has no ${coverWord(x.p.kind)} picked yet.`);
+      const st = platformStatus(f, x.p.id, now);
+      if (st.locked) return no(`${appName(x.p)}'s ${coverWord(x.p.kind)} is locked. ${st.lockWhy ?? ''}`.trim());
+      const took: Platform[] = [];
+      const held: string[] = [];
+      for (const q of f.platforms) {
+        if (q.id === x.p.id || !q.thumbnail) continue;
+        const qs = platformStatus(f, q.id, now);
+        if (qs.locked) { held.push(`${q.name} ${lockedVerb(qs)}, so it keeps the frame it has.`); continue; }
+        q.thumbnail.pick = putFrame(q.thumbnail, o);
+        delete q.thumbnail.own;
+        took.push(q);
+      }
+      delete t.own;
+      if (!took.length) return no(held.length ? `No other platform can take it: ${held.join(' ')}` : `No other platform has a ${coverWord(x.p.kind)}.`);
+      return { ok: true, file: f, said: `${o.by === 'user' ? 'Your own frame' : `The cover frame "${o.does}"`} is now the cover frame on ${nameList([x.p, ...took].map((q) => q.name))}${held.length ? `. ${held.join(' ')}` : ''}` };
+    }
     case 'thumbnailOwn': {
       const x = find(f, op.platform);
       if (typeof x === 'string') return no(x);
@@ -452,12 +581,12 @@ export function applyOp(file: ReleaseFile | undefined, op: ReleaseOp, now: Date)
       if (op.what === 'unschedule') {
         if (st.state !== 'scheduled') return no(`${appName(x.p)} is not scheduled.`);
       } else if (op.what === 'stop') {
-        if (s.posted) return no(`${appName(x.p)} is already posted. To remove it, delete it in ${appName(x.p)}.`);
+        if (anyPosted(x.p)) return no(`${appName(x.p)} is already posted. To remove it, delete it in ${appName(x.p)}.`);
         if (!(s.go || s.sending)) return no(`${appName(x.p)} is not sending.`);
         if (stoppable(x.p) === 'no') return no(`Too late to stop it. To remove it, delete it in ${appName(x.p)} once it is up.`);
         if (stoppable(x.p) === 'unknown') return no('Alma has not said whether it can still be stopped. Ask her.');
       } else if (op.what === 'check') {
-        if (s.posted || !(s.go || s.sending || s.scheduled || s.failed)) return no(`${appName(x.p)} has nothing going out to check.`);
+        if (anyPosted(x.p) || !(s.go || s.sending || s.scheduled || s.failed)) return no(`${appName(x.p)} has nothing going out to check.`);
       } else return no('"what" is unschedule, stop or check.');
       s.requested = { ...(s.requested ?? {}), [op.what]: at };
       const words = { unschedule: `Asked Alma to unschedule ${x.p.name}`, stop: `Asked Alma to stop sending ${x.p.name}`, check: `Asked Alma to check on ${x.p.name}` };
@@ -484,15 +613,39 @@ function backProblem(file: ReleaseFile, p: Platform, b: Box, back: Record<string
 }
 
 /** The id of the frame `o` among `t`'s options: the same id at the same moment, else the same moment (within 0.05 s),
- *  else `o` added (under a free id when its own is taken by another frame there). */
+ *  else `o` added (under a free id when its own is taken by another frame there). The user's own frame (`by: "user"`)
+ *  is exact to the frame, so it is never matched to one of Alma's nearby: it replaces the user's frame there
+ *  (one per platform) and keeps its mark. */
 function putFrame(t: Thumbnail, o: ThumbOption): string {
+  if (o.by === 'user') {
+    const was = t.options.findIndex((k) => k.by === 'user');
+    if (was >= 0) { const id = t.options[was].id; t.options[was] = { id, at: o.at, does: o.does, by: 'user' }; return id; }
+    let id = USER_FRAME;
+    for (let i = 2; t.options.some((k) => k.id === id); i++) id = `${USER_FRAME}-${i}`;
+    t.options.push({ id, at: o.at, does: o.does, by: 'user' });
+    return id;
+  }
   const near = (k: ThumbOption) => Math.abs(k.at - o.at) <= 0.05;
-  const same = t.options.find((k) => k.id === o.id && near(k)) ?? t.options.find(near);
+  const alma = t.options.filter((k) => k.by !== 'user');
+  const same = alma.find((k) => k.id === o.id && near(k)) ?? alma.find(near);
   if (same) return same.id;
   let id = o.id;
   for (let i = 2; t.options.some((k) => k.id === id); i++) id = `${o.id}-${i}`;
   t.options.push({ id, at: o.at, does: o.does });
   return id;
+}
+
+/** A place's post written (`post`) or taken out (undefined): the first place (or a platform with one post) is
+ *  `send.posted`, the others `send.postedIn[<id>]` (places.ts). */
+function writePost(p: Platform, place: string | undefined, post: { at: string; link?: string } | undefined): void {
+  const first = placesOf(p.kind)[0]?.id;
+  if (!place || place === first) {
+    if (post) p.send.posted = post; else delete p.send.posted;
+    return;
+  }
+  const rest = { ...(p.send.postedIn ?? {}) };
+  if (post) rest[place] = post; else delete rest[place];
+  if (Object.keys(rest).length) p.send.postedIn = rest; else delete p.send.postedIn;
 }
 
 /** "TikTok and Instagram Reels" for a shared field, "TikTok" alone. */
@@ -505,7 +658,7 @@ function names(file: ReleaseFile, p: Platform, f: Field): string {
 function nameFinal(file: ReleaseFile | undefined, final: ReleaseFinal, now: Date): OpResult {
   const f = file ? copy(file) : emptyRelease(localDay(now));
   if (f.final?.path === final.path) return { ok: true, file: f, said: `The final is already the master of ${final.version}` };
-  const out = f.platforms.filter((p) => p.send.posted);
+  const out = f.platforms.filter((p) => anyPosted(p));
   if (out.length) {
     const ns = out.map((p) => appName(p));
     return no(`${ns.length > 1 ? `${ns.slice(0, -1).join(', ')} and ${ns[ns.length - 1]}` : ns[0]} already ${ns.length > 1 ? 'have' : 'has'} this file.`);
@@ -527,17 +680,20 @@ export function parseOp(raw: unknown): ReleaseOp | string {
   if (typeof o.op !== 'string' || !(OP_NAMES as string[]).includes(o.op)) return `"op" must be one of ${OP_NAMES.join(', ')}.`;
   const need = (...keys: string[]) => keys.filter((k) => typeof o[k] !== 'string');
   const want: Record<OpName, string[]> = {
-    pick: ['platform', 'field', 'candidate'], setText: ['platform', 'field', 'text'], setPartText: ['platform', 'part', 'text'], confirm: ['fact', 'value'], tick: ['platform', 'list', 'step'],
+    pick: ['platform', 'field', 'candidate'], saveOption: ['platform', 'field', 'candidate'], setText: ['platform', 'field', 'text'], setPartText: ['platform', 'part', 'text'], confirm: ['fact', 'value'], tick: ['platform', 'list', 'step'],
     setRoute: ['platform', 'route'], unlink: ['platform', 'field'], link: ['platform', 'field', 'with'], nameFinal: [], ask: ['platform', 'when'],
-    cancelAsk: ['platform'], go: ['platform'], pasteLink: ['platform', 'link'], postedNoLink: ['platform'], answer: ['platform', 'field', 'note', 'action'], undoAnswer: [],
-    pickThumbnail: ['platform', 'option'], thumbnailOwn: ['platform'], request: ['platform', 'what'],
+    cancelAsk: ['platform'], go: ['platform'], pasteLink: ['platform', 'link'], postedNoLink: ['platform'], removeLink: ['platform'], answer: ['platform', 'field', 'note', 'action'], undoAnswer: [],
+    pickThumbnail: ['platform', 'option'], thumbnailOwn: ['platform'], pickFrame: ['platform'], frameToOthers: ['platform'], request: ['platform', 'what'],
   };
   const missing = need(...want[o.op as OpName]);
   if (missing.length) return `"${o.op}" needs ${missing.map((m) => `"${m}"`).join(', ')} as text.`;
   if (o.op === 'tick' && typeof o.done !== 'boolean') return '"tick" needs "done": true or false.';
+  if ((o.op === 'pasteLink' || o.op === 'postedNoLink' || o.op === 'removeLink') && o.place !== undefined && typeof o.place !== 'string') return '"place" is the id of one of the platform\'s places ("aivideos").';
   if (o.op === 'ask' && o.file !== undefined && typeof o.file !== 'string') return '"ask" takes "file" as text.';
   if (o.op === 'thumbnailOwn' && typeof o.own !== 'boolean') return '"thumbnailOwn" needs "own": true or false.';
-  for (const k of ['only', 'tags']) if (o[k] !== undefined && typeof o[k] !== 'boolean') return `"${k}" is true or false.`;
+  if (o.op === 'pickFrame' && (typeof o.at !== 'number' || !Number.isFinite(o.at) || o.at < 0)) return '"pickFrame" needs "at": the frame\'s time in seconds, 0 or more.';
+  if (o.op === 'saveOption' && o.switchTo !== undefined && typeof o.switchTo !== 'string') return '"switchTo" is a candidate id.';
+  for (const k of ['only', 'tags', 'mine']) if (o[k] !== undefined && typeof o[k] !== 'boolean') return `"${k}" is true or false.`;
   if ((o.op === 'unlink' || o.op === 'link') && o.fields !== undefined && !(Array.isArray(o.fields) && o.fields.every((x) => typeof x === 'string'))) return '"fields" is a list of field ids.';
   if (o.op === 'setPartText' && o.back !== undefined && !(o.back && typeof o.back === 'object' && !Array.isArray(o.back))) return '"back" is the fields as they were, by id.';
   return o as unknown as ReleaseOp;

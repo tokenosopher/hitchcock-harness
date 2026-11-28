@@ -12,11 +12,13 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { FEED_PLACES, type FeedAsk, type FeedCard, type FeedMedia, type FeedOption, type FeedPlace, type FeedSummary } from '../../types';
 import { answersStamp, readAnswers } from '../../actions/answers';
+import { isRemovedAnswer } from '../../../components/lib/remove';
 import { progressStamp, readProgress } from '../../actions/progress';
 import { abs, asRecord, asString, AUDIO_RE, IMAGE_RE, redact, VIDEO_RE, type FilmCtx } from '../util';
 import { readSounds, sfxRefs, soundAnswerKey } from './sfx';
 import { cutOf } from '../../../components/edit/cutLink';
 import { checkAnswers, checkDebrief, countsOf, DEBRIEF_ANSWERS_REL, DEBRIEF_REL } from '../../../components/lib/debrief';
+import { isAudioPath, momentOfSound, momentsFromLay, momentsFromPlaces, pairFiles } from '../../../components/feed/hearIt';
 
 export interface Feed { cards: FeedCard[]; warnings: string[] }
 
@@ -124,6 +126,8 @@ function mediaOf(card: Record<string, unknown>): FeedMedia[] {
     items(b.items);
   }
   items(card.files);
+  // a plain list of the card's files (a sound pick: one file per option, in order)
+  if (Array.isArray(card.files)) for (const f of card.files) if (typeof f === 'string') add(f);
   return out;
 }
 
@@ -151,6 +155,8 @@ function askOf(card: Record<string, unknown>, media: FeedMedia[]): FeedAsk | und
         const p = asString(o.file ?? o.path);
         return [{ id: str(o.id) ?? String(i + 1), label: str(o.label) ?? p?.split('/').pop() ?? `option ${i + 1}`, path: p }];
       });
+      // options as words with a plain list of sound files beside them: the i-th file is the i-th option's
+      pairFiles(options.length, card.files).forEach((f, i) => { if (f && !options[i].path) options[i].path = f; });
       // an option that names one of the card's files sits under that file
       for (const o of options) {
         const m = o.path ? media.find((x) => x.path === o.path) : undefined;
@@ -258,6 +264,13 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
       if (cut) card.cut = cut;
       else if (c.cut !== undefined) warn(`"${title.slice(0, 50)}": its "cut" names no clip, take, sound or moment (clip, take and shot, sound and try, t, at)`);
       // the sound designer's sounds, by name; readFeed reads where each sits and its tries
+      // where the options of a sound pick sit in the film: the card's own "places", else its "lay" file (read
+      // in readFeed), else the film's newest audio/sfx/lay*.json
+      if (ask?.kind === 'pick' && ask.options.some((o) => o.path && isAudioPath(o.path))) {
+        const ms = momentsFromPlaces(c.places, ask.options);
+        if (ms.length) card.hear = { moments: ms, from: 'the card' };
+        else layOf.set(card, asString(c.lay) ?? '');
+      }
       const refs = sfxRefs(c.sfx);
       if (refs.length) card.sounds = refs.map((r) => ({ name: r.name, tries: [], ...(r.prediction ? { prediction: r.prediction } : {}) }));
       out.push(card);
@@ -270,6 +283,36 @@ function parse(data: Record<string, unknown>, warn: (m: string) => void): FeedCa
 
 /** The cards of a review record already read (the sample-data mode's cards of the Release pages use it). */
 export const cardsOf = (data: Record<string, unknown>, warn: (m: string) => void = () => undefined): FeedCard[] => parse(data, warn);
+
+// ---- where a sound pick's options sit in the film
+
+/** The cards whose options are sounds with no "places" of their own: the lay file each names ('' for the film's own). */
+const layOf = new WeakMap<FeedCard, string>();
+const LAY = /^lay(?:-v(\d+))?\.json$/;
+/** The film's lay files, newest first (lay-v3.json, lay-v2.json, lay.json). */
+async function layFiles(ctx: FilmCtx): Promise<{ rel: string; mtime: number }[]> {
+  const names = await fs.readdir(abs(ctx, 'audio/sfx')).catch(() => [] as string[]);
+  const lays = names.filter((n) => LAY.test(n)).sort((a, b) => Number(LAY.exec(b)![1] ?? 0) - Number(LAY.exec(a)![1] ?? 0));
+  return Promise.all(lays.map(async (n) => ({ rel: `audio/sfx/${n}`, mtime: (await fs.stat(abs(ctx, `audio/sfx/${n}`)).catch(() => undefined))?.mtimeMs ?? 0 })));
+}
+async function readHear(ctx: FilmCtx, cards: FeedCard[], lays: { rel: string }[], warn: (m: string) => void): Promise<void> {
+  const read = new Map<string, unknown>();
+  const json = async (rel: string): Promise<unknown> => {
+    if (!read.has(rel)) read.set(rel, await fs.readFile(abs(ctx, rel), 'utf8').then((t) => JSON.parse(t) as unknown).catch(() => { warn(`${rel}: not found or not valid JSON`); return undefined; }));
+    return read.get(rel);
+  };
+  for (const c of cards) {
+    const named = layOf.get(c);
+    if (named === undefined || !c.ask) continue;
+    const rel = named.replace(/^assets\/films\/[^/]+\//, '');
+    if (rel && (rel.startsWith('/') || rel.includes('..'))) continue;
+    // the card's own lay file; else the newest of the film's that places any of its options
+    for (const r of rel ? [rel] : lays.map((l) => l.rel)) {
+      const ms = momentsFromLay(await json(r), c.ask.options);
+      if (ms.length) { c.hear = { moments: ms, from: r }; break; }
+    }
+  }
+}
 
 // ---- cached on the two files it reads
 
@@ -286,7 +329,8 @@ export async function readFeed(ctx: FilmCtx, slug: string): Promise<Feed> {
     return { cards: [], warnings: [] };
   }
   const mt = async (rel: string): Promise<number> => (await fs.stat(abs(ctx, rel)).catch(() => undefined))?.mtimeMs ?? 0;
-  const stamp = `${file}:${mtime}:${await answersStamp()}:${await progressStamp()}:${await mt(DEBRIEF_REL)}:${await mt(DEBRIEF_ANSWERS_REL)}:${await mt('audio/sfx/plan.json')}`;
+  const lays = await layFiles(ctx);
+  const stamp = `${file}:${mtime}:${await answersStamp()}:${await progressStamp()}:${await mt(DEBRIEF_REL)}:${await mt(DEBRIEF_ANSWERS_REL)}:${await mt('audio/sfx/plan.json')}:${lays.map((l) => `${l.rel}@${l.mtime}`).join(',')}`;
   const hit = cache.get(slug);
   if (hit?.stamp === stamp) return hit.feed;
 
@@ -298,6 +342,7 @@ export async function readFeed(ctx: FilmCtx, slug: string): Promise<Feed> {
     warnings.push(`${REL}: not valid JSON (${(e as Error).message.slice(0, 80)})`);
   }
   const cards = data ? parse(data, (m) => warnings.push(`${REL}: ${m}`)) : [];
+  await readHear(ctx, cards, lays, (m) => warnings.push(m));
   const answers = await readAnswers(slug);
   const marks = await readProgress(slug);
   for (const c of cards) {
@@ -314,6 +359,8 @@ export async function readFeed(ctx: FilmCtx, slug: string): Promise<Feed> {
         const sa = answers[soundAnswerKey(c.key, snd.name)];
         if (sa?.option) snd.answer = { option: sa.option, note: sa.note, at: sa.at };
       }
+      const ms = c.sounds.map(momentOfSound).filter((m): m is NonNullable<typeof m> => !!m);
+      if (ms.length) c.hear = { moments: ms, from: 'audio/sfx/plan.json' };
       if (c.ask && !c.ask.answer && c.sounds.every((x) => x.answer)) {
         const last = c.sounds.map((x) => x.answer!.at ?? '').sort().pop();
         c.ask.answer = { option: c.sounds.map((x) => `${x.name} ${x.answer!.option}`).join(', '), ...(last ? { at: last } : {}), by: 'harness' };
@@ -363,7 +410,7 @@ export const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;
 export const isWaiting = (c: FeedCard): boolean => isOpen(c) && !c.ask!.progress;
 
 /** A yes the user gave: a card that asks for a yes, answered with anything but a no or "replaced by …". */
-export const isYes = (c: FeedCard): boolean => c.ask?.kind === 'yes' && !!c.ask.answer && c.ask.answer.option !== 'no' && !/^replaced by\b/i.test(c.ask.answer.option ?? '');
+export const isYes = (c: FeedCard): boolean => c.ask?.kind === 'yes' && !!c.ask.answer && c.ask.answer.option !== 'no' && !/^replaced by\b/i.test(c.ask.answer.option ?? '') && !isRemovedAnswer(c.ask.answer.option);
 
 export function feedSummary(feed: Feed): FeedSummary {
   const counts: FeedSummary['counts'] = {};

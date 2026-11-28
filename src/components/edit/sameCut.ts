@@ -15,7 +15,7 @@
 // Left out because the render never reads them: the version's name, basedOn, note, by, at, markers and renders; a
 // track's name (said only in the stems' file names and the leave-out summary, never in the picture or the mix) and
 // locked; a clip's id (it names a clip in a log line and in a "More renders" leave-out only), label (read only by the
-// "leave out the title cards" option of More renders, never by the plain master), takeRef and unlinked (edit
+// "leave out the title cards" option of More renders, never by the plain master), takeRef, unlinked and link (edit
 // behaviour). The files themselves are not read: an .srt or a take whose file changed under the same name is the
 // master's own out-of-date check's business (masters.ts), not this one's.
 import type { TimelineClip, TimelineTrack } from '@/server/types';
@@ -36,6 +36,8 @@ export interface RenderClip {
   gain: number;
   gainPoints: { t: number; db: number }[];
   fadeIn: number; fadeOut: number;
+  /** A sound fade from or to a level, only when set. */
+  fadeInFrom?: number; fadeOutTo?: number;
   dissolve: number;
   muted: boolean;
   flip: boolean;
@@ -57,6 +59,7 @@ function renderClip(c: AnyClip): RenderClip {
     gain: num(c.gain),
     gainPoints: (c.gainPoints ?? []).map((p) => ({ t: num(p.t), db: num(p.db) })),
     fadeIn: num(c.fadeIn), fadeOut: num(c.fadeOut),
+    ...(typeof c.fadeInFrom === 'number' ? { fadeInFrom: c.fadeInFrom } : {}), ...(typeof c.fadeOutTo === 'number' ? { fadeOutTo: c.fadeOutTo } : {}),
     dissolve: num(c.dissolve),
     muted: !!c.muted,
     // a RenderPart's own clip (flip: true) reads the same again: renderPart(renderPart(t)) is renderPart(t)
@@ -79,7 +82,7 @@ export function renderPart(t: CutLike): RenderPart {
 /** The same clip for the render (everything but its id). */
 function sameClip(a: RenderClip, b: RenderClip): boolean {
   return a.src === b.src && a.text === b.text && a.in === b.in && a.out === b.out && a.at === b.at && a.speed === b.speed && a.gain === b.gain
-    && a.fadeIn === b.fadeIn && a.fadeOut === b.fadeOut && a.dissolve === b.dissolve && a.muted === b.muted && a.flip === b.flip
+    && a.fadeIn === b.fadeIn && a.fadeOut === b.fadeOut && a.fadeInFrom === b.fadeInFrom && a.fadeOutTo === b.fadeOutTo && a.dissolve === b.dissolve && a.muted === b.muted && a.flip === b.flip
     && a.gainPoints.length === b.gainPoints.length && a.gainPoints.every((p, i) => p.t === b.gainPoints[i].t && p.db === b.gainPoints[i].db);
 }
 
@@ -141,7 +144,7 @@ function clipChanges(kind: TimelineTrack['kind'], a: RenderClip, b: RenderClip, 
   if (a.flip !== b.flip) t.add(area, noun, nouns, 'mirrored');
   const level = a.gain !== b.gain || a.gainPoints.length !== b.gainPoints.length || a.gainPoints.some((p, i) => p.t !== b.gainPoints[i].t || p.db !== b.gainPoints[i].db);
   if (level) t.add(kind === 'video' ? area : 'sound', 'sound level', 'sound levels', 'changed');
-  if (a.fadeIn !== b.fadeIn || a.fadeOut !== b.fadeOut) t.add('fades', 'fade', 'fades', 'changed');
+  if (a.fadeIn !== b.fadeIn || a.fadeOut !== b.fadeOut || a.fadeInFrom !== b.fadeInFrom || a.fadeOutTo !== b.fadeOutTo) t.add('fades', 'fade', 'fades', 'changed');
   if (a.dissolve !== b.dissolve) t.add('dissolves', 'dissolve', 'dissolves', 'changed');
   if (a.muted !== b.muted) t.add('mutes', 'clip', 'clips', b.muted ? 'muted' : 'unmuted');
 }

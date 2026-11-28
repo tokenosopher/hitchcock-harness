@@ -1,11 +1,12 @@
 // After the takes (stages 9 to 12), by file name only: cut/ (the edits and drafts), the 1080 masters
 // (cut/*1080*, video/1080/), the caption files (subtitles/ and social/), the finished films (cut/ and social/,
 // named "final" or "as-posted"), social/kit.md (older films) and social/release.json in brief (the
-// release file: there, and the final it names). The flow board reads its Edit, Finish, Sound and Release
+// release file: there, the final it names, how many platforms and how many posted, and the user's "Done" tick). The flow board reads its Edit, Finish, Sound and Release
 // nodes from it. Pieces made for the cut that are not takes (a title card, a graphic) are read from cut/cards/
 // and edits/, one folder deep.
 import type { PostInfo } from '../../types';
 import { abs, exists, list, natCmp, readJson, statOf, VIDEO_RE, type FilmCtx } from '../util';
+import { cleanLeft, LEFT_REL, postBrief } from '@/components/edit/left';
 
 const RELEASE = 'social/release.json';
 
@@ -14,7 +15,7 @@ const FINAL = /(^|[-_ ])(final|as-posted)([-_ .]|$)/i;
 export async function readPost(ctx: FilmCtx): Promise<PostInfo | undefined> {
   const files = async (dir: string, re: RegExp): Promise<string[]> =>
     (await list(abs(ctx, dir))).filter((e) => !e.dir && re.test(e.name)).map((e) => `${dir}/${e.name}`);
-  const [cut, v1080, social, subs, socialSubs, kitThere, rel] = await Promise.all([
+  const [cut, v1080, social, subs, socialSubs, kitThere, rel, left] = await Promise.all([
     files('cut', VIDEO_RE),
     files('video/1080', VIDEO_RE),
     files('social', VIDEO_RE),
@@ -22,6 +23,7 @@ export async function readPost(ctx: FilmCtx): Promise<PostInfo | undefined> {
     files('social', /\.(srt|vtt)$/i),
     exists(abs(ctx, 'social/kit.md')),
     readJson<{ final?: { path?: unknown; version?: unknown } }>(ctx, RELEASE),
+    readJson<unknown>(ctx, LEFT_REL),
   ]);
   const editDirs = (await list(abs(ctx, 'edits'))).filter((e) => e.dir).map((e) => `edits/${e.name}`);
   const pieces = (await Promise.all(['cut/cards', 'edits', ...editDirs].map((d) => files(d, VIDEO_RE)))).flat().sort(natCmp);
@@ -37,10 +39,9 @@ export async function readPost(ctx: FilmCtx): Promise<PostInfo | undefined> {
     finals: finals.length ? finals : undefined,
     pieces: pieces.length ? pieces : undefined,
   };
-  if (rel && typeof rel === 'object') {
-    const fp = rel.final && typeof rel.final.path === 'string' ? rel.final.path : undefined;
-    out.release = { path: RELEASE, ...(fp ? { final: { path: fp, ...(typeof rel.final!.version === 'string' ? { version: rel.final!.version } : {}) } } : {}) };
-  }
+  // with how many platforms have texts and are posted, and the user's "Done" on publishing (What's next's tick)
+  const brief = postBrief(rel, cleanLeft(left)?.ticks);
+  if (brief) out.release = { path: RELEASE, ...brief };
   const written: Record<string, string> = {};
   await Promise.all([...new Set([...out.cuts, ...finals])].map(async (p) => {
     const st = await statOf(abs(ctx, p));

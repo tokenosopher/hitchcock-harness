@@ -28,15 +28,27 @@ function player(): HTMLAudioElement {
   return a;
 }
 
-function toggle(src: string) {
+// Other players of the page (a sound card's clip of the film): told to stop when a sound starts, so only one
+// thing plays at a time; pauseSound stops the sound when one of them starts.
+const others = new Set<() => void>();
+export function onSoundStart(stop: () => void): () => void { others.add(stop); return () => { others.delete(stop); }; }
+export function pauseSound(): void { if (audio && !audio.paused) audio.pause(); }
+
+function toggle(src: string, at?: number) {
   const a = player();
+  others.forEach((f) => f());
   if (now.src !== src) {
     a.src = src;
     set({ src, t: 0, d: 0, failed: false });
+    if (at) { const go = () => { if (a.duration) a.currentTime = at * a.duration; }; a.addEventListener('loadedmetadata', go, { once: true }); }
     void a.play().catch(() => set({ playing: false }));
-  } else if (a.paused) void a.play().catch(() => set({ playing: false }));
+  } else if (at !== undefined && a.duration) { a.currentTime = at * a.duration; if (a.paused) void a.play().catch(() => set({ playing: false })); }
+  else if (a.paused) void a.play().catch(() => set({ playing: false }));
   else a.pause();
 }
+
+/** Plays this file (from `at`, a fraction of it, when given), or pauses it when it plays and no place is given. */
+export const playSound = (path: string, at?: number): void => toggle(mediaUrl(path), at);
 
 // The play buttons drawn now, per file. When the last button of the file that plays goes (the page was left, the
 // card was folded away), the sound stops: it played on with no control anywhere on screen to stop it.
@@ -55,7 +67,7 @@ function useDrawn(src: string): void {
 }
 
 /** This file's player state, or the idle one while something else (or nothing) plays. */
-function useSound(src: string): Now {
+export function useSound(src: string): Now {
   return useSyncExternalStore(subscribe, () => (now.src === src ? now : IDLE), () => IDLE);
 }
 

@@ -14,6 +14,21 @@ import { IconChevronDown, IconChevronRight } from '@/components/shell/icons';
 import { QC_CATEGORIES, QC_LOCK_SCORE, QC_MAX_ROUNDS, type QCCategory, type QCEntry, type QCMiss } from '@/server/types';
 import { cn } from '@/lib/utils';
 import { Reveal } from '@/components/shell/Reveal';
+import { usePathname } from 'next/navigation';
+import { refData } from '@/components/lib/refPick';
+import { capWords } from '@/components/lib/refBlock';
+import type { InlineRef } from '@/lib/refs';
+import type { QCReport } from '@/server/types';
+
+/** A QC round as a thing for Alma's message box (Option-click): the stage, the target, the round, its score, its file. */
+function qcRefOf(r: QCReport, label: string, page: string, fileOf: (p: string) => string): InlineRef {
+  return { kind: 'qc', label: `QC · ${label} · round ${r.round}`, place: String(r.stage), item: r.target, round: r.round, title: r.score === null ? 'no score' : `score ${r.score}`, page, ...(r.file ? { file: fileOf(r.file) } : {}) };
+}
+/** One miss of a QC round: its id (stable across rounds), what is wrong and the fix. */
+function findingRefOf(r: QCReport, label: string, m: QCMiss, page: string, fileOf: (p: string) => string): InlineRef {
+  return { kind: 'finding', label: `QC · ${m.where ?? label} · ${m.id}`, place: String(r.stage), item: m.id, round: r.round, title: m.title ?? m.sub, page,
+    words: capWords(`${m.finding} Fix: ${m.fix}${m.open ? '' : ` (fixed in ${m.fixedIn ?? 'an earlier round'})`}`), ...(r.file ? { file: fileOf(r.file) } : {}) };
+}
 
 export const QC_HUE: Record<QCCategory, string> = {
   'camera+geometry': '#60A5FA', 'blocking+fluidity': '#F472B6', prop: '#FBBF24', lines: '#A78BFA', 'audio+effect': '#4ADE80',
@@ -111,9 +126,12 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
     && (word(file).test(k.title) || (!/^(?:[A-Z]+\d|FIX-)/.test(file) && word(spec.stage).test(k.title))));
   const fileOf = (p: string) => (state ? repoPath(state.film.folder, state.film.repo, p) : p);
   const nine = (state?.film.aspect ?? '9:16') === '9:16';
+  // where the panel is, for Option-click's references (the page under /films/<film>)
+  const page = usePathname()?.replace(/^\/films\/[^/]+\/?/, '') ?? '';
+  const missRef = (m: QCMiss) => (r ? findingRefOf(r, label, m, page, fileOf) : undefined);
 
   return (
-    <section aria-label={`QC · ${label} · ${status}`} className={cn('@container flex min-w-0 flex-col overflow-clip rounded-xl border border-edge bg-well', compact && 'max-h-[min(78vh,760px)] overflow-y-auto rounded-[10px] bg-[#0C0C0E] shadow-[0_16px_48px_rgba(0,0,0,0.6)]')}>
+    <section aria-label={`QC · ${label} · ${status}`} {...(r ? refData(qcRefOf(r, label, page, fileOf)) : {})} className={cn('@container flex min-w-0 flex-col overflow-clip rounded-xl border border-edge bg-well', compact && 'max-h-[min(78vh,760px)] overflow-y-auto rounded-[10px] bg-[#0C0C0E] shadow-[0_16px_48px_rgba(0,0,0,0.6)]')}>
       {/* Head */}
       <div className={cn('flex items-start justify-between gap-4 border-b border-line', compact ? 'px-4 pb-3 pt-3.5' : 'px-[18px] pb-3.5 pt-4')}>
         <div className="flex min-w-0 items-start gap-3">
@@ -219,7 +237,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
 
 
           {shown(open).map((m) => (
-            <MissRow key={m.id} m={m} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine}
+            <MissRow key={m.id} m={m} mark={missRef(m)} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine}
               onClick={() => { setRow(row === m.id ? undefined : m.id); ui.addChip({ id: `qcmiss:${file}:${m.id}`, label: `QC · ${m.where ?? label} · ${m.sub || m.category}` }); }} />
           ))}
           {!shown(open).length && (
@@ -236,7 +254,7 @@ export function QCPanel({ spec, t, compact, onClose, lockWord }: {
                 Resolved earlier <span className="font-normal text-mute">({resolved.length})</span>
               </button>
               {showResolved && shown(resolved).map((m) => (
-                <MissRow key={m.id} m={m} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine} onClick={() => setRow(row === m.id ? undefined : m.id)} />
+                <MissRow key={m.id} m={m} mark={missRef(m)} compact={compact} openRow={row === m.id} fileOf={fileOf} nine={nine} onClick={() => setRow(row === m.id ? undefined : m.id)} />
               ))}
             </>
           )}
@@ -388,7 +406,7 @@ function headline(m: QCMiss): { head: string; rest: string[] } {
 /** One finding as a card that can be read at a glance: where it is, what is wrong in a sentence, the pictures that
  *  show it, and the fix in a line. A click opens the reasoning, the full fix and the files. One layout at every width:
  *  the old three-column row let a long "where" run into the finding. */
-function MissRow({ m, compact, openRow, onClick, fileOf, nine }: { m: QCMiss; compact?: boolean; openRow: boolean; onClick: () => void; fileOf: (p: string) => string; nine: boolean }) {
+function MissRow({ m, mark, compact, openRow, onClick, fileOf, nine }: { m: QCMiss; mark?: InlineRef; compact?: boolean; openRow: boolean; onClick: () => void; fileOf: (p: string) => string; nine: boolean }) {
   const hue = QC_HUE[m.category];
   const { head, rest } = headline(m);
   const fixAll = sentences(m.fix);
@@ -397,7 +415,7 @@ function MissRow({ m, compact, openRow, onClick, fileOf, nine }: { m: QCMiss; co
     ? <span className="inline-flex h-[22px] flex-none items-center whitespace-nowrap rounded-[11px] border border-dashed border-sub px-2 text-[11.5px] font-medium text-ink">open</span>
     : <span className="inline-flex max-w-[45%] flex-none items-start gap-1.5 rounded-[11px] border border-edge-strong bg-raised px-2 py-[3px] text-[11.5px] font-medium leading-[1.35] text-ink-3 [overflow-wrap:anywhere]"><Check />{m.fixedIn ?? 'fixed'}</span>;
   return (
-    <div className={cn('border-b border-line', m.open ? 'border-l-2 border-l-[#FBBF24]' : '', openRow ? 'bg-tile' : '', compact ? 'px-4 py-3' : 'px-[18px] py-3.5')}>
+    <div {...(mark ? refData(mark) : {})} className={cn('border-b border-line', m.open ? 'border-l-2 border-l-[#FBBF24]' : '', openRow ? 'bg-tile' : '', compact ? 'px-4 py-3' : 'px-[18px] py-3.5')}>
       <button type="button" aria-expanded={openRow} onClick={onClick} className="flex w-full cursor-pointer flex-col gap-2 border-0 bg-transparent p-0 text-left text-ink">
         {/* where it is and its state */}
         <span className="flex w-full items-start gap-2.5">

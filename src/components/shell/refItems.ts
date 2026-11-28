@@ -30,9 +30,24 @@ export function viewRefOf(s: FilmState, l: LocationRef, v: { camera: string; pat
   const f = fileOf(s, v.path);
   return { kind: 'view', label: `${l.id} · ${v.camera}`, location: l.id, view: v.camera, ...(f ? { file: f } : {}) };
 }
+export const locationRefOf = (l: LocationRef): InlineRef => ({ kind: 'location', label: `${l.id} · ${l.name}`, location: l.id, title: l.name });
 export const cardRefOf = (c: FeedCard): InlineRef => ({
   kind: 'card', label: c.id ?? (c.title.length > 40 ? `${c.title.slice(0, 39)}…` : c.title), card: c.id ?? c.key, place: c.place, title: c.title,
 });
+
+/** A step of the flow board ("Locations"), with what it says now. */
+export const stageRefOf = (key: string, name: string, now?: string): InlineRef => ({ kind: 'stage', label: name, place: key, title: now ? `${name}: ${now}` : name, page: `?open=${key}` });
+
+/** A row of What's next's "Waiting for you": its card when it is one, else the pick, the go or the lock it asks for. */
+export const waitRefOf = (w: { key: string; card?: FeedCard; place: string; title: string }): InlineRef => (w.card ? cardRefOf(w.card) : {
+  kind: 'card', label: w.title.length > 40 ? `${w.title.slice(0, 39)}…` : w.title, card: w.key, place: w.place, title: w.title,
+});
+
+/** A voice option of a character's round ("C01 · voice option 2"), with its preview file. */
+export function voiceRefOf(s: FilmState, character: string, round: string, option: string, name: string, path?: string): InlineRef {
+  const f = fileOf(s, path);
+  return { kind: 'voice', label: `${character} · voice ${name}`, character, item: round, option, title: `${name} of round ${round.replace(/^r/, '')}`, page: 'character/voices', ...(f ? { file: f } : {}) };
+}
 
 /** The things the film's state names, grouped and in the film's order. */
 export function stateItems(s: FilmState | undefined): RefItem[] {
@@ -69,7 +84,7 @@ export function stateItems(s: FilmState | undefined): RefItem[] {
     out.push({ group: 'Characters', sub: c.role, image: r.file ? mediaUrl(r.file, { w: 80 }) : undefined, ref: r });
   }
   for (const l of s.locations) {
-    out.push({ group: 'Places and views', sub: l.name, ref: { kind: 'location', label: `${l.id} · ${l.name}`, location: l.id, title: l.name } });
+    out.push({ group: 'Places and views', sub: l.name, ref: locationRefOf(l) });
     for (const v of l.views ?? []) {
       const r = viewRefOf(s, l, v);
       out.push({ group: 'Places and views', sub: l.name, image: r.file ? mediaUrl(r.file, { w: 80 }) : undefined, ref: r });

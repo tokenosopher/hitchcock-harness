@@ -38,6 +38,8 @@ export interface MediaProps {
   /** Text on the grey tile when there is no file; defaults to the file name. */
   missingLabel?: string;
   className?: string;
+  /** The box's own style: the film's aspect for a picture of the film (src/lib/frame.ts aspectStyle). */
+  style?: React.CSSProperties;
   /** Overlays drawn above the picture (labels, badges). */
   children?: React.ReactNode;
   onPlay?: () => void;
@@ -45,7 +47,7 @@ export interface MediaProps {
 
 const baseName = (p?: string): string => (p ? p.split('/').pop() ?? p : '');
 
-export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, alt, missingLabel, className, children, onPlay }: MediaProps) {
+export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, alt, missingLabel, className, style, children, onPlay }: MediaProps) {
   const [failed, setFailed] = useState(0);
   const [playing, setPlaying] = useState(!!autoPlay);
   const [retry, setRetry] = useState(0);
@@ -72,7 +74,7 @@ export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, a
 
   if (!usable) {
     return (
-      <span className={cn(box, 'flex items-end justify-center')} title={path}>
+      <span className={cn(box, 'flex items-end justify-center')} style={style} title={path}>
         <span className="max-w-full truncate px-1.5 pb-1.5 font-mono text-[11px] text-mute">{missingLabel ?? (baseName(path) || 'no file')}</span>
         {children}
       </span>
@@ -91,7 +93,7 @@ export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, a
 
   if (video && playing) {
     return (
-      <span className={box}>
+      <span className={box} style={style}>
         <video
           src={mediaUrl(path!, { retry })}
           poster={mediaUrl(path!, { w: Math.max(w, 640), t, retry })}
@@ -139,7 +141,7 @@ export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, a
 
   if (video && play) {
     return (
-      <span className={box}>
+      <span className={box} style={style}>
         {img}
         <span
           role="button"
@@ -162,7 +164,7 @@ export function Media({ path, w = 320, t = 0.5, fit = 'cover', play, autoPlay, a
   }
 
   return (
-    <span className={box}>
+    <span className={box} style={style}>
       {img}
       {expand}
       {children}

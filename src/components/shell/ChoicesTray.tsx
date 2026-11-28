@@ -26,7 +26,11 @@ export function ChoicesTray({ film }: { film: string }) {
   const [p, setP] = useState<{ k: 'idle' | 'busy' } | { k: 'error'; text: string } | { k: 'sent'; n: number }>({ k: 'idle' });
   // a card that was answered some other way (in the thread, on another device) no longer asks: its choice is dropped
   const open = state?.feed ? new Set(state.feed.asks.map((c) => c.key)) : undefined;
-  const list = all.filter((c) => !c.answer || !open || open.has(c.answer.card));
+  // and a sheet approved some other way no longer needs its yes
+  const approved = (id: string) => !!state?.characters?.find((x) => x.id === id)?.sheet?.approved;
+  // (a removal of a card that no longer asks is dropped the same way)
+  const asking = (key: string) => !open || !key.startsWith('card:') || open.has(key.slice(5));
+  const list = all.filter((c) => (!c.answer || !open || open.has(c.answer.card)) && !(c.approve && approved(c.approve.id)) && !(c.remove && !asking(c.remove.key)));
   const goes = list.filter((c) => c.answer?.kind === 'go');
   // "Sent" stays a few seconds, then fades away (it stayed at the foot of the page until the next choice)
   const sent = p.k === 'sent' ? p.n : 0;
@@ -68,6 +72,8 @@ export function ChoicesTray({ film }: { film: string }) {
       const r = await almaFetch(film, `/api/films/${film}/done`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
         answers: list.filter((c) => c.answer).map((c) => ({ card: c.answer!.card, option: c.answer!.option, note: c.answer!.note })),
         picks: list.filter((c) => c.pick).map((c) => c.pick),
+        approvals: list.filter((c) => c.approve).map((c) => c.approve),
+        removals: list.filter((c) => c.remove).map((c) => c.remove),
       }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
       if (!r.ok) { back(j.error ?? `Not sent (${r.status})`); return; }

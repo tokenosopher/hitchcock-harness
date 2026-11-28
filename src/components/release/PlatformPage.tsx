@@ -25,6 +25,8 @@ import { DockProvider, layoutFor, useFadeOn, useTyping, useWidth } from './layou
 import type { Platform, ReleaseFile } from './file';
 import type { FilmState } from '@/server/types';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { refData } from '@/components/lib/refPick';
+import { platformRef } from './refs';
 
 export function PlatformPage() {
   const { film, state, error, base } = useFilmPage();
@@ -81,7 +83,7 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
         crumbExtra={<Pill className="ml-1 @max-[820px]/page:hidden">final: master of {file.final!.version}</Pill>} actions={<Pill className="h-8">{posted.words}</Pill>} />
       <StepIntro step="platform" className="px-5 py-3" />
       <Tabs file={file} p={p} now={now} base={base} qs={qs} prev={prev} next={next} sticky={one} />
-      <div data-state-line className="flex min-h-[42px] flex-none flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line px-5 py-2 text-[12.5px] text-sub">
+      <div data-state-line {...refData(platformRef(p))} className="flex min-h-[42px] flex-none flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line px-5 py-2 text-[12.5px] text-sub">
         <StateWords st={st} big className="flex-wrap whitespace-normal" />
         <span className="text-faint">·</span><span>{where}</span>
         {st.state !== 'posted' && st.state !== 'sending' && <><span className="text-faint">·</span><span>planned for about {p.wave.about}{day === 'today' ? '' : ` ${day}`}</span></>}
@@ -90,7 +92,7 @@ function DesktopPlatform({ rel, file, p, now, state, base, film, prev, next }: {
       <DockProvider value={one ? dock : null}>
         <div ref={setBody} data-platform-page={p.id} className={cn(one ? 'flex flex-col' : 'flex min-h-0 flex-1')}>
           {layout === 'three' && <PlatformLook film={film} state={state} file={file} p={p} />}
-          <PlatformText film={film} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout={layout}
+          <PlatformText film={film} state={state} file={file} p={p} st={st} now={now} run={rel.run} base={base} layout={layout} finalFile={rel.view?.finalFile}
             look={layout !== 'three' ? <LookFold film={film} state={state} file={file} p={p} /> : undefined} />
           <SendingIt rel={rel} file={file} p={p} now={now} base={base} layout={layout} />
         </div>
@@ -140,7 +142,7 @@ function Tabs({ file, p, now, base, qs, prev, next, sticky }: { file: ReleaseFil
           const notes = q.fields.reduce((a, f) => a + (f.notes ?? []).filter((n) => !n.answered).length, 0);
           const on = q.id === p.id;
           return (
-            <Link key={q.id} href={`${base}/release/${q.id}${qs}`} data-tab={q.id} aria-current={on ? 'page' : undefined}
+            <Link key={q.id} href={`${base}/release/${q.id}${qs}`} data-tab={q.id} {...refData(platformRef(q))} aria-current={on ? 'page' : undefined}
               className={cn('relative inline-flex flex-none items-center gap-[7px] whitespace-nowrap px-2.5 text-[12.5px] no-underline transition-colors duration-150', on ? 'text-ink' : 'text-sub hover:text-ink')}>
               <Glyph state={s.state} />{q.name}
               {s.state === 'posted' && s.tags.some((t) => t.tone === 'amber' && /left in/.test(t.text)) && <span className="text-[11px] text-warn">{s.tags.find((t) => /left in/.test(t.text))!.text.replace(/ thing(s)? left in .*/, ' left')}</span>}

@@ -18,9 +18,11 @@ import { PlayButton } from '@/components/media/Sound';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconChevronRight } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
-import { GoCard, PickCard, StoryWaitCard } from './GatePage';
+import { GoCard, PickCard, ReleaseWaitCard, StoryWaitCard } from './GatePage';
 import { itemHref, soundsOf, waitItemsOf, type WaitItem } from './waitList';
 import { useKept } from './useKept';
+import { refData } from '@/components/lib/refPick';
+import { waitRefOf } from '@/components/shell/refItems';
 
 /** The flow and what waits in it, for the film on screen; undefined until the film is read. */
 export function useWaitingNow(): { s: FilmState; flow: Flow; items: WaitItem[] } | undefined {
@@ -95,7 +97,7 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
   const prefill = (t: string, id: string, label: string) => ui.command({ id, label }, t);
   const g = it.gate;
   return (
-    <li ref={li} data-wait={it.key} data-wait-ready={it.ready || undefined}
+    <li ref={li} data-wait={it.key} data-wait-ready={it.ready || undefined} {...refData(waitRefOf(it))}
       className={cn('mb-1.5 min-w-0 rounded-[10px] border transition-[border-color,background-color] duration-200 animate-in fade-in-0', it.ready ? 'border-line' : 'border-dashed border-line')}>
       <div className="flex min-h-[52px] items-center gap-3 px-2.5 py-1.5 max-[760px]:flex-wrap max-[760px]:gap-y-1.5">
         <span className="w-4 flex-none max-[760px]:hidden" />
@@ -123,13 +125,17 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
           )}
         </span>
         <span className="flex flex-none items-center gap-1 max-[760px]:basis-full">
-          {it.ready && (
+          {/* posting the film has nothing to answer here: its one button opens the Release page */}
+          {it.release ? (href !== here && (
+            <Link href={`${base}${href}`} data-wait-open data-wait-release
+              className="inline-flex h-8 items-center whitespace-nowrap rounded-lg border border-edge-strong px-3 text-[12.5px] text-ink no-underline transition-colors duration-150 hover:bg-raised max-[760px]:h-11">Open Release</Link>
+          )) : it.ready && (
             <button type="button" data-wait-answer aria-expanded={open} onClick={() => onOpen(open ? undefined : it.key)}
               className="inline-flex h-8 cursor-pointer items-center whitespace-nowrap rounded-lg border border-edge-strong px-3 text-[12.5px] text-ink transition-colors duration-150 hover:bg-raised max-[760px]:h-11">
               {open ? 'Fold' : 'Answer'}
             </button>
           )}
-          {href !== here && (
+          {!it.release && href !== here && (
             <Link href={`${base}${href}`} data-wait-open title={`Open ${where ?? 'its page'}`}
               className="group/open inline-flex h-8 items-center gap-0.5 whitespace-nowrap rounded-lg px-2 text-[12.5px] text-sub no-underline transition-colors duration-150 hover:text-ink max-[760px]:h-11">
               Open<IconChevronRight size={13} className="text-mute transition-colors duration-150 group-hover/open:text-ink" />
@@ -141,6 +147,7 @@ function Row({ it, w, here, from, open, onOpen }: { it: WaitItem; w: { s: FilmSt
       <Reveal open={open} className="min-w-0 px-2.5 pb-2.5">
         <div className="flex flex-col gap-3 pt-0.5">
           {it.story ? <StoryWaitCard w={it.story} base={base} onChip={chip} />
+            : it.release ? <ReleaseWaitCard w={it.release} base={base} onChip={chip} />
             : it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from={from} where={<span>{where}</span>} />
             : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={chip} />
             : g ? <PickCard p={g} onChip={chip} onPrefill={prefill} from={from} voices={it.voiceIds} /> : null}

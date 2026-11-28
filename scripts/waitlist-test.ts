@@ -151,6 +151,17 @@ ok('order: the ranks behind it', ['loc', 'faces', 'clothing', 'sheet', 'voices']
 ok('order: equal ranks keep the order they came in', byImportance([{ place: 'faces' as const, k: 'b' }, { place: 'loc' as const, k: 'x' }, { place: 'faces' as const, k: 'a' }]).map((x) => x.k).join() === 'x,b,a');
 ok('order: the go alone is the first item', keys(waitItemsOf({ ...all, asks: [], gate: [all.gate[0]] } as Flow)).join() === 'gate:g-go');
 
+// ---- one question a sheet: Alma's own card at Sheet about a character stands in for the gate's entry of that sheet
+{
+  const sheetCard = { ...card('a-sheet', 'sheet', 'yes'), ids: ['C04'] };
+  const one = { ...all, asks: [sheetCard], gate: [gi({ key: 'g-sheet', kind: 'sheet', group: 'gate', state: 'ready', id: 'C04' }), gi({ key: 'g-sheet5', kind: 'sheet', group: 'gate', state: 'ready', id: 'C05' })] } as unknown as Flow;
+  ok('a sheet Alma\'s card asks about is listed once, as her card; another character\'s sheet stays', keys(waitItemsOf(one)).join() === 'card:a-sheet,gate:g-sheet5', keys(waitItemsOf(one)));
+  // a form's sheet: the card's ids hold the character (C01); its id or title names the form
+  const formCard = { ...card('ASK-C01a-sheet-voice', 'sheet', 'yes'), ids: ['C01'], title: 'C01a Maren, night 1: sheet with her voice' };
+  const forms = { ...all, asks: [formCard], gate: ['C01', 'C01a', 'C01b'].map((id) => gi({ key: `g-${id}`, kind: 'sheet', group: 'gate', state: 'ready', id })) } as unknown as Flow;
+  ok('a card about a form\'s sheet stands in for that form only', keys(waitItemsOf(forms)).filter((k) => k.startsWith('gate:')).join() === 'gate:g-C01,gate:g-C01b', keys(waitItemsOf(forms)));
+}
+
 // ---- which step each item holds up: only from a real waiting item, never from the order
 const STEPS: StepId[] = ['script', 'characters', 'places', 'shots', 'boards', 'takes', 'approved', 'full', 'sound', 'subs', 'master', 'final', 'posted'];
 const steps = (current: StepId, done: StepId[] = []) => STEPS.map((id) => ({ id, done: done.includes(id), current: id === current }));

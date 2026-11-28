@@ -18,6 +18,7 @@ import { useJson } from '@/components/pages/postCommon';
 import { cn } from '@/lib/utils';
 import { Who } from './Who';
 import { choose, unchoose, useChoice } from '@/components/data/choices';
+import { ClearChoice } from '@/components/shell/ClearChoice';
 import { Reveal } from '@/components/shell/Reveal';
 import { IconFile } from '@/components/shell/icons';
 import { refData } from '@/components/lib/refPick';
@@ -25,10 +26,13 @@ import { cardRefOf } from '@/components/shell/refItems';
 import { SoundPicks } from './SoundPicks';
 import { CutButton, sceneInCut } from './CutButton';
 import { takeCutOf } from '@/components/edit/cutLink';
-import { CardText } from './CardText';
+import { CardText, longSub } from './CardText';
 import { WhyPanel } from './WhyPanel';
+import { isRemovedAnswer } from '@/components/lib/remove';
 import { almaFetch } from '@/components/data/almaOutbox';
 import { askLayout, bodyMedia, optionMediaOf, readHref, readOf, wideBox } from './askMedia';
+import { FilmButton, HearInFilm, RingPlay, useHearData, Wave, type HearHandle } from './SoundChoice';
+import { momentsOf } from './hearIt';
 
 interface FeedData { cards: FeedCard[]; total: number; warnings: string[] }
 type ToRepo = (rel: string) => string;
@@ -188,7 +192,8 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
   const mine = useChoice(film, cid);
   const sel = mine?.answer?.option;
   const about = `${card.ids[0] ? `${card.ids[0]} · ` : ''}${short(card.title, 44)}`;
-  const setSel = (id: string) => choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
+  // the chosen option tapped again is cleared, as the chosen Yes or Go is
+  const setSel = (id: string) => sel === id ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.options.find((o) => o.id === id)?.label || id}`, answer: { card: card.key, option: id, kind: 'pick' } });
   const setYes = () => (mine ? unchoose(film, cid) : choose(film, { id: cid, label: `${about} · ${ask.kind === 'go' ? `go${ask.cost ? ` (${short(ask.cost, 30)})` : ''}` : 'yes'}`, answer: { card: card.key, kind: ask.kind === 'go' ? 'go' : 'yes', cost: ask.cost } }));
   const [p, setP] = useState<Phase>({ k: 'idle' });
   const mediaOf = (o: FeedOption): FeedMedia | undefined => optionMediaOf(card, o);
@@ -197,6 +202,11 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
   const { state } = useFilm();
   const inCut = sceneInCut(state, card.ids.find((x) => /^S\d+$/.test(x)));
   const rows = withFile.filter((x) => !x.m || !visual(x.m));
+  // a pick among sounds: each heard on the card, and in the film where the card places them
+  const sounds = rows.some((x) => x.m?.kind === 'audio');
+  const hearData = useHearData(sounds ? film : '', card.key);
+  const hearRef = useRef<HearHandle>(null);
+  const moments = card.hear?.moments ?? [];
   // a card with its own yes and no words (Release, stage 3) answers at once: the card itself is the second look
   const send = async (no?: boolean) => {
     setP({ k: 'busy' });
@@ -230,20 +240,39 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
           )}
           {rows.map(({ o, m }) => {
             const on = sel === o.id;
+            if (m?.kind === 'audio') {
+              const placed = momentsOf(moments, o.id).length > 0;
+              return (
+                <div key={o.id} data-sound-option={o.id} className={cn('flex min-w-0 items-center gap-2.5 rounded-lg border py-1.5 pl-1.5 pr-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
+                  <RingPlay path={toRepo(m.path)} label={o.label || o.id} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <button type="button" role="radio" aria-checked={on} onClick={() => setSel(o.id)} className="flex min-h-6 min-w-0 cursor-pointer items-center gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
+                      <span aria-hidden="true" className={cn('flex size-3.5 flex-none items-center justify-center rounded-full border transition-colors duration-200', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink duration-150 animate-in zoom-in-50 motion-reduce:animate-none" />}</span>
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{o.label || o.id}</span>
+                      {o.id === ask.prediction && <span className="flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
+                    </button>
+                    <Wave path={toRepo(m.path)} label={o.label || o.id} peaks={hearData?.peaks[m.path]} seconds={hearData?.seconds[m.path]} className="pl-6" />
+                  </div>
+                  {placed && <FilmButton label={o.label || o.id} onClick={() => hearRef.current?.play(o.id)} />}
+                </div>
+              );
+            }
             return (
               <div key={o.id} className={cn('flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2 transition-colors duration-200', on ? 'border-sub bg-raised' : 'border-edge')}>
-                {m?.kind === 'audio' && <PlayButton path={toRepo(m.path)} label={o.label || o.id} />}
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <button type="button" role="radio" aria-checked={on} onClick={() => setSel(o.id)} className="flex min-w-0 cursor-pointer items-start gap-2.5 border-0 bg-transparent p-0 text-left text-ink">
                     <span aria-hidden="true" className={cn('mt-[3px] flex size-3.5 flex-none items-center justify-center rounded-full border', on ? 'border-ink' : 'border-mute')}>{on && <span className="size-1.5 rounded-full bg-ink" />}</span>
                     <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] leading-[1.45]">{o.label || o.id}</span>
                     {o.id === ask.prediction && <span className="mt-px flex-none rounded-[4px] bg-ink px-1.5 py-px text-[10px] font-semibold text-bg">Alma</span>}
                   </button>
-                  {m?.kind === 'audio' && <PlayLine path={toRepo(m.path)} className="max-w-[420px] pl-6" />}
                 </div>
               </div>
             );
           })}
+          {sounds && moments.length > 0 && (
+            <HearInFilm ref={hearRef} film={film} card={card.key} moments={moments} data={hearData} toRepo={toRepo} prediction={ask.prediction} chosen={sel}
+              options={ask.options.filter((o) => momentsOf(moments, o.id).length).map((o) => ({ id: o.id, label: o.label || o.id }))} />
+          )}
         </div>
       )}
       {ask.kind === 'go' && ask.cost && <p className="m-0 text-[13px] leading-normal"><span className="text-sub">The quote: </span>{ask.cost}</p>}
@@ -261,6 +290,7 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
         ) : ask.kind === 'pick' ? (
           <>
             {mine ? chosenMark : <span className="text-[12.5px] text-sub">Tap one to choose it.</span>}
+            <ClearChoice shown={!!mine} onClear={() => unchoose(film, cid)} />
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
           </>
         ) : (
@@ -271,6 +301,7 @@ function AskPanel({ film, card, toRepo, from, onAnswered }: { film: string; card
             </Btn>
             <Btn ghost onClick={elsewhere}>Say something else</Btn>
             {mine && <span className="text-[12px] text-mute duration-200 animate-in fade-in-0">Goes with Done picking</span>}
+            <ClearChoice shown={!!mine} onClear={() => unchoose(film, cid)} />
           </>
         )}
         {p.k === 'error' && <span role="alert" className="text-[12px] text-bad">{p.text}</span>}
@@ -287,7 +318,11 @@ function CardBody({ card, toRepo, hideOptions }: { card: FeedCard; toRepo: ToRep
   const onChip = (m: FeedMedia) => ui.addChip({ id: `file:${m.path}`, label: short(m.label ?? m.path.split('/').pop() ?? m.path, 32), ref: toRepo(m.path) });
   return (
     <>
-      {card.sub && <p className="m-0 max-w-[760px] text-[12.5px] leading-normal text-sub">{card.sub}</p>}
+      {/* the line under the title: one quiet line as written; with line breaks, a list or many words it is drawn as the
+          card's text is (paragraphs, lists, folded under "Show more"), never as one unbroken paragraph */}
+      {card.sub && (longSub(card.sub)
+        ? <CardText text={[card.sub]} film={film} />
+        : <p className="m-0 max-w-[760px] text-[12.5px] leading-normal text-sub">{card.sub}</p>)}
       {card.quote && <blockquote data-card-quote className="m-0 max-w-[760px] whitespace-pre-wrap break-words border-l-2 border-edge-strong pl-3 text-[13px] leading-[1.5] text-ink">{card.quote}</blockquote>}
       {card.fileLine && (
         <p data-card-file className="m-0 flex max-w-[760px] items-start gap-2 text-[12.5px] leading-[1.45] text-ink-3" title={card.fileLine.path}>
@@ -383,6 +418,7 @@ function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
     : card.sounds?.length ? `${card.sounds.length} sounds answered`
       : k === 'debrief' ? `answers sent${card.debrief ? ` · ${card.debrief.answered} answered` : ''}`
         : k === 'why' ? (a.option === 'skip' ? 'skipped' : 'you said why')
+          : isRemovedAnswer(a.option) ? 'removed, not answered'
           : a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : k === 'go' ? 'go given' : 'yes given';
   const line = [mediaLine(card.media), said].filter(Boolean).join(' · ');
   return (

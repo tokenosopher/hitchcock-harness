@@ -478,6 +478,26 @@ export function useCut(film: string) {
     });
   }, [setError, inChain, send, adopt, failed]);
 
+  /** The cut's frame set to another size (the brief says 16:9 and the cut is 9:16), as one step that can be
+   *  undone; the tracks and markers stay as they are. */
+  const setFrameSize = useCallback(async (width: number, height: number, words: string): Promise<boolean> => {
+    const w0 = workingRef.current;
+    if (!w0 || savingRef.current || busyRef.current) return false;
+    busyRef.current = 'frame';
+    setError(undefined);
+    return inChain(async () => {
+      try {
+        const { ok, status, j } = await send('working', { words, by: 'user', tracks: w0.tracks, markers: w0.markers ?? [], width, height });
+        if (!ok) { failed(status, j, 'the frame size'); return false; }
+        adopt(j.working, j.history);
+        if (!j.same) stepsRef.current++;
+        return true;
+      } finally {
+        busyRef.current = undefined;
+      }
+    });
+  }, [setError, inChain, send, adopt, failed]);
+
   /** Keeps the working cut as the next version (⌘S, Save, a render, an export): asks nothing. When nothing changed since
    *  the newest version no file is written (`made: false`). The status line says what happened (`lastSave`). */
   const saveNow = useCallback(async (why: SaveWhy, name?: string): Promise<{ version?: string; made?: boolean; error?: string }> => {
@@ -648,7 +668,7 @@ export function useCut(film: string) {
     mode, current, working, history, versions, names, newest, equals, edited, ref, refRenders, renders, rendersStore: store, auto480p, saving, error, problems, unreadable,
     /** The changes this page landed, and what is in flight (refs: they never draw the page; the browser tests read them). */
     landed: () => stepsRef.current, busy: () => busyRef.current ?? savingRef.current,
-    lastSave: saveShown, notice: noticeShown, hereNow, setError, view, commit, undo, redo, goTo, restore, save, ensureSaved, nameVersion, followServer, reload,
+    lastSave: saveShown, notice: noticeShown, hereNow, setError, view, commit, undo, redo, goTo, restore, setFrameSize, save, ensureSaved, nameVersion, followServer, reload,
     renderMaster, renderProxy, proxyLanded, renderWith, exportCut, canExport, sourceSeconds,
   };
 }

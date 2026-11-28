@@ -11,9 +11,11 @@ import { Btn } from '@/components/shell/atoms';
 import { IconX } from '@/components/shell/icons';
 import { cn } from '@/lib/utils';
 import { clipName, lenF, partnerOf, pastEnd, pastShot, patchClip, shotFrames, replaceTake, retimeClips, speedOf, startF, superseded, toConfirm, toF, type ClipFrames, type ClipRef, type Edit } from './model';
-import { setFade, setFlip } from './controls';
+import { setFade, setFadeLevel, setFlip, smoothChange } from './controls';
+import { asFades, clipAfter, clipBefore, fmtLevel, levelAtEnd, levelAtStart, smoothOffer } from './fades';
 import type { HistoryStep } from './history';
 import { isLine } from './subs';
+import { SpeedControl } from './SpeedControl';
 import { retypeLine } from './subsEdit';
 
 interface Props {
@@ -28,6 +30,8 @@ interface Props {
   /** What a clip may use of its file (shots.ts clipFrames), for the note on a clip that shows another shot's frames. */
   framesOf?: (c: TimelineClip) => ClipFrames;
   onEdit: (e: Edit | undefined) => void;
+  /** A speed tried in the Speed row, shown and heard on the timeline before it is kept (undefined: none). */
+  onTrySpeed?: (ref: ClipRef, pct: number | undefined) => void;
   onClose: () => void;
   onAsk: () => void;
   onChip: () => void;
@@ -65,6 +69,41 @@ function NumField({ label, value, unit, step, min, max, disabled, onCommit }: { 
 
 /** A subtitle line's words (14 Nov): two rows at most; Enter saves (one version), Shift-Enter starts the second
  *  row, Escape puts back what is saved; leaving the field saves. */
+/** Where a sound fade starts (in) or ends (out): silence, the level of the clip beside it at the
+ *  split, or a level typed in. Writes on the choice, or when the typed level loses focus or on Enter. */
+function LevelPick({ label, value, near, nearWord, disabled, onPick }: { label: string; value: number | undefined; near?: number; nearWord: string; disabled?: boolean; onPick: (db: number | undefined) => void }) {
+  const mode = value === undefined ? 'silence' : near !== undefined && Math.abs(value - near) < 0.05 ? 'near' : 'level';
+  const [typing, setTyping] = useState<string>();
+  const [own, setOwn] = useState(false);
+  const shown = own || mode === 'level';
+  const done = () => {
+    if (typing === undefined) return;
+    const v = Number(typing);
+    setTyping(undefined);
+    if (typing.trim() !== '' && Number.isFinite(v) && v !== value) onPick(v);
+  };
+  return (
+    <label className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-2 py-[3px] text-[12.5px]">
+      <span className="text-sub">{label}</span>
+      <span className="flex min-w-0 items-center justify-end gap-1.5">
+        <select aria-label={label} disabled={disabled} value={own ? 'level' : mode}
+          onChange={(e) => { const m = e.target.value; setOwn(m === 'level'); if (m === 'silence') onPick(undefined); else if (m === 'near' && near !== undefined) onPick(near); }}
+          className="h-7 min-w-0 max-w-[200px] truncate rounded-[6px] border border-edge bg-bg px-1.5 text-[12px] text-ink outline-none transition-colors duration-150 focus:border-sub disabled:opacity-50">
+          <option value="silence">Silence</option>
+          {near !== undefined && <option value="near">{nearWord} ({fmtLevel(near)})</option>}
+          <option value="level">A level</option>
+        </select>
+        {shown && (
+          <input type="number" inputMode="decimal" aria-label={`${label}, dB`} disabled={disabled} step={0.5} min={-96} max={24} value={typing ?? (value ?? '')}
+            onChange={(e) => setTyping(e.target.value)} onBlur={done} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setTyping(undefined); }}
+            className="h-7 w-[60px] rounded-[6px] border border-edge bg-bg px-2 text-right font-mono text-[12px] text-ink outline-none duration-150 animate-in fade-in-0 focus:border-sub disabled:opacity-50" />
+        )}
+        <span className="w-[16px] font-mono text-[11px] text-mute">{shown ? 'dB' : ''}</span>
+      </span>
+    </label>
+  );
+}
+
 function WordsField({ text, disabled, onCommit }: { text: string; disabled?: boolean; onCommit: (v: string) => void }) {
   const [v, setV] = useState<string>();
   const shown = v ?? text;
@@ -85,7 +124,7 @@ function WordsField({ text, disabled, onCommit }: { text: string; disabled?: boo
   );
 }
 
-export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, framesOf, onEdit, onClose, onAsk, onChip }: Props) {
+export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, framesOf, onEdit, onTrySpeed, onClose, onAsk, onChip }: Props) {
   const fps = tl.fps;
   const track: TimelineTrack | undefined = sel ? tl.tracks.find((t) => t.id === sel.trackId) : undefined;
   const clip: TimelineClip | undefined = track?.clips.find((c) => c.id === sel?.clipId);
@@ -117,6 +156,12 @@ export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, f
   const locked = readOnly || !!track.locked;
   const recent = steps.filter((x) => x.words.includes(name)).slice(-4).reverse();
   const srcLen = srcSeconds((clip.src ?? ''));
+  // a sound clip's fades as heard (Alma's head pair of level points is a fade, fades.ts), the levels of the clips
+  // beside it at a split, and the offer to smooth the change from the clip before
+  const fc = track.kind === 'audio' ? asFades(clip).clip : clip;
+  const before = track.kind === 'audio' ? clipBefore(track, clip, fps) : undefined, after = track.kind === 'audio' ? clipAfter(track, clip, fps) : undefined;
+  const nearIn = before ? levelAtEnd(before) : undefined, nearOut = after ? levelAtStart(after) : undefined;
+  const smooth = track.kind === 'audio' ? smoothOffer(tl, track.id, clip) : undefined;
 
   const replace = (takeId: string) => {
     const t = takes.find((x) => x.id === takeId);
@@ -178,18 +223,38 @@ export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, f
       )}
       <div className="flex flex-col border-b border-line px-4 py-2.5">
         {track.kind !== 'captions' && (
-          <NumField key={`sp-${clip.id}-${speedOf(clip)}`} label="Speed" unit="%" step={5} min={10} max={1000} value={Math.round(speedOf(clip) * 100)} disabled={locked}
-            onCommit={(v) => onEdit(retimeClips(tl, [ref], v / 100))} />
+          // the same control as the clip menu's Speed panel: tried at once, kept when it rests, on Enter or
+          // when the row is left; Esc puts it back
+          <div className="grid grid-cols-[92px_minmax(0,1fr)] items-start gap-2 py-[4px] text-[12.5px]">
+            <span className="pt-[7px] text-sub">Speed</span>
+            <SpeedControl key={`sp-${clip.id}-${speedOf(clip)}`} mode="row" pct={Math.round(speedOf(clip) * 100)} srcs={[clip.out - clip.in]} nowF={len} fps={fps} disabled={locked}
+              onChange={(p) => onTrySpeed?.(ref, p)} onCommit={(p) => onEdit(retimeClips(tl, [ref], p / 100))} onCancel={() => onTrySpeed?.(ref, undefined)} />
+          </div>
         )}
  {!isLine(clip) && <NumField key={`g-${clip.id}-${clip.gain ?? 0}`} label="Gain" unit="dB" step={0.5} min={-60} max={12} value={clip.gain ?? 0} disabled={locked}
           onCommit={(v) => onEdit(patchClip(tl, ref, { gain: v }, `${track.id} ${name} gain ${clip.gain ?? 0} → ${v} dB`))} />}
         {/* each fade on its own clip (13 Nov): the picture's fades the picture from and to black, the sound's the sound */}
         {track.kind !== 'captions' && (
           <>
-            <NumField key={`fi-${clip.id}-${clip.fadeIn ?? 0}`} label={`${track.kind === 'video' ? 'Picture' : 'Sound'} fade in`} unit="f" step={1} min={0} max={len} value={toF(clip.fadeIn ?? 0, fps)} disabled={locked}
+            <NumField key={`fi-${clip.id}-${fc.fadeIn ?? 0}`} label={`${track.kind === 'video' ? 'Picture' : 'Sound'} fade in`} unit="f" step={1} min={0} max={len} value={toF(fc.fadeIn ?? 0, fps)} disabled={locked}
               onCommit={(v) => onEdit(setFade(tl, ref, 'fadeIn', Math.round((v / fps) * 1e6) / 1e6))} />
-            <NumField key={`fo-${clip.id}-${clip.fadeOut ?? 0}`} label={`${track.kind === 'video' ? 'Picture' : 'Sound'} fade out`} unit="f" step={1} min={0} max={len} value={toF(clip.fadeOut ?? 0, fps)} disabled={locked}
+            {track.kind === 'audio' && (
+              <LevelPick key={`fif-${clip.id}-${fc.fadeInFrom ?? 's'}`} label="Fades in from" value={(fc.fadeIn ?? 0) > 0 ? fc.fadeInFrom : undefined} near={nearIn} nearWord="The clip before" disabled={locked}
+                onPick={(db) => onEdit(setFadeLevel(tl, ref, 'fadeIn', db))} />
+            )}
+            <NumField key={`fo-${clip.id}-${fc.fadeOut ?? 0}`} label={`${track.kind === 'video' ? 'Picture' : 'Sound'} fade out`} unit="f" step={1} min={0} max={len} value={toF(fc.fadeOut ?? 0, fps)} disabled={locked}
               onCommit={(v) => onEdit(setFade(tl, ref, 'fadeOut', Math.round((v / fps) * 1e6) / 1e6))} />
+            {track.kind === 'audio' && (
+              <LevelPick key={`fot-${clip.id}-${fc.fadeOutTo ?? 's'}`} label="Fades out to" value={(fc.fadeOut ?? 0) > 0 ? fc.fadeOutTo : undefined} near={nearOut} nearWord="The clip after" disabled={locked}
+                onPick={(db) => onEdit(setFadeLevel(tl, ref, 'fadeOut', db))} />
+            )}
+            {smooth && !locked && (
+              <div data-smooth="" className="flex items-center justify-between gap-2 py-[5px] text-[12px] text-sub duration-200 animate-in fade-in-0">
+                <span className="min-w-0">Jumps from {fmtLevel(smooth.from)} at the split</span>
+                <Btn className="h-7 shrink-0 px-2.5 text-[12px]" title={`Fade in from ${fmtLevel(smooth.from)} over ${(smooth.len).toFixed(1)} s, so the level rises (or falls) smoothly from the clip before`}
+                  onClick={() => onEdit(smoothChange(tl, ref))}>Smooth the change</Btn>
+              </div>
+            )}
           </>
         )}
         {track.kind === 'video' && (
@@ -199,7 +264,7 @@ export function Inspector({ tl, sel, state, base, steps, readOnly, srcSeconds, f
           </label>
         )}
         {track.kind === 'audio' && (
-          <Row k="Level points" mono={false}><span className="text-[12px] text-ink-3">{clip.gainPoints?.length ? `${clip.gainPoints.length} · drag them on the level line` : '⌥-click the level line to add'}</span></Row>
+          <Row k="Level points" mono={false}><span className="text-[12px] text-ink-3">{fc.gainPoints?.length ? `${fc.gainPoints.length} · drag them on the level line` : '⌥-click the level line to add'}</span></Row>
         )}
         <label className="flex items-center justify-between py-[5px] text-[12.5px]">
           <span className="text-sub">Clip muted</span>

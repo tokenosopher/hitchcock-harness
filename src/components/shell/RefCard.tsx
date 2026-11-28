@@ -22,6 +22,9 @@ export function refImage(r: InlineRef): string | undefined {
   return mediaUrl(r.file, { w: 160, t: Math.round((t ?? 0.5) * 100) / 100 });
 }
 
+/** Words in a card row: quoted, about two lines. */
+const said = (w?: string) => (w ? `“${w.length > 140 ? `${w.slice(0, 139)}…` : w}”` : undefined);
+
 function rows(r: InlineRef): [string, ReactNode][] {
   const cut = r.cut ? `${r.cut}${r.edited ? ' with edits' : ''}` : undefined;
   const file = r.file ? <span className="font-mono text-[10.5px] text-sub" title={r.file}>{base(r.file)}</span> : undefined;
@@ -37,9 +40,21 @@ function rows(r: InlineRef): [string, ReactNode][] {
       case 'view': return [['Place', r.location], ['File', file]];
       case 'location': return [['Name', r.title]];
       case 'card': return [['Asks', r.title], ['Card', r.card]];
+      case 'platform': return [['Platform', r.platform]];
+      case 'field': return [['Field', r.title ?? r.field], ['Text', said(r.words)]];
+      case 'option': return [['Does', r.title], ['Text', said(r.words)]];
+      case 'note': case 'step': return [['Field', r.field], ['Says', said(r.words)]];
+      case 'final': return [['Cut', r.cut], ['File', file]];
+      case 'stage': return [['Now', r.title]];
+      case 'voice': return [['Character', r.character], ['Round', r.item], ['File', file]];
+      case 'prompt': return [['Scene', r.scene], ['Says', said(r.words)], ['File', file]];
+      case 'qc': return [['Round', r.round], ['Score', r.title], ['File', file]];
+      case 'finding': return [['Round', r.round], ['Miss', r.item], ['Says', said(r.words)]];
+      case 'line': return [['Scene', r.scene], ['Line', r.line], ['Says', said(r.words)]];
+      case 'text': return [['Page', r.page || 'the film’s page'], ['Under', r.section], ['Says', said(r.words)]];
     }
   })();
-  return list.filter((x): x is [string, ReactNode] => x[1] !== undefined && x[1] !== '');
+  return [...list, ['Selected', said(r.quote)] as [string, ReactNode | undefined]].filter((x): x is [string, ReactNode] => x[1] !== undefined && x[1] !== '');
 }
 
 /** Goes to the thing: the page on screen when it shows it, else its page. */
@@ -111,7 +126,8 @@ export function useHoverCard<T>() {
   return { open, setOpen, show, hide, keep };
 }
 
-/** A chip in a sent message: hover for its card, click to go to it; on a touch screen a tap opens the card. */
+/** A chip in a sent message: hover for its card, click to go to it; on a touch screen a tap opens the card.
+ *  Never wider than the bubble's text: a label longer than the line wraps inside the chip. */
 function SentChip({ r, film, open, onOpen, onClose, onKeep }: { r: InlineRef; film: string; open?: DOMRect; onOpen: (rect: DOMRect, now?: boolean) => void; onClose: () => void; onKeep: () => void }) {
   const go = useGoToRef(film);
   const touch = useRef(false);
@@ -121,7 +137,7 @@ function SentChip({ r, film, open, onOpen, onClose, onKeep }: { r: InlineRef; fi
         onPointerDown={(e) => { touch.current = e.pointerType !== 'mouse'; }}
         onMouseEnter={(e) => onOpen(e.currentTarget.getBoundingClientRect())} onMouseLeave={onClose}
         onClick={(e) => { if (touch.current) { if (open) onClose(); else onOpen(e.currentTarget.getBoundingClientRect(), true); } else go(r); }}
-        className={cn('mx-px inline cursor-pointer whitespace-nowrap rounded-[5px] border-0 bg-edge px-[3px] py-0 align-baseline text-[13.5px] leading-[inherit] text-ink shadow-[inset_0_0_0_1px_#3f3f46] transition-colors hover:bg-edge-strong', open && 'bg-edge-strong shadow-[inset_0_0_0_1px_#a1a1aa]')}>
+        className={cn('mx-px inline max-w-[calc(100%-2px)] cursor-pointer whitespace-normal rounded-[5px] text-left [overflow-wrap:anywhere] border-0 bg-edge px-[3px] py-0 align-baseline text-[13.5px] leading-[inherit] text-ink shadow-[inset_0_0_0_1px_#3f3f46] transition-colors hover:bg-edge-strong', open && 'bg-edge-strong shadow-[inset_0_0_0_1px_#a1a1aa]')}>
         {r.label}
       </button>
       {open && <RefCard r={r} film={film} place={{ anchor: open }} onEnter={onKeep} onLeave={onClose} />}

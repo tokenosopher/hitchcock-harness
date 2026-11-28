@@ -3,7 +3,7 @@
 // for you" shows (GatePage reads it from here): only what asks the user to choose, the most important first
 // (byImportance), so the two lists, their order and their counts cannot disagree.
 import type { FeedCard, FilmState } from '@/server/types';
-import type { GateItem, StoryWait } from '@/components/lib/derive';
+import type { GateItem, ReleaseWait, StoryWait } from '@/components/lib/derive';
 import { gateChoices, voiceParts } from '@/components/lib/derive';
 import { ORDER, type Flow } from '@/components/lib/flow';
 import type { FlowKey } from '@/components/lib/derive';
@@ -17,6 +17,8 @@ export interface WaitItem {
   gate?: GateItem;
   /** The script waiting for the user's lock, or the story for their read and settle (derive.ts storyWait). */
   story?: StoryWait;
+  /** The film waiting for the user to post it (derive.ts releaseWait): its button opens the Release page. */
+  release?: ReleaseWait;
   /** The flow step it belongs to (a card's page, a pick's step). */
   place: FlowKey;
   /** The question, in its own words. */
@@ -30,7 +32,7 @@ export interface WaitItem {
   /** One more line: the card's own line under its title, or the pick's round and count. */
   line?: string;
   /** What the answer is, for the steps' line: "your yes", "your go", "your pick", "your lock", "your read". */
-  answer: 'your yes' | 'your go' | 'your pick' | 'your answer' | 'your lock' | 'your read';
+  answer: 'your yes' | 'your go' | 'your pick' | 'your answer' | 'your lock' | 'your read' | 'your post';
   /** A character's voice pick at the gate: its character (one card per character). */
   voiceIds?: string[];
 }
@@ -79,7 +81,9 @@ export function waitItemsOf(flow: Flow): WaitItem[] {
     answer: g.kind === 'go' ? 'your go' : g.kind === 'sheet' ? 'your yes' : 'your pick',
     ...(g.kind === 'voices' ? { voiceIds: [g.id] } : {}),
   }));
-  return byImportance([...story, ...cards, ...picks]);
+  const rw = flow.release;
+  const release: WaitItem[] = rw ? [{ key: rw.key, release: rw, place: 'release', title: rw.title, line: rw.line, ready: true, word: 'Your post', answer: 'your post' }] : [];
+  return byImportance([...story, ...cards, ...picks, ...release]);
 }
 
 /** The gate's picks still being made (a round running or queued) and Alma's questions being worked on: no choice yet,
@@ -129,6 +133,7 @@ export function waitsLine(items: WaitItem[]): string {
 export function itemHref(it: WaitItem, flow: Flow): string {
   // the Story page at the script, where "Lock vN" is, or at the story, where "Settle" is
   if (it.story) return `/story?tab=${it.story.kind}`;
+  if (it.release) return '/release';
   const g = it.gate;
   if (g) {
     if (g.kind === 'go') return '/go';

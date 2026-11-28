@@ -7,12 +7,13 @@
 // The page's identity for a state is the working cut's `w<rev>` (tl.version); a version's name is `cut.newest`,
 // `cut.equals` (a version with the same content) or `cut.ref` (equals, else newest): those, never `w<rev>`, go to
 // anything that reads version numbers.
+import Link from 'next/link';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { FilmState, Timeline, TimelineClip, TimelineTrack } from '@/server/types';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { usePage, useUIActions } from '@/components/data/ui';
 import { useFilm } from '@/components/data/film';
-import { fmtDate, repoPath, smpte } from '@/components/lib/format';
+import { fmtDate, repoPath, smpte, takeLabel as takeIdLabel } from '@/components/lib/format';
 import { Header } from '@/components/shell/Header';
 import { Loading } from '@/components/shell/StageTitle';
 import { QCChip } from '@/components/shell/QCChip';
@@ -21,6 +22,8 @@ import { Badge, Btn } from '@/components/shell/atoms';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlay } from '@/components/shell/icons';
 import { ToConfirm } from '@/components/pages/postCommon';
 import { useIsPhone } from '@/components/shell/useIsPhone';
+import { rememberBack } from '@/components/shell/BackLink';
+import { shotDetailsHref } from '@/components/lib/shotHref';
 import { mediaUrl } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { Inspector } from './Inspector';
@@ -28,8 +31,9 @@ import { Tracks, type Tool } from './Tracks';
 import { Viewer } from './Viewer';
 import { ViewerEdge } from './ViewerEdge';
 import { colWidthCss, stageWidthCss } from './viewerWidth';
+import { frameRule, frameShape, shownFrame } from '@/lib/frame';
 import { MasterSwitch, useFullView } from './MasterSwitch';
-import { clipMarks, picturePieces, pictureMade, scaledUpWords, type FullInfo } from './fullsize';
+import { clipMarks, hasOwnFull, madeFull, picturePieces, pictureMade, scaledUpWords, type FullInfo } from './fullsize';
 import { checkTakes, FullBar, SeedanceMarksLink, seedanceAsk, upscaleAsk, UpscaleCheck, useSeedanceMarks, type CheckShot } from './UpscaleCheck';
 import { useJson } from '@/components/pages/postCommon';
 import { useCut, useRendersLive, type RendersStore, type SaveNote, type VersionInfo, type VersionNames } from './useCut';
@@ -37,6 +41,8 @@ import type { SaveWhy } from './history';
 import { FilmStrip, PicksBox, ShotGrid, SourceShot, useShots, type Trying } from './ShotViews';
 import { EffectOptions, dirOf, isSoundFile, useOptions, type SoundOption } from './Options';
 import { ContextMenu, type MenuItem } from './Menu';
+import { ClipPanel, FadesBody, LevelBody, panelEdit, type PanelAnchor, type PanelTry } from './ClipPanel';
+import { SpeedControl } from './SpeedControl';
 import { FilesPanel, adoptUpload, useFilmFiles, type FilmFile } from './Files';
 import { RendersButton } from './Renders';
 import { ProxyPill } from './ProxyPill';
@@ -48,17 +54,20 @@ import { RenderPlayer } from './RenderPlayer';
 import { playTag, type RenderRow } from './renderList';
 import { useDrawCount } from './drawCount';
 import { fileFrames, placeFile, replaceFile, trackForFile } from './placeFile';
+import { placeTake, takePieces, type TakeDrag } from './dragTake';
 import { clipFrames, clipTag, inFilm, mainTracks, ownShotOf, pickKey, picksWords, putShot, samePlace, sceneAnchor, sceneOrder, sceneOf, sceneRuns, shotClips, shotNo, shotOf, shotsOf, shotTimeline, subTag, takeNames, takeOutScene, takeOutShot, withPicks, type SceneRun, type TakeShots } from './shots';
 import { cellP, fromCellP } from './shotCols';
 import {
-  addMarker, clipName, deleteClip, deleteTrack, deleteEmptyTracks, emptyTracks, moveTrack, renameTrack, whyNotDeleteTrack, whyNotMoveTrack, deleteClips, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, optionWindow, swapSound, endF, findClip, lenF, partnerOf, pictureAt, retimeClips, sameEdit, setLinked, speedOf, splitClip, startF, tidyOverlaps, toF, totalF, trimClip,
+  addMarker, clipName, deleteClip, deleteTrack, deleteEmptyTracks, emptyTracks, moveTrack, renameTrack, whyNotDeleteTrack, whyNotMoveTrack, deleteClips, groupDelta, moveClips, withPartners, canMoveToTrack, moveToTrack, optionWindow, swapSound, endF, findClip, lenF, partnerOf, patchClip, pictureAt, replaceTake, sameEdit, setLinked, speedOf, splitClip, startF, tidyOverlaps, toF, totalF, trimClip,
   carryPlan, carrySound, relinkSound, takeRefusal, lockedWhy, pasteClips, type ClipRef, type Copied, type Edit,
 } from './model';
-import { dissolvePlan, maxDissolveF, pressWords, removeGainPoint, saveStatus, setDissolve, setFlip, setSoundDissolve, soundJoin, stepTitle, stepUndoLine, tidyDissolves, withPresses, type Presses } from './controls';
+import { dissolvePlan, maxDissolveF, pressWords, removeGainPoint, saveStatus, setDissolve, setFlip, setSoundDissolve, smoothChange, soundJoin, stepTitle, stepUndoLine, tidyDissolves, withPresses, type Presses } from './controls';
 import { isLine, isSrtClip } from './subs';
+import { addBookmark, deleteMarker, markerName, moveMarker, nextMarker, renameMarker, unnamed } from './bookmarks';
+import { asFades, fmtLevel, smoothOffer } from './fades';
 import { hasSubtitles, placeSrt, splitSrt } from './subsEdit';
 import { downloadSrt, fetchSrt, SubtitleOverlay, subtitlesAsk } from './Subtitles';
-import { leftChip, leftWords, NEXT_TAB, soundCounts, subsCounts, unreadableSplit, waitWords, whatIsLeft, type LeftDo, type LeftStep } from './left';
+import { leftChip, leftWords, NEXT_TAB, soundCounts, STEP_IDS, subsCounts, unreadableSplit, waitWords, whatIsLeft, type LeftDo, type LeftStep, type StepId } from './left';
 import { WaitingCount } from '@/components/flow/WaitingNow';
 import { LeftTab, useLeft } from './LeftTab';
 import { hasPlanned, isFirstPart, plannedCounts, retakeWords, sceneOfClip, shotSpan, PLANNED_RENDER_WHY } from './planned';
@@ -73,7 +82,12 @@ import { useSendAsUser } from '@/components/release/AskAlma';
 import { usePhoneFull } from './phoneFull';
 import { useEditRefSource } from './refSource';
 import { StepIntro } from '@/components/intro/StepIntro';
-import { hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
+import { freshCount, hasOpenAt, intoOf, newTakes, readOpenAt, resolveOpenAt, withoutOpenAt, type NewTake, type OpenAt, type Opened } from './openAt';
+import { isNewTake, notNew, useBeginSeen, useSeenTakes } from './seenTakes';
+import { countWords, cutSrcs } from '@/components/takes/inbox';
+import { useDecided } from '@/components/takes/useDecided';
+import { otherKey, pickupView, type Placed } from './pickupRows';
+import type { ShotList } from '@/server/films/read/shotlist';
 
 const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 
@@ -123,6 +137,9 @@ function plannedSaid(tl: Timeline): string {
 let kSeq = 0;
 const nextK = () => ++kSeq;
 
+/** A touch-first device: the Edit page adds no Shot details entry there. */
+const coarse = (): boolean => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches;
+
 export function EditPage() {
   // Not useFilmPage: this page only writes to the UI state (the pinned chip, the playhead, a chip in her box) and does not read
   // Alma's thread, so it reads neither. Each change of the pinned chip (it names the version) used to draw the whole
@@ -139,6 +156,7 @@ export function EditPage() {
   // sees" here would draw the whole page again on every change of the pinned chip, F15)
   const [sending, setSending] = useState<{ text: string; chip?: { id: string; label: string; ref?: string }; said: string }>();
   const keyName = useKeyName();
+  const isMac = useMac();
   const phone = useIsPhone();
   const params = useSearchParams();
   const [viewing, setViewing] = useState<Timeline>();
@@ -189,7 +207,18 @@ export function EditPage() {
   const [playRecord, setPlayRecord] = useState(false);
 
   // the film in shots (ASKS 16): every take cut into its shots by the server, the cut's clips split to match
-  const shots = useShots(film);
+  const { all: rawTakes, waiting: rawWaiting, loaded: rawLoaded } = useShots(film);
+  // the pick-ups' takes as rows of their scene, each shot under the place it stands for: placed
+  // as the Shots page places them, from the same shot lists and the cut as saved; a copy of a listed take left out
+  const { data: shotList } = useJson<ShotList>(state ? `/api/films/${encodeURIComponent(film)}/shotlist` : undefined, state?.updatedAt);
+  const keepPlaced = useRef<Map<string, Placed> | undefined>(undefined);
+  const shotScenes = state?.scenes;
+  const savedCut = cut.current;
+  const shots = useMemo(() => {
+    const v = pickupView({ takes: rawTakes, scenes: shotScenes ?? [], gens: shotList?.gens, checks: shotList?.checks, cut: savedCut, keep: keepPlaced.current });
+    return { ...v, waiting: rawWaiting, loaded: rawLoaded };
+  }, [rawTakes, rawWaiting, rawLoaded, shotScenes, shotList, savedCut]);
+  useEffect(() => { keepPlaced.current = shots.placed; }, [shots.placed]);
   // a scene's layouts: read again when the takes change; the layout whose takes the Takes view shows
   const layouts = useLayouts(film, useMemo(() => shots.takes.map((t) => `${t.src}:${t.state}`).join('|'), [shots.takes]));
   const [viewLay, setViewLay] = useState<{ scene: string; key: number }>();
@@ -215,9 +244,19 @@ export function EditPage() {
   // the timeline's right-click menu: where it opened and what was under the pointer
   const [menu, setMenu] = useState<{ x: number; y: number; frame: number; trackId?: string; clipId?: string }>();
   const closeMenu = useCallback(() => setMenu(undefined), []);
+  // the small panel a clip's menu opens: Speed, Level, Fades; what it tries is shown and heard at once
+  const [panel, setPanel] = useState<PanelTry & { title: string; anchor: PanelAnchor; start: number | { fin: number; fout: number } }>();
+  // the Inspector's Speed row, tried and not kept yet (the same control as the panel's)
+  const [rowTry, setRowTry] = useState<{ ref: ClipRef; pct: number }>();
   // the track menu: a right-click on a track's name cell (13 Nov: "delete, move up, and move down")
   const [headMenu, setHeadMenu] = useState<{ x: number; y: number; trackId: string }>();
   const closeHeadMenu = useCallback(() => setHeadMenu(undefined), []);
+  // bookmarks: the flag selected on the ruler (an index in the cut's markers), its right-click menu, and
+  // the command that opens its name field (Enter, the menu's Rename)
+  const [markerSel, setMarkerSel] = useState<number>();
+  const [markerMenu, setMarkerMenu] = useState<{ x: number; y: number; i: number }>();
+  const closeMarkerMenu = useCallback(() => setMarkerMenu(undefined), []);
+  const [markerRename, setMarkerRename] = useState<{ n: number; i: number }>();
   const [renaming, setRenaming] = useState<string>();
   // the player full screen (13 Nov: "see the video that is composed from all of the bits full screen"): the
   // picture's own box goes full screen, so the same player keeps playing; its controls show while the pointer moves
@@ -258,6 +297,11 @@ export function EditPage() {
   const empty = cut.mode === 'none';
   const rawTl = viewing ?? pressedTl ?? (empty ? EMPTY_TL : undefined);
   const tl = useMemo(() => (rawTl ? shotTimeline(rawTl, shots.by) : undefined), [rawTl, shots.by]);
+  // the picture's frame: the brief's when the cut takes it at its next write (no picture in it yet), else
+  // the cut's own; and, on the working cut, whether its pictures are in another shape than the brief's
+  const filmAspect = state?.film.aspect;
+  const picFrame = useMemo(() => (tl ? shownFrame(tl, filmAspect) : { width: 1080, height: 1920 }), [tl, filmAspect]);
+  const frameAsk = useMemo(() => { if (!tl || viewing) return undefined; const r = frameRule(tl, filmAspect); return r.kind === 'ask' ? r : undefined; }, [tl, viewing, filmAspect]);
   // the 1080p view (ASKS 37): the full-size pictures on disk, and the switch on the player
   const { data: fullInfo } = useJson<FullInfo>(`/api/films/${film}/full`, state?.updatedAt);
   const sw = useFullView(film, fullInfo, viewing?.version ?? cut.ref, cut.view);
@@ -367,7 +411,12 @@ export function EditPage() {
     const o = opts?.find((x) => x.src === heardSrc);
     return f && o ? swapSound(tl, ref, o, opts?.find((x) => x.src === f.clip.src || x.files.includes((f.clip.src ?? '')))?.name) : undefined;
   }, [tl, options, heardSrc, hearTrack, hearClip]);
-  const shown = tryEdit?.tl ?? hearEdit?.tl ?? tl;
+  /** The cut with what the open panel (or the Inspector's Speed row) tries: the tracks and the player use it; nothing
+   *  is saved until it is kept. */
+  // (the Inspector's try holds only while its clip is the one selected: another clip selected lets go of it)
+  const rowOn = rowTry && selKey === `${rowTry.ref.trackId}:${rowTry.ref.clipId}` ? rowTry : undefined;
+  const panelTried = useMemo(() => (!tl ? undefined : panel ? panelEdit(panel, tl, (c) => { const n = shotNo(c, shots.by), sc = sceneOf(c, shots.by); return n && sc ? `${sc} shot ${n}` : undefined; }) : rowOn ? panelEdit({ kind: 'speed', refs: [rowOn.ref], val: rowOn.pct }, tl) : undefined), [tl, panel, rowOn, shots.by]);
+  const shown = tryEdit?.tl ?? hearEdit?.tl ?? panelTried?.tl ?? tl;
   const runs = useMemo(() => (shown ? sceneRuns(shown, shots.by) : []), [shown, shots.by]);
   const tryIds = useMemo(() => (tryEdit ? new Set(tryEdit.ids.flatMap((id) => [id, `${id}a`])) : hearEdit && hearClip ? new Set([hearClip]) : undefined), [tryEdit, hearEdit, hearClip]);
   // the 1080p view (ASKS 37): where each stretch's full-size picture comes from, each shot's mark, the check list
@@ -437,6 +486,8 @@ export function EditPage() {
   // what the list showed last, so it keeps its words while it closes
   const [filesWas, setFilesWas] = useState<{ mode: 'add' | 'replace'; replacing?: string }>({ mode: 'add' });
   const [dragFile, setDragFile] = useState<FilmFile>();
+  // a shot or a whole take dragged from the Takes view: it lands on the timeline as a dragged file does
+  const [dragTake, setDragTake] = useState<TakeDrag>();
   const [placing, setPlacing] = useState(false);
   const filmFiles = useFilmFiles(film, !!files);
   const srcSeconds0 = useSourceSeconds(state, cut.sourceSeconds);
@@ -509,29 +560,22 @@ export function EditPage() {
     if (r.kind !== 'frame' && r.say) say(r.say, { ms: 9000 });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when a place waits and when what it needs changes
   }, [opening, openTick, tl, cut.mode, shots.by, shots.takes, names, sceneIds, options, layouts]);
-  // the takes newer than the one a shot of the cut uses, never tried in this browser (openAt.ts newTakes): the clip's quiet
-  // "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does. A shot selected once
-  // is remembered here (localStorage), so its mark goes.
-  const [seenTakes, setSeenTakes] = useState<Set<string>>(() => new Set());
-  useEffect(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(`hh:takes-seen:${film}`) ?? '[]') as unknown;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from this browser's storage, which the server render cannot see
-      if (Array.isArray(v)) setSeenTakes(new Set(v.filter((x): x is string => typeof x === 'string')));
-    } catch { /* nothing kept */ }
-  }, [film]);
-  useEffect(() => {
-    if (!picks.length) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- a shot selected is a take looked at
-    setSeenTakes((cur) => {
-      const add = picks.map(pickKey).filter((k) => !cur.has(k));
-      if (!add.length) return cur;
-      const next = new Set([...cur, ...add]);
-      try { localStorage.setItem(`hh:takes-seen:${film}`, JSON.stringify([...next].slice(-2000))); } catch { /* this tab only */ }
-      return next;
-    });
-  }, [picks, film]);
-  const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, seenTakes) : undefined), [tl, viewing, shots.by, shots.takes, seenTakes]);
+  // the takes not looked at yet (seenTakes.ts, the server's list, the same on every device): the "new" tag in the Takes
+  // view, the dot on their scene in the strip; and those newer than the one a shot of the cut uses (openAt.ts newTakes):
+  // the clip's quiet "1 new take" mark puts the newest in place as a shot selected, as the Takes view's click does
+  const seenT = useSeenTakes(film);
+  const { looked, add: addSeen } = seenT;
+  useBeginSeen(seenT, tl, shots);
+  // a take played or a shot of it selected is a take looked at
+  useEffect(() => { if (picks.length) addSeen(picks.map((p) => p.src)); }, [picks, addSeen]);
+  useEffect(() => { if (watching) addSeen([watching.src]); }, [watching, addSeen]);
+  const isNew = useCallback((t: TakeShots) => isNewTake(t, looked), [looked]);
+  // the takes that came back and wait to be looked at: "5 new takes" beside the Takes tab, to the New takes page
+  const { decided: takesDecided, ready: takesDecidedReady } = useDecided(film);
+  const inboxCut = useMemo(() => cutSrcs(savedCut), [savedCut]);
+  const inboxWords = shots.loaded && takesDecidedReady && savedCut ? countWords(shots.takes, looked, takesDecided, inboxCut) : '';
+  const newScenes = useMemo(() => new Set(shots.takes.filter(isNew).map((t) => t.scene)), [shots.takes, isNew]);
+  const fresh = useMemo(() => (tl && !viewing ? newTakes(tl, shots.by, shots.takes, looked.seen, notNew(looked)) : undefined), [tl, viewing, shots.by, shots.takes, looked]);
   const tryNew = useCallback((x: NewTake) => {
     if (!tl) return;
     const t = shots.by.get(x.pick.src);
@@ -544,6 +588,11 @@ export function EditPage() {
     say(`${x.pick.scene} shot ${x.pick.tag ?? x.pick.n} of ${names.get(x.pick.src) ?? x.name} is in place, not in the film yet. Press play to see it; Use in the film keeps it, Back to the film drops it.`, { ms: 9000 });
   }, [tl, shots.by, layouts, names, say]);
 
+  const freshN = freshCount(fresh);
+  // the step the film page sent the user to (`?step=`): What's next brings it into view
+  const stepParam = params.get('step');
+  const focusStep = stepParam && (STEP_IDS as string[]).includes(stepParam) ? (stepParam as StepId) : undefined;
+
   const selFound = tl && sel ? findClip(tl, sel) : undefined;
   // the shots selected in the Takes view (ASKS 52): Alma reads them, and that the film is shown with them, not changed
   const picksSaid = picks.length ? ` · ${picks.length} ${picks.length === 1 ? 'shot' : 'shots'} from other takes shown in place, not in the film: ${picksWords(picks, state?.scenes.map((x) => x.id))}` : '';
@@ -555,8 +604,10 @@ export function EditPage() {
 
   /** A shot as a version's note names it ("S2 shot 3"), when the shots are known (for the notes made here). */
   const noteNameOf = useCallback((c: TimelineClip) => { const n = shotNo(c, shots.by), sc = sceneOf(c, shots.by); return n && sc ? `${sc} shot ${n}` : undefined; }, [shots.by]);
-  /** One finished gesture = one step of the history (stage 2: no version is written; ⌘S keeps one). */
-  const apply = useCallback(async (e: Edit | undefined, o?: { presses?: boolean }) => {
+  /** One finished gesture = one step of the history (stage 2: no version is written; ⌘S keeps one). Resolves true when
+   *  the step was kept, false when the server did not keep it (its reason is the note above the timeline) or the cut was
+   *  busy, undefined when nothing was sent (nothing changed, or a lock refused it and that was said). */
+  const apply = useCallback(async (e: Edit | undefined, o?: { presses?: boolean }): Promise<boolean | undefined> => {
     // an edit refused because of a lock says which track and why (14 Nov); read at once, before anything awaits
     const refused = takeRefusal();
     if (!e) { if (refused) say(refused); return; }
@@ -584,7 +635,7 @@ export function EditPage() {
     const pw = o?.presses ? '' : pressWords(cut.current, pressOn?.p);
     const pressed = pw ? ` · ${pw}` : '';
     setPress(undefined);
-    await cut.commit({ tracks: dz.tl.tracks, markers: dz.tl.markers, base: e.tl.version }, `${e.note}${split}${side}${fit}${pressed}`,
+    return cut.commit({ tracks: dz.tl.tracks, markers: dz.tl.markers, base: e.tl.version }, `${e.note}${split}${side}${fit}${pressed}`,
       dz.said.length ? () => say(`${cap(dz.said.join('; '))}, so the cut stays valid.`) : undefined);
   }, [cut, viewing, tl, noteNameOf, pressOn, say]);
 
@@ -776,6 +827,37 @@ export function EditPage() {
     const p = pictureAt(tl, frame);
     if (p) void apply(splitClip(tl, { trackId: p.track.id, clipId: p.clip.id }, frame));
   };
+  // ---- bookmarks: M drops one at the playhead with no name, [ and ] go to the one before and after
+  const nameMarker = (i: number) => setMarkerRename((r) => ({ n: (r?.n ?? 0) + 1, i }));
+  const dropBookmark = async () => {
+    if (!tl) return;
+    if (readOnly) { say(viewing ? 'A saved version is read only: go back to the cut to add a bookmark.' : 'The cut cannot be changed just now.'); return; }
+    const { edit, i } = addBookmark(tl, frame);
+    const at = smpte(frame / fps, fps);
+    if (await apply(edit)) { setMarkerSel(i); say(`Bookmark at ${at}. Enter names it, ] goes to the next one.`); }
+  };
+  const goMarker = (dir: 1 | -1) => {
+    if (!tl) return;
+    if (!tl.markers.length) { say('No bookmarks yet: M puts one at the playhead.'); return; }
+    const i = nextMarker(tl, frame, dir);
+    if (i === undefined) { say(dir > 0 ? 'No bookmark after the playhead.' : 'No bookmark before the playhead.'); return; }
+    const m = tl.markers[i];
+    setRate(0); setWatching(undefined);
+    setFrame(toF(m.at, fps));
+    setMarkerSel(i);
+    say(`${markerName(m)} · ${smpte(m.at, fps)} (${i + 1} of ${tl.markers.length})`);
+  };
+  const dropMarker = (i: number) => {
+    if (!tl || readOnly) return;
+    const e = deleteMarker(tl, i);
+    if (!e) return;
+    setMarkerSel(undefined);
+    void apply(e).then((ok) => { if (ok) say(`${unnamed(tl.markers[i]) ? 'Bookmark' : `“${tl.markers[i].text.trim()}”`} deleted. ${keyName('Z')} brings it back.`); });
+  };
+  // a clip selected after a flag takes the keys (Enter, Delete) back; a flag gone with an undo is no longer selected
+  useEffect(() => { if (sel) setMarkerSel(undefined); }, [sel]);
+  const nMarkers = tl?.markers.length ?? 0;
+  useEffect(() => { setMarkerSel((i) => (i !== undefined && i < nMarkers ? i : undefined)); }, [nMarkers]);
   // a delete refused (a lock) keeps the selection, and the status line says why
   const deleteSel = () => { if (tl && sel) { const e = group.length > 1 ? deleteClips(tl, group, ripple) : deleteClip(tl, sel, ripple); void apply(e); if (e) setSel(undefined); } };
   /** The reason the edit just asked for was refused (a lock), on the status line; for the paths that do not go on to `apply`. */
@@ -926,6 +1008,18 @@ export function EditPage() {
       say(`Added ${e.name} at ${smpte(at / fps, fps)}. ⌘Z takes it out.`);
     } finally { setPlacing(false); }
   };
+  /** A shot of a take, or the whole take, dropped from the Takes view on a picture track at frame `f`: laid
+   *  there with its sound as a dropped file is (dragTake.ts), one step of the history. */
+  const placeTakeAt = async (d: TakeDrag, trackId: string, f: number) => {
+    if (!tl || readOnly) return;
+    const r = placeTake(tl, d, names.get(d.t.src) ?? d.t.name, trackId, f);
+    if (!r.edit) { say(r.error ?? 'It could not be placed there.'); return; }
+    await apply(r.edit);
+    setSel(r.edit.ref); setExtra(undefined);
+    say(`${cap(r.edit.note)}. ⌘Z takes it out.`);
+  };
+  // the length the line on the timeline stands for while a shot or a take is dragged (0: it cannot be placed)
+  const dragTakeLen = (() => { if (!dragTake) return 0; const p = takePieces(dragTake, names.get(dragTake.t.src) ?? dragTake.t.name, fps); return 'error' in p ? 0 : p.frames; })();
   const replaceWith = async (e: FilmFile) => {
     const ref = files?.ref;
     if (!tl || !ref || readOnly || placing) return;
@@ -1014,6 +1108,11 @@ export function EditPage() {
         if (v) { e.preventDefault(); v.dispatchEvent(new Event('shot-toggle')); return; }
       }
       if (e.key === ' ') { e.preventDefault(); setRate((r) => (r === 0 ? (frame >= total ? (setFrame(0), 1) : 1) : 0)); return; }
+      // bookmarks: M drops one at the playhead, no typing; [ and ] go to the one before and after. Read by
+      // the key's letter, and the brackets also by their place on the keyboard (a layout without them on that key)
+      if (k === 'm' && !e.repeat) { e.preventDefault(); void dropBookmark(); return; }
+      if (e.key === '[' || e.key === '{' || e.code === 'BracketLeft') { e.preventDefault(); goMarker(-1); return; }
+      if (e.key === ']' || e.key === '}' || e.code === 'BracketRight') { e.preventDefault(); goMarker(1); return; }
       if (k === 'f') { toggleFull(); return; }
       if (k === 'k') { setRate(0); return; }
       if (k === 'l') { setRate((r) => (r <= 0 ? 1 : Math.min(4, r * 2))); return; }
@@ -1024,7 +1123,8 @@ export function EditPage() {
       if (k === 'b') { setTool((t) => (t === 'blade' ? 'select' : 'blade')); return; }
       if (k === 'a' || k === 'v') { setTool('select'); return; }
       if (k === 'n') { setSnap((s) => !s); return; }
-      if (k === 'r') { setRipple((s) => !s); return; }
+      // ripple has no button: the key says what it now does, or a trim that stops at its neighbour seems broken
+      if (k === 'r') { setRipple(!ripple); say(ripple ? 'Ripple off (R): a trim stops at the clip next to it, and gaps stay open.' : 'Ripple on (R): a trim moves the clips after it along.'); return; }
       // an effect with options is selected: up and down play the next one in the film, Enter uses it
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && selOptions && stepOption(e.key === 'ArrowDown' ? 1 : -1)) { e.preventDefault(); return; }
       // the 1080p view: up and down go from shot to shot through the film, to check each at full size
@@ -1035,10 +1135,16 @@ export function EditPage() {
         if (to !== undefined) setFrame(to);
         return;
       }
+      // a bookmark's flag selected: Enter names it, Delete or Backspace takes it out
+      if (markerSel !== undefined && tl?.markers[markerSel] && !readOnly) {
+        if (e.key === 'Enter') { e.preventDefault(); nameMarker(markerSel); return; }
+        if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); dropMarker(markerSel); return; }
+      }
       if (e.key === 'Enter' && hearingOn && hearEdit) { e.preventDefault(); void putHeard(); return; }
       if (k === 'escape' && renderOn) { setRate(0); setRenderOn(undefined); return; }
       // Enter with one subtitle line selected: its words open for retyping over its block
       if (e.key === 'Enter' && !e.shiftKey && sel && selAt && group.length <= 1 && isLine(selAt.clip) && !readOnly && !selAt.track.locked) { e.preventDefault(); retypeSel(); return; }
+      if (k === 'escape' && markerSel !== undefined && !document.querySelector('[role="menu"], [data-versions-menu]')) { setMarkerSel(undefined); return; }
       if (k === 'escape' && files) { closeFiles(); return; }
       if (k === 'escape' && hearingOn) { stopHearing(); return; }
       if (k === 'escape' && pointOn) { setPoint(undefined); return; }
@@ -1246,7 +1352,7 @@ export function EditPage() {
 
   if (phone) {
     return (
-      <PhoneEdit state={state} tl={tl} name={empty ? '' : viewing?.version ?? cut.equals ?? `${cutName} with edits`} frame={frame} fps={fps} total={total} setFrame={(f) => { setRate(0); setFrame(f); }}
+      <PhoneEdit state={state} tl={tl} pic={picFrame} name={empty ? '' : viewing?.version ?? cut.equals ?? `${cutName} with edits`} frame={frame} fps={fps} total={total} setFrame={(f) => { setRate(0); setFrame(f); }}
         playing={rate !== 0} onPlay={() => setRate((r) => (r ? 0 : (frame >= total ? (setFrame(0), 1) : 1)))} viewer={viewer} transport={transport} file={phoneOwn?.kind} ahead={ahead && !settled ? aheadFigures : undefined}
         // played live (no file of this cut): the quiet line says so, and asks for the 480p where one can be made. No 480p
         // to ask for before there is a cut, of a cut that still holds planned clips (as on the desktop), of an older
@@ -1333,6 +1439,9 @@ export function EditPage() {
         return;
       case 'renders': openRenders(); return;
       case 'release': router.push(`${base}/release`); return;
+      // the new takes not looked at: the first in the cut's order put in its place, as its clip's mark does
+      case 'check': { const first = fresh ? [...fresh.values()][0] : undefined; if (first) tryNew(first); return; }
+      case 'on-edit': return;
       // the early steps (15 Nov): Alma's box, a page of the film, the planned shots, the takes, the go sent as the user's words
       case 'idea': ui.focusBox(); return;
       case 'page': router.push(d.page === 'story' ? `${base}/story` : `${base}/${d.page}`); return;
@@ -1492,14 +1601,25 @@ export function EditPage() {
     if (watching?.src === t.src && watching.n === n && watching.tag === tag) setWatching(undefined);
   };
   const backToFilm = () => { setRate(0); setWatching(undefined); setPicks([]); };
+  /** Why chosen shots made no edit, when no lock said so ("Use in the film" must never do nothing in silence). */
+  const notPutWhy = (ps: Trying[]) => {
+    const what = picksWords(ps, order);
+    if (ps.some((p) => !by.get(p.src))) return `${what} not put in the film: its take is not cut into shots yet. Try again in a moment.`;
+    return `${what} not put in the film: the film has ${ps.length === 1 ? 'it' : 'them'} there already.`;
+  };
+  /** Said when the step was not kept: the film is as it was. `busy`: the cut was still saving the change before (read
+   *  before the step, as commit reads it); else the server refused it and its reason is the note above the timeline. */
+  const notKept = (ps: Trying[], busy: boolean) => say(`${picksWords(ps, order)} not put in the film: ${busy ? 'the last change was still being saved. Try again in a moment' : 'the change was not kept, why is above the timeline'}. The film is as it was.`, { ms: 9000 });
   /** "Use in the film": every selected shot in its place, one step of the history; one Undo takes them all out. */
   const putPicks = async () => {
     if (readOnly || !picks.length) return;
     const e = withPicks(tl, picks, by, names, undefined, order);
     const warned = layWarnings(picks), note = layNote(picks);
+    const ps = picks;
     setRate(0); setWatching(undefined); setPicks([]); setBoxFolded(false);
-    if (!e) { sayRefused(); return; }
-    await apply({ ...e, note: `${e.note}${note}` });
+    if (!e) { say(takeRefusal() ?? notPutWhy(ps)); return; }
+    const busy = !!cut.busy();
+    if ((await apply({ ...e, note: `${e.note}${note}` })) === false) { notKept(ps, busy); return; }
     const one = e.placed.length === 1 ? e.placed[0] : undefined;
     if (one && mainV) { setSel({ trackId: mainV, clipId: one.clipId }); setFrameRaw(one.at); }
     if (warned.length) say(`In the film, with what does not match: ${warned.join(' ')} ⌘Z takes it back.`);
@@ -1507,14 +1627,16 @@ export function EditPage() {
   /** One shot put in the film at once (the Takes view's menu): one step, as "Use in the film" with that one alone. */
   const putOne = async (t: TakeShots, n: number, to?: number, tag?: string) => {
     if (readOnly) return;
+    addSeen([t.src]);
     const sw = swapOf(t, n, to, tag);
     const one: Trying = { scene: t.scene, n, src: t.src, ...(sw ? { into: { to: sw.to, layout: sw.layout } } : {}), ...(tag ? { tag } : {}) };
     const e = withPicks(tl, [one], by, names, undefined, order);
     const warned = layWarnings([one]), note = layNote([one]);
     setRate(0); setWatching(undefined);
     setPicks((cur) => cur.filter((p) => !samePlace(p, one)));
-    if (!e) { sayRefused(); return; }
-    await apply({ ...e, note: `${e.note}${note}` });
+    if (!e) { say(takeRefusal() ?? notPutWhy([one])); return; }
+    const busy = !!cut.busy();
+    if ((await apply({ ...e, note: `${e.note}${note}` })) === false) { notKept([one], busy); return; }
     if (mainV) { setSel({ trackId: mainV, clipId: e.placed[0].clipId }); setFrameRaw(e.placed[0].at); }
     if (warned.length) say(`In the film, with what does not match: ${warned.join(' ')} ⌘Z takes it back.`);
   };
@@ -1597,6 +1719,7 @@ export function EditPage() {
   /** A click on a shot whose column has nothing in the film: it goes back in its place, and plays from just before. */
   const bringBack = async (t: TakeShots, n: number, tag?: string) => {
     if (readOnly) return;
+    addSeen([t.src]);
     const name = names.get(t.src) ?? t.name;
     const e = putShot(tl, t.scene, n, t, name, by, undefined, order, undefined, tag);
     if (!e) { sayRefused(); return; }
@@ -1634,8 +1757,8 @@ export function EditPage() {
     if (watching && watched) {
       const all = shotsOf(watched);
       const sh = all.find((x) => watchT >= x.in && watchT < x.out) ?? watchedShot;
-      // a shot sharing its cell ("7b"): the line stands over its half
-      return sh ? { n: sh.n, p: cellP(all, sh, (watchT - sh.in) / Math.max(0.04, sh.out - sh.in)) } : undefined;
+      // a shot sharing its cell ("7b"): the line stands over its half; a shot under "Other shots", over that column
+      return sh ? { n: sh.n, p: cellP(all, sh, (watchT - sh.in) / Math.max(0.04, sh.out - sh.in)), ...(shots.other.has(otherKey(watched.src, sh.i)) ? { other: true } : {}) } : undefined;
     }
     if (!pic || !picShot || !picScene || picScene !== openId) return undefined;
     const col = colPieces(shown ?? tl, picScene, picShot);
@@ -1648,7 +1771,9 @@ export function EditPage() {
     const sh = own && own.n === picShot ? own : shotOf(by.get((pic.clip.src ?? '')), picShot);
     if (!sh) return undefined;
     const t = pic.clip.in + ((frame - startF(pic.clip, fps)) * (pic.clip.speed && pic.clip.speed > 0 ? pic.clip.speed : 1)) / fps;
-    return { n: picShot, p: cellP(all, sh, (t - sh.in) / Math.max(0.04, sh.out - sh.in)) };
+    // the film plays a pick-up's shot whose place is not known: the line stands over "Other shots"
+    const src0 = shots.alias.get(pic.clip.src ?? '') ?? pic.clip.src ?? '';
+    return { n: picShot, p: cellP(all, sh, (t - sh.in) / Math.max(0.04, sh.out - sh.in)), ...(shots.other.has(otherKey(src0, sh.i)) ? { other: true } : {}) };
   })();
   // ---- the playhead moved from the Takes view (ASKS 53): the same playhead as the timeline's, whole frames, nothing
   // written. Shot `n` of the open scene, `p` of the way through it as the line across the takes measures it.
@@ -1693,6 +1818,12 @@ export function EditPage() {
     setRate(0); setWatching(undefined); setSel(undefined); setPin(undefined); setFrame(to);
     return true;
   };
+  // ---- Shot details: the page of a take at one of its shots; its Back comes here
+  const openShotDetails = (src: string, i?: number) => {
+    const href = shotDetailsHref(film, src, i);
+    rememberBack(href, 'Back to the edit');
+    router.push(href);
+  };
   // ---- the Takes view's right-click menu (ASKS 51): on a shot, or on a take's name
   const takeItems = (() => {
     const t = takeMenu ? shots.takes.find((x) => x.src === takeMenu.src) : undefined;
@@ -1703,7 +1834,9 @@ export function EditPage() {
     const edit: MenuItem = { label: 'Edit this video…', hint: 'with Alma', disabled: !canEdit, onPick: () => editVideo(t, n, tag) };
     const copy: MenuItem = { label: 'Copy its path', sepBefore: true, onPick: () => copyPath(t) };
     const sh = n ? shotOf(t, n, tag) : undefined;
-    if (!n || !sh) return { title: `${t.scene} · ${take}`, items: [edit, copy] };
+    // Shot details: everything that was fed to the model for this take, at this shot (not on touch)
+    const details: MenuItem[] = canEdit && !coarse() ? [{ label: 'Shot details…', hint: 'what went in', onPick: () => openShotDetails(t.src, sh?.i) }] : [];
+    if (!n || !sh) return { title: `${t.scene} · ${take}`, items: [edit, ...details, copy] };
     const key = pickKey({ src: t.src, n, tag });
     const isIn = inFilm(tl, by).has(key);
     const colOut = !shotClips(tl, by, t.scene, n).length;
@@ -1720,7 +1853,7 @@ export function EditPage() {
     }) : [];
     return {
       title: `${t.scene} · ${take} · ${shotSaid(n, tag)} · ${secsOf(Math.round((sh.out - sh.in) * fps))}${sw ? ` · Layout ${sw.from.n}` : ''}`,
-      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) })) : clickShot(t, n, tag)) }, put, ...places, copy],
+      items: [edit, { label: 'Watch it', hint: 'click', onPick: () => (picks.some((p) => pickKey(p) === key) || colOut ? (setRate(0), setSel(undefined), setWatching({ scene: t.scene, n, src: t.src, k: nextK(), ...(tag ? { tag } : {}) })) : clickShot(t, n, tag)) }, put, ...places, ...details, copy],
     };
   })();
   // ---- the right-click menu: every entry that goes to Alma carries the point it was opened at
@@ -1792,8 +1925,22 @@ export function EditPage() {
     const onTrack = track?.kind === 'audio' && track.id !== mainTracks(tl).a?.id ? `on ${track.id} ${track.name}` : 'on the effects track';
     const ref = hit ? { trackId: hit.track.id, clipId: hit.clip.id } : undefined;
     const hitShot = hit ? shotNo(hit.clip, by) : undefined;
-    const items: MenuItem[] = [
-      { label: 'Add an effect here…', hint: 'Alma makes it', onPick: () => ui.about({ id: `add-effect:${almaCut}:${f}`, label: `Add an effect · ${track?.kind === 'audio' && track.id !== mainTracks(tl).a?.id ? track.id : 'effects'} · ${at}` },
+    // ---- the clip's actions, all in its right-click menu: what changes the clip (its own panels for speed, level and fades), then what edits it in
+    // the cut, then what asks about it, then the point under the pointer. Only what applies to that clip's kind.
+    const anchorOf = (r: ClipRef): PanelAnchor => {
+      const b = document.querySelector(`[data-clip="${r.trackId}:${r.clipId}"]`)?.getBoundingClientRect();
+      return { x: menu.x, y: menu.y, ...(b ? { rect: { top: b.top, bottom: b.bottom } } : {}) };
+    };
+    const multi = !!hit && group.length > 1 && group.some((r) => r.trackId === hit.track.id && r.clipId === hit.clip.id);
+    // a picture and its linked sound are one clip to retime: the picture is named, the sound follows it
+    const mains = (refs: ClipRef[]) => refs.filter((r) => { const p = partnerOf(tl, r); return !p || r.trackId === mainV || !refs.some((x) => x.trackId === p.trackId && x.clipId === p.clipId); });
+    const openSpeed = (refs: ClipRef[], title: string, what?: string) => {
+      const f0 = findClip(tl, refs[0]);
+      const pct = f0 ? Math.round(speedOf(f0.clip) * 100) : 100;
+      setPanel({ kind: 'speed', refs, what, title, anchor: anchorOf(refs[0]), start: pct });
+    };
+    const pointItems: MenuItem[] = [
+      { label: 'Add an effect here…', hint: 'Alma makes it', sepBefore: !!hit, onPick: () => ui.about({ id: `add-effect:${almaCut}:${f}`, label: `Add an effect · ${track?.kind === 'audio' && track.id !== mainTracks(tl).a?.id ? track.id : 'effects'} · ${at}` },
         `Add an effect at ${where}. Its own clip ${onTrack}, nothing else changed. The user says what the effect is`, 'What effect…') },
       { label: 'Add a file here…', hint: 'one you have', disabled: readOnly, onPick: () => openFiles('add', track && (track.kind === 'audio' || track.kind === 'video') ? track.id : undefined) },
       ...(join ? [{ label: 'About the sound across this join…', onPick: () => ui.about({ id: `join:${almaCut}:${join.at}`, label: `join · ${smpte(join.at / fps, fps)}` }, `the sound across the join at ${smpte(join.at / fps, fps)} in cut ${almaCut}, where ${describeClip(join.left)} ends and ${describeClip(join.right)} begins`, 'What do you hear across this join…') }] : []),
@@ -1821,75 +1968,123 @@ export function EditPage() {
       { label: 'Tell Alma about this point…', onPick: () => ui.about(chip, `the point at ${where}`, 'Say something about this point…') },
       { label: 'Play from here', hint: 'Space', sepBefore: true, onPick: () => { setFrameRaw(f); setRate(1); } },
       { label: 'Save this frame…', hint: under ? 'PNG' : 'no picture here', disabled: !under, onPick: () => void saveFrame(f) },
-      ...(hit && hit.track.kind === 'video' && fullMarks?.get(hit.clip.id)?.kind === 'small' ? [{ label: 'Upscale on Higgsfield…', hint: 'the whole take', onPick: () => askUpscale(hit.clip.src) }] : []),
-      ...(hit && hit.track.kind === 'video' && fullMarks && fullMarks.get(hit.clip.id)?.kind !== 'small' && !fullFor?.info.takes[(hit.clip.src ?? '')] ? [{ label: seedance.marks.has((hit.clip.src ?? '')) ? 'Do not redo in Seedance' : 'Redo in Seedance', hint: 'the whole take', onPick: () => seedance.toggle((hit.clip.src ?? '')) }] : []),
-      ...(hit && hitShot && hit.track.id === mainV ? [{ label: 'Retake this shot…', disabled: readOnly, onPick: () => retakeOf(hit.track, hit.clip, sceneOf(hit.clip, by), hitShot) }] : []),
-      ...(ref && hit && isLine(hit.clip) ? [{ label: 'Retype…', hint: 'Enter', disabled: readOnly || hit.track.locked, onPick: () => retypeSel(ref) }] : []),
-      ...(ref && hit && isSrtClip(hit.clip) ? [{ label: 'Split into lines to edit', hint: 'a line a cue', disabled: readOnly || hit.track.locked, onPick: () => void splitSrtClip(ref) }] : []),
-      ...(ref && hit && (hit.track.kind === 'video' || hit.track.kind === 'audio') ? (() => {
-        // faster or slower, the voice keeping its tone: this shot, or every shot of its scene
-        const SPEEDS = [75, 90, 100, 110, 125, 150, 200];
-        const nowPct = Math.round(speedOf(hit.clip) * 100);
-        const sc = hit.track.id === mainV ? sceneOf(hit.clip, by) : undefined;
-        const sceneRefs = sc ? (mainTracks(tl).v?.clips ?? []).filter((c) => sceneOf(c, by) === sc).map((c) => ({ trackId: mainV!, clipId: c.id })) : [];
-        const choices = (refs: { trackId: string; clipId: string }[], what?: string): MenuItem[] => SPEEDS.map((p) => ({
-          label: `${p}%${p === 100 ? ' · normal' : p < 100 ? ' · slower' : ' · faster'}`, hint: refs.length === 1 && p === nowPct ? 'now' : undefined,
-          disabled: readOnly, onPick: () => void apply(retimeClips(tl, refs, p / 100, what)),
-        }));
-        return [
-          { label: hitShot && hit.track.id === mainV ? 'Speed of this shot…' : 'Speed of this clip…', hint: `${nowPct}%`, sub: choices([ref]) },
-          ...(sc && sceneRefs.length > 1 ? [{ label: `Speed of all of ${sc}…`, hint: `${sceneRefs.length} shots`, sub: choices(sceneRefs, `scene ${sc}`) }] : []),
-        ];
-      })() : []),
-      ...(ref && hit && hit.track.kind === 'video' ? [{
-        // the render's mirror (flip), on the picture alone: its sound is never touched
-        label: hit.clip.flip ? 'Stop mirroring' : 'Mirror this shot', hint: hit.clip.flip ? 'mirrored now' : 'left to right', disabled: readOnly || !!hit.track.locked,
-        onPick: () => { void apply(setFlip(tl, ref, !hit.clip.flip, noteNameOf)); },
-      }] : []),
-      ...(ref && hit && (hit.track.id === mainV || hit.track.kind === 'audio') ? (() => {
-        const un = hit.track.id === mainV || hit.track.id === mainTracks(tl).a?.id ? setLinked(tl, ref, false) : undefined;
-        const lined = setLinked(tl, ref, true), re = relinkOf(ref);
-        const sound = hit.track.kind === 'audio';
-        if (un) return [{ label: sound ? 'Unlink from the picture' : 'Unlink the sound', disabled: readOnly, onPick: () => void apply(un) }];
-        // a sound carried past its picture (on the track beside, say) goes back to its picture's length and place
-        if (hit.clip.unlinked || (re && !lined)) return [{ label: sound ? 'Link to the picture again' : 'Link the sound again', hint: re ? (lined ? undefined : 'back to the picture\'s length') : 'not lined up', disabled: readOnly || !re, onPick: () => void apply(re) }];
-        return [];
-      })() : []),
-      ...(ref && hit && hit.track.kind === 'audio' && isSoundFile(hit.clip.src) ? (() => {
-        const opts = options.get(dirOf(hit.clip.src));
-        return [
-          { label: 'Say something about it…', sepBefore: true, onPick: () => sayAboutEffect(hit, opts) },
-          { label: 'Another option for this effect…', hint: opts?.length ? `${opts.length} so far` : undefined, onPick: () => askAnother(hit, opts) },
-        ];
-      })() : []),
-      ...(ref && hit && hit.track.kind === 'audio' ? [{ label: 'Replace with another file…', hint: 'keeps its place', sepBefore: !isSoundFile(hit.clip.src), disabled: readOnly || hit.track.locked, onPick: () => openFiles('replace', undefined, ref) }] : []),
-      ...(ref && hit && tl.tracks.filter((t) => t.kind === hit.track.kind && t.id !== hit.track.id).length ? [{
-        label: 'Move to another track…', hint: 'or drag it there', sepBefore: true,
-        sub: tl.tracks.filter((t) => t.kind === hit.track.kind && t.id !== hit.track.id).map((t): MenuItem => {
-          const ok = canMoveToTrack(tl, ref, t.id);
-          return { label: `${t.id} ${t.name}`, hint: ok ? 'same time' : t.locked ? 'locked' : 'no room there', disabled: readOnly || !ok, onPick: () => { void apply(moveToTrack(tl, ref, t.id)); setSel({ trackId: t.id, clipId: ref.clipId }); } };
-        }),
-      }] : []),
-      ...(ref && hit ? [{ label: 'Copy', hint: '⌘C', sepBefore: true, onPick: () => { copySel(); } }] : []),
       ...(held ? (() => {
         const first = held.items[0];
         const lane = track && held.items.some((i) => i.kind === track.kind) && !track.locked ? track : undefined;
         const to = held.items.length === 1 ? lane ?? trackOfKind(first.kind, first.trackId) : undefined;
         const name = held.items.length === 1 || (held.items.length === 2 && held.items[0].kind !== held.items[1].kind && held.items[0].clip.src === held.items[1].clip.src) ? clipName(first.clip) : `${held.items.length} clips`;
-        return [{ label: `Paste “${name.length > 24 ? `${name.slice(0, 23).trim()}…` : name}” here`, hint: to ? `${to.id} · ⌘V` : '⌘V', sepBefore: !(ref && hit), disabled: readOnly || (held.items.length === 1 && !to), onPick: () => void pasteHeld(f, lane?.id) }];
+        return [{ label: `Paste “${name.length > 24 ? `${name.slice(0, 23).trim()}…` : name}” here`, hint: to ? `${to.id} · ⌘V` : '⌘V', disabled: readOnly || (held.items.length === 1 && !to), onPick: () => void pasteHeld(f, lane?.id) }];
       })() : []),
-      ...(ref && hit ? [
-        { label: 'Split here', hint: '⌘B', disabled: readOnly || f <= startF(hit.clip, fps) || f >= endF(hit.clip, fps), onPick: () => void apply(splitClip(tl, ref, f)) },
-        { label: hitShot && hit.track.id === mainV ? 'Delete this shot' : 'Delete this clip', hint: '⌫', danger: true, disabled: readOnly, onPick: () => { const e = deleteClip(tl, ref, ripple); void apply(e); if (e) setSel(undefined); } },
-      ] : []),
       { label: 'Select from here on…', sepBefore: true, sub: [
         ...(track ? [{ label: `On ${track.id} ${track.name}`, hint: 'Y', onPick: () => selectFrom(f, true, track.id) }] : []),
         { label: 'On every track', hint: '⌥Y', onPick: () => selectFrom(f, true) },
         ...(track ? [{ label: `Before here, on ${track.id}`, hint: '⌘Y', onPick: () => selectFrom(f, false, track.id) }] : []),
         { label: 'Before here, on every track', hint: '⌥⌘Y', onPick: () => selectFrom(f, false) },
       ] },
-      { label: 'Marker here', disabled: readOnly, onPick: () => setMarkerText('') },
+      { label: 'Marker here', hint: 'M: no name', disabled: readOnly, onPick: () => setMarkerText('') },
     ];
+    // ---- several clips selected and the right-click on one of them: what makes sense for them all
+    if (multi && hit) {
+      const refs = group;
+      const n = mains(refs).length;
+      const allMuted = refs.every((r) => findClip(tl, r)?.clip.muted);
+      const timed = mains(refs).filter((r) => { const k = findClip(tl, r)?.track.kind; return k === 'video' || k === 'audio'; });
+      const muteAll = (): Edit | undefined => {
+        let x: Edit | undefined;
+        for (const r of refs) { const e = patchClip(x?.tl ?? tl, r, { muted: allMuted ? undefined : true }, ''); if (!e) return undefined; x = e; }
+        return x ? { tl: x.tl, note: `${allMuted ? 'unmuted' : 'muted'} ${n} clips` } : undefined;
+      };
+      const items: MenuItem[] = [
+        ...(timed.length ? [{ label: `Speed of these ${timed.length} clips…`, hint: `${Math.round(speedOf(hit.clip) * 100)}%`, disabled: readOnly, onPick: () => openSpeed(timed, `Speed · ${timed.length} clips`) }] : []),
+        { label: allMuted ? `Unmute these ${n} clips` : `Mute these ${n} clips`, disabled: readOnly, onPick: () => void apply(muteAll()) },
+        { label: 'Copy', hint: '⌘C', sepBefore: true, onPick: () => { copySel(); } },
+        { label: 'Cut', hint: '⌘X', disabled: readOnly, onPick: () => { copySel(true); } },
+        { label: `Delete these ${n} clips`, hint: '⌫', danger: true, disabled: readOnly, onPick: deleteSel },
+        { label: 'Add them to what Alma sees', sepBefore: true, onPick: () => { for (const r of refs) { const x = findClip(tl, r); if (x) ui.addChip(clipChip(x.track, x.clip)); } } },
+        { label: 'Keep only this one selected', onPick: () => setExtra(undefined) },
+        ...pointItems,
+      ];
+      return { title: `${at} · ${n} clips`, items };
+    }
+    const sound = hit?.track.kind === 'audio' && !isLine(hit.clip);
+    const timed = !!hit && (hit.track.kind === 'video' || hit.track.kind === 'audio');
+    const heard = hit && hit.track.kind === 'audio' ? asFades(hit.clip).clip : hit?.clip;
+    const smooth = ref && hit && sound ? smoothOffer(tl, hit.track.id, hit.clip) : undefined;
+    const scene = hit?.clip.takeRef ? state.scenes.find((x) => x.id === hit.clip.takeRef!.scene) : undefined;
+    const takes = (scene?.takes ?? []).filter((x) => x.path);
+    const clipItems: MenuItem[] = !(ref && hit) ? [] : [
+      // -- what changes the clip
+      ...(timed ? (() => {
+        // faster or slower, the voice keeping its tone: this shot, or every shot of its scene, in the speed panel
+        const nowPct = Math.round(speedOf(hit.clip) * 100);
+        const sc = hit.track.id === mainV ? sceneOf(hit.clip, by) : undefined;
+        const sceneRefs = sc ? (mainTracks(tl).v?.clips ?? []).filter((c) => sceneOf(c, by) === sc).map((c) => ({ trackId: mainV!, clipId: c.id })) : [];
+        const one = hitShot && hit.track.id === mainV ? 'this shot' : 'this clip';
+        return [
+          { label: `Speed of ${one}…`, hint: `${nowPct}%`, disabled: readOnly, onPick: () => openSpeed([ref], `Speed · ${describeClip(hit.clip)}`) },
+          ...(sc && sceneRefs.length > 1 ? [{ label: `Speed of all of ${sc}…`, hint: `${sceneRefs.length} shots`, disabled: readOnly, onPick: () => openSpeed(sceneRefs, `Speed · all of ${sc}, ${sceneRefs.length} shots`, `scene ${sc}`) }] : []),
+        ];
+      })() : []),
+      ...(sound ? [{ label: 'Level…', hint: fmtLevel(hit.clip.gain ?? 0), disabled: readOnly || !!hit.track.locked,
+        onPick: () => setPanel({ kind: 'level', ref, title: `Level · ${describeClip(hit.clip)}`, anchor: anchorOf(ref), start: hit.clip.gain ?? 0 }) }] : []),
+      ...(timed && heard ? (() => {
+        const fin = Math.round((heard.fadeIn ?? 0) * fps), fout = Math.round((heard.fadeOut ?? 0) * fps);
+        return [{ label: 'Fade in and out…', hint: fin || fout ? `${fin} f · ${fout} f` : 'none', disabled: readOnly || !!hit.track.locked,
+          onPick: () => setPanel({ kind: 'fades', ref, title: `${hit.track.kind === 'video' ? 'Picture' : 'Sound'} fades · ${describeClip(hit.clip)}`, anchor: anchorOf(ref), start: { fin, fout } }) }];
+      })() : []),
+      ...(smooth ? [{ label: 'Smooth the change', hint: `from ${fmtLevel(smooth.from)}`, disabled: readOnly || !!hit.track.locked, onPick: () => void apply(smoothChange(tl, ref)) }] : []),
+      ...(hit.track.kind !== 'captions' ? [{ label: hit.clip.muted ? 'Unmute this clip' : 'Mute this clip', disabled: readOnly || !!hit.track.locked,
+        onPick: () => void apply(patchClip(tl, ref, { muted: hit.clip.muted ? undefined : true }, `${hit.clip.muted ? 'unmuted' : 'muted'} ${clipName(hit.clip)}`)) }] : []),
+      ...(hit.track.kind === 'video' ? [{
+        // the render's mirror (flip), on the picture alone: its sound is never touched
+        label: hit.clip.flip ? 'Stop mirroring' : 'Mirror this shot', hint: hit.clip.flip ? 'mirrored now' : 'left to right', disabled: readOnly || !!hit.track.locked,
+        onPick: () => { void apply(setFlip(tl, ref, !hit.clip.flip, noteNameOf)); },
+      }] : []),
+      ...(isLine(hit.clip) ? [{ label: 'Retype…', hint: 'Enter', disabled: readOnly || hit.track.locked, onPick: () => retypeSel(ref) }] : []),
+      ...(isSrtClip(hit.clip) ? [{ label: 'Split into lines to edit', hint: 'a line a cue', disabled: readOnly || hit.track.locked, onPick: () => void splitSrtClip(ref) }] : []),
+      // -- what edits it in the cut
+      { label: 'Split here', hint: '⌘B', sepBefore: true, disabled: readOnly || f <= startF(hit.clip, fps) || f >= endF(hit.clip, fps), onPick: () => void apply(splitClip(tl, ref, f)) },
+      { label: 'Copy', hint: '⌘C', onPick: () => { copySel(); } },
+      { label: 'Cut', hint: '⌘X', disabled: readOnly, onPick: () => { copySel(true); } },
+      ...((hit.track.id === mainV || hit.track.kind === 'audio' || hit.clip.link) ? (() => {
+        const un = hit.track.id === mainV || hit.track.id === mainTracks(tl).a?.id || hit.clip.link ? setLinked(tl, ref, false) : undefined;
+        const lined = setLinked(tl, ref, true), re = relinkOf(ref);
+        if (un) return [{ label: sound || hit.track.kind === 'audio' ? 'Unlink from the picture' : 'Unlink the sound', disabled: readOnly, onPick: () => void apply(un) }];
+        // a sound carried past its picture (on the track beside, say) goes back to its picture's length and place
+        if (hit.clip.unlinked || (re && !lined)) return [{ label: hit.track.kind === 'audio' ? 'Link to the picture again' : 'Link the sound again', hint: re ? (lined ? undefined : 'back to the picture\'s length') : 'not lined up', disabled: readOnly || !re, onPick: () => void apply(re) }];
+        return [];
+      })() : []),
+      ...(tl.tracks.filter((t) => t.kind === hit.track.kind && t.id !== hit.track.id).length ? [{
+        label: 'Move to another track…', hint: 'or drag it there',
+        sub: tl.tracks.filter((t) => t.kind === hit.track.kind && t.id !== hit.track.id).map((t): MenuItem => {
+          const ok = canMoveToTrack(tl, ref, t.id);
+          return { label: `${t.id} ${t.name}`, hint: ok ? 'same time' : t.locked ? 'locked' : 'no room there', disabled: readOnly || !ok, onPick: () => { void apply(moveToTrack(tl, ref, t.id)); setSel({ trackId: t.id, clipId: ref.clipId }); } };
+        }),
+      }] : []),
+      ...(scene && takes.length > 1 && hit.track.id === mainV ? [{
+        label: 'Replace with another take…', hint: `${takes.length} takes`,
+        sub: takes.map((x): MenuItem => ({ label: takeIdLabel(x.id), checked: hit.clip.takeRef?.take === x.id, hint: `${x.seconds ? `${x.seconds} s` : ''}${x.kind === 'pickup' ? `${x.seconds ? ' · ' : ''}pick-up` : ''}` || undefined, disabled: readOnly || hit.clip.takeRef?.take === x.id,
+          onPick: () => { if (x.path) void apply(replaceTake(tl, ref, repoPath(state.film.folder, state.film.repo, x.path), { scene: scene.id, take: x.id }, `${scene.id} · ${takeIdLabel(x.id)}`, x.seconds)); } })),
+      }] : []),
+      ...(hit.track.kind === 'audio' ? [{ label: 'Replace with another file…', hint: 'keeps its place', disabled: readOnly || hit.track.locked, onPick: () => openFiles('replace', undefined, ref) }] : []),
+      { label: hitShot && hit.track.id === mainV ? 'Delete this shot' : 'Delete this clip', hint: '⌫', danger: true, disabled: readOnly, onPick: () => { const e = deleteClip(tl, ref, ripple); void apply(e); if (e) setSel(undefined); } },
+      // -- what asks about it
+      ...(hit.track.kind === 'video' && hit.clip.src && !hit.clip.plan && by.has(hit.clip.src) && !coarse() ? [{ label: 'Shot details…', hint: 'what went in', sepBefore: true, onPick: () => openShotDetails(hit.clip.src!, ownShotOf(hit.clip, by)?.i) }] : []),
+      ...(hitShot && hit.track.id === mainV ? [{ label: 'Retake this shot…', disabled: readOnly, sepBefore: !(hit.track.kind === 'video' && hit.clip.src && !hit.clip.plan && by.has(hit.clip.src) && !coarse()), onPick: () => retakeOf(hit.track, hit.clip, sceneOf(hit.clip, by), hitShot) }] : []),
+      { label: 'Ask Alma about this clip…', sepBefore: !(hitShot && hit.track.id === mainV) && !(hit.track.kind === 'video' && hit.clip.src && !hit.clip.plan && by.has(hit.clip.src) && !coarse()), onPick: askAlma },
+      { label: 'Add to what Alma sees', onPick: () => ui.addChip(clipChip(hit.track, hit.clip)) },
+      ...(hit.track.kind === 'audio' && isSoundFile(hit.clip.src) ? (() => {
+        const opts = options.get(dirOf(hit.clip.src));
+        return [
+          { label: 'Say something about it…', onPick: () => sayAboutEffect(hit, opts) },
+          { label: 'Another option for this effect…', hint: opts?.length ? `${opts.length} so far` : undefined, onPick: () => askAnother(hit, opts) },
+        ];
+      })() : []),
+      ...(hit.track.kind === 'video' && fullMarks?.get(hit.clip.id)?.kind === 'small' ? [{ label: 'Upscale on Higgsfield…', hint: 'the whole take', onPick: () => askUpscale(hit.clip.src) }] : []),
+      ...(hit.track.kind === 'video' && fullMarks && fullMarks.get(hit.clip.id)?.kind !== 'small' && !hasOwnFull(fullFor?.info, hit.clip.src ?? '') ? [{ label: seedance.marks.has((hit.clip.src ?? '')) ? 'Do not redo in Seedance' : 'Redo in Seedance', hint: 'the whole take', onPick: () => seedance.toggle((hit.clip.src ?? '')) }] : []),
+      { label: 'Details…', hint: 'the Inspector', onPick: () => setDetails(true) },
+    ];
+    const items: MenuItem[] = [...clipItems, ...pointItems];
     return { title: `${at}${hit ? ` · ${describeClip(hit.clip)}` : track ? ` · ${track.name}` : ''}`, items };
   })();
   // ---- the track menu. What names a track and would point at nothing once it is gone is let go of with it: the
@@ -1979,7 +2174,7 @@ export function EditPage() {
           {sel && selFound.clip.unlinked && <Btn ghost className={cn(barBtn, 'text-warn')} disabled={readOnly || !relinkOf(sel)} onClick={() => void apply(relinkOf(sel))} title={setLinked(tl, sel, true) ? 'Picture and sound move together again' : relinkOf(sel) ? 'The sound goes back under its picture, at its length, and the two move together again' : 'Unlinked. They can be linked again only where the sound can go back under its picture.'}>{relinkOf(sel) ? 'Link sound again' : 'Sound unlinked'}</Btn>}
           {fullMarks && selFound.track.kind === 'video' && (fullMarks.get(selFound.clip.id)?.kind === 'small'
             ? <Btn className={cn(barBtn, 'border-warn/70 text-warn')} onClick={() => askUpscale(selFound.clip.src)} title="Puts its whole take in Alma's box, to upscale on Higgsfield">Upscale on Higgsfield</Btn>
-            : !fullFor?.info.takes[(selFound.clip.src ?? '')] && <Btn ghost className={cn(barBtn, seedance.marks.has((selFound.clip.src ?? '')) && 'text-warn')} aria-pressed={seedance.marks.has((selFound.clip.src ?? ''))} onClick={() => seedance.toggle((selFound.clip.src ?? ''))} title="Marks its whole take: every shot from it is replaced">Redo in Seedance</Btn>)}
+            : !hasOwnFull(fullFor?.info, selFound.clip.src ?? '') && <Btn ghost className={cn(barBtn, seedance.marks.has((selFound.clip.src ?? '')) && 'text-warn')} aria-pressed={seedance.marks.has((selFound.clip.src ?? ''))} onClick={() => seedance.toggle((selFound.clip.src ?? ''))} title="Marks its whole take: every shot from it is replaced">Redo in Seedance</Btn>)}
           <Btn className={barBtn} disabled={readOnly} onClick={askRetake} title="Puts the shot, its take and its place in Alma's box; you add what should change">Retake this shot</Btn>
           <Btn ghost className={barBtn} aria-pressed={details} onClick={() => setDetails((x) => !x)} title="In and out, level, fades, speed">Details</Btn>
           <Btn ghost className={cn(barBtn, 'px-2.5')} disabled={readOnly} onClick={deleteSel} title="Delete this shot; what follows moves back (⌫)" aria-label="Delete this shot">
@@ -2020,7 +2215,7 @@ export function EditPage() {
   };
 
   return (
-    <div className="flex min-h-full flex-col" onPointerDownCapture={letGo}>
+    <div className="flex min-h-full flex-col" data-frame={frameShape(picFrame)} style={frameShape(picFrame) ? { '--film-aspect': `${picFrame.width} / ${picFrame.height}` } as React.CSSProperties : undefined} onPointerDownCapture={letGo}>
       <Header crumbs={crumbs.slice(0, -1)}
         crumbExtra={empty ? undefined : <VersionsMenu film={film} versions={cut.versions} unreadable={cut.unreadable} names={cut.names} equals={cut.equals} newest={cut.newest} edited={cutEdited}
           shown={cutName} viewing={!!viewing} busy={!!cut.saving} savedWhy={savedWhy} marks={marks} now={cut.current} view={cut.view}
@@ -2108,14 +2303,22 @@ export function EditPage() {
         </div>
       )}
 
+      {frameAsk && (
+        <div data-frame-mismatch className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-line px-6 py-2 text-[12.5px] duration-200 animate-in fade-in-0">
+          <span className="min-w-0 text-ink-3">{frameAsk.words}.</span>
+          <Btn className="h-7 text-[12px]" title={`Sets the cut's frame to ${frameAsk.width}x${frameAsk.height} as one step you can undo; the pictures are fitted inside it, not cropped`}
+            onClick={() => { void cut.setFrameSize(frameAsk.width, frameAsk.height, `frame size set to ${frameAsk.width}x${frameAsk.height} from the brief`); }}>Switch to {frameAsk.brief}</Btn>
+        </div>
+      )}
+
       <div className="flex items-start max-[1100px]:flex-col">
         {/* the films are 9:16, so the picture stands tall at the left and stays put while the takes scroll; the edge at
             its right makes it wider or narrower, the picture growing with it (ViewerEdge.tsx, viewerWidth.ts) */}
-        <section ref={viewerCol} aria-label="Viewer" style={{ '--viewer-col': colWidthCss(tl.width, tl.height) } as React.CSSProperties} className="scroll sticky top-14 flex max-h-[calc(100dvh-56px)] w-[var(--viewer-col)] flex-none flex-col gap-3 self-start overflow-y-auto py-4 pl-4 pr-2.5 [scrollbar-gutter:stable] max-[1100px]:static max-[1100px]:max-h-none max-[1100px]:w-full max-[1100px]:items-center">
+        <section ref={viewerCol} aria-label="Viewer" style={{ '--viewer-col': colWidthCss(picFrame.width, picFrame.height) } as React.CSSProperties} className="scroll sticky top-14 flex max-h-[calc(100dvh-56px)] w-[var(--viewer-col)] flex-none flex-col gap-3 self-start overflow-y-auto py-4 pl-4 pr-2.5 [scrollbar-gutter:stable] max-[1100px]:static max-[1100px]:max-h-none max-[1100px]:w-full max-[1100px]:items-center">
           <div ref={stage} onPointerMove={full ? wake : undefined}
             onClick={full && !watching ? () => { wake(); setRate((r) => (r ? 0 : (frame >= total ? (setFrame(0), 1) : 1))); } : undefined}
-            className={cn('group/stage relative mx-auto flex-none overflow-hidden rounded-[10px] border border-edge-strong bg-black max-[1100px]:max-w-[240px] [&:fullscreen]:rounded-none [&:fullscreen]:border-0', full && !ctl && 'cursor-none')}
-            style={{ width: stageWidthCss(tl.width, tl.height), aspectRatio: `${tl.width} / ${tl.height}` }}>
+            className={cn('group/stage relative mx-auto flex-none overflow-hidden rounded-[10px] border border-edge-strong bg-black [&:fullscreen]:rounded-none [&:fullscreen]:border-0', picFrame.width > picFrame.height ? 'max-[1100px]:max-w-[560px]' : 'max-[1100px]:max-w-[240px]', full && !ctl && 'cursor-none')}
+            style={{ width: stageWidthCss(picFrame.width, picFrame.height), aspectRatio: `${picFrame.width} / ${picFrame.height}` }}>
             {peek480 && <span className="pointer-events-none absolute bottom-2 left-2 z-[6] rounded-[4px] bg-black/85 px-1.5 py-px font-mono text-[10px] text-ink duration-150 animate-in fade-in-0">480p · while C is held</span>}
             {!(watching && watchedShot) && !playRecord && !renderOn && <MasterSwitch sw={sw} className={cn('absolute right-2 top-2 z-[6] transition-opacity duration-300', full && !ctl ? 'pointer-events-none opacity-0' : 'opacity-100')} />}
             <button type="button" onClick={(e) => { e.stopPropagation(); toggleFull(); }} aria-label={full ? 'Leave full screen' : 'Full screen'} title={full ? 'Leave full screen (F or Esc)' : 'Full screen (F)'}
@@ -2229,21 +2432,29 @@ export function EditPage() {
             ) : <span className="text-[13px] text-sub">No picture at {tc}.</span>}
           </div>
           <div className="flex w-full flex-col gap-1.5 border-t border-line pt-3">
-            <span className="lbl">Notes</span>
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="lbl">Notes</span>
+              {/* the bookmark keys, where the markers are listed (the user had not found them) */}
+              <span data-bookmark-keys className="whitespace-nowrap text-[11px] text-mute" title="M puts a bookmark at the playhead, no typing. [ and ] go to the one before and after. On the ruler: click a flag to go there, drag it to move it, double-click to name it, Delete removes the one selected.">
+                Bookmark <kbd className="rounded-[4px] border border-edge-strong px-1 font-sans text-[10.5px] text-sub">M</kbd>
+                <span className="ml-1.5">Go</span> <kbd className="rounded-[4px] border border-edge-strong px-1 font-sans text-[10.5px] text-sub">[</kbd> <kbd className="rounded-[4px] border border-edge-strong px-1 font-sans text-[10.5px] text-sub">]</kbd>
+              </span>
+            </span>
             {tl.markers.length ? (
               <div className="flex max-h-[150px] flex-col gap-1 overflow-y-auto">
                 {tl.markers.map((m, i) => (
-                  <button key={i} type="button" title={m.text} onClick={() => { setRate(0); setFrame(toF(m.at, fps)); }} className="flex cursor-pointer items-baseline gap-2 text-left text-[12px] hover:text-ink">
-                    <span className="mt-[3px] h-2.5 w-2 flex-none bg-warn [clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)]" />
+                  <button key={i} type="button" title={unnamed(m) ? 'A bookmark with no name: Enter on its flag names it' : m.text} aria-pressed={markerSel === i} onClick={() => { setRate(0); setFrame(toF(m.at, fps)); setMarkerSel(i); setSel(undefined); setExtra(undefined); }}
+                    className="flex cursor-pointer items-baseline gap-2 text-left text-[12px] hover:text-ink">
+                    <span className={cn('mt-[3px] h-2.5 w-2 flex-none transition-colors duration-150 [clip-path:polygon(0_0,100%_0,100%_60%,50%_100%,0_60%)]', markerSel === i ? 'bg-ink' : 'bg-warn')} />
                     <span className="font-mono text-[11.5px]">{smpte(m.at, fps).slice(3, 8)}</span>
-                    <span className="min-w-0 truncate text-ink-3">{m.text}</span>
+                    <span className={cn('min-w-0 truncate', unnamed(m) ? 'text-mute' : 'text-ink-3')}>{markerName(m)}</span>
                   </button>
                 ))}
               </div>
             ) : <span className="text-[12px] text-mute">No notes on this cut.</span>}
             {markerText === undefined ? (
               <span className="flex gap-3">
-                <button type="button" disabled={readOnly} onClick={() => setMarkerText('')} className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink disabled:opacity-50">+ Marker here</button>
+                <button type="button" disabled={readOnly} onClick={() => setMarkerText('')} title="A marker with words at the playhead. M puts one with no name, no typing" className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink disabled:opacity-50">+ Marker here</button>
                 <button type="button" onClick={noteToAlma} className="-my-[3px] inline-flex h-6 cursor-pointer items-center self-start whitespace-nowrap text-[12px] text-sub hover:text-ink">Note to Alma</button>
               </span>
             ) : (
@@ -2255,11 +2466,11 @@ export function EditPage() {
             )}
           </div>
         </section>
-        <ViewerEdge colRef={viewerCol} aspect={tl.width / tl.height} className="max-[1100px]:hidden" />
+        <ViewerEdge colRef={viewerCol} aspect={picFrame.width / picFrame.height} className="max-[1100px]:hidden" />
 
         <div className="flex min-w-0 flex-1 flex-col gap-2.5 self-stretch border-l border-line px-4 py-3 max-[1100px]:border-l-0 max-[1100px]:border-t">
           <FilmStrip runs={runs} total={total} frame={frame} open={openId} shots={(mainTracks(shown ?? tl).v?.clips ?? []).filter((c) => shotNo(c, by) && !(c.panel && c.panel.k > 1)).length}
-            absent={absent} onPickAbsent={openAbsent} onPick={openRun} onZoom={(dir) => setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, dir }))} empty={empty} />
+            absent={absent} fresh={newScenes} onPickAbsent={openAbsent} onPick={openRun} onZoom={(dir) => setZoomCmd((z) => ({ n: (z?.n ?? 0) + 1, dir }))} empty={empty} />
           <div className={cn('relative flex flex-none flex-col', empty && '[&_[role=toolbar]]:pointer-events-none [&_[role=toolbar]]:opacity-45')} style={{ height: tracksH }}>
             {/* no script yet: the timeline says when it starts, and the one thing to do now (15 Nov) */}
             {empty && (
@@ -2285,16 +2496,54 @@ export function EditPage() {
               focus={focus} scenes={runs.map((r) => { const wait = !!r.scene && planned && making.has(r.scene) && plannedScene(r.scene); return { ...r, title: r.scene ? (wait ? 'take being made' : state.scenes.find((x) => x.id === r.scene)?.title) : undefined, ...(wait ? { making: true } : {}) }; })} openScene={openId}
               tryIds={tryIds} solo={soloed} onSolo={toggleSolo} onMenu={openMenu}
               clipNote={fresh?.size ? (c) => { const x = fresh.get(c.id); return x ? { text: `${x.count} new ${x.count === 1 ? 'take' : 'takes'}`, title: `${x.count === 1 ? 'A take' : `${x.count} takes`} of this shot landed after the one in the cut and ${x.count === 1 ? 'has' : 'have'} not been looked at. Click to see the newest (${names.get(x.pick.src) ?? x.name}) in place, not in the film yet.`, onPress: () => tryNew(x) } : undefined; } : undefined}
-              clipMark={fullMarks && !tryEdit ? (c) => { const m = fullMarks.get(c.id); return m ? { kind: m.kind === 'take' ? 'seedance' : m.kind === 'small' ? 'small' : 'upscaled', marked: seedance.marks.has((c.src ?? '')) } : undefined; } : undefined}
-              fileDrag={dragFile && dragFile.seconds ? { kind: dragFile.kind === 'sound' ? 'audio' : dragFile.kind === 'subtitles' ? 'captions' : 'video', frames: fileFrames(dragFile.seconds, fps) } : undefined} retype={retypeCmd}
-              onDropFile={(trackId, f) => { const e = dragFile; setDragFile(undefined); if (e) void placeEntry(e, { trackId, f }); }}
+              clipMark={fullMarks && !tryEdit ? (c) => { const m = fullMarks.get(c.id); return m ? { kind: m.kind !== 'small' && madeFull(fullFor?.info, c.src ?? '') ? 'full' : m.kind === 'take' ? 'seedance' : m.kind === 'small' ? 'small' : 'upscaled', marked: seedance.marks.has((c.src ?? '')) } : undefined; } : undefined}
+              fileDrag={dragFile && dragFile.seconds ? { kind: dragFile.kind === 'sound' ? 'audio' : dragFile.kind === 'subtitles' ? 'captions' : 'video', frames: fileFrames(dragFile.seconds, fps) } : dragTakeLen ? { kind: 'video', frames: dragTakeLen } : undefined} retype={retypeCmd}
+              onDropFile={(trackId, f) => { const e = dragFile, d = dragTake; setDragFile(undefined); setDragTake(undefined); if (e) void placeEntry(e, { trackId, f }); else if (d) void placeTakeAt(d, trackId, f); }}
               onHeadMenu={(m) => { setMenu(undefined); setHeadMenu(m); }} renaming={renaming} onPress={pressTrack} point={pointOn} onPoint={setPoint}
               onRenamed={(id, name) => { setRenaming(undefined); if (name !== undefined && !readOnly) void apply(renameTrack(tl, id, name)); }} onPeek={setPeek}
               laneNote={planned && mainV && !(mainTracks(tl).v?.clips.length) ? { [mainV]: 'No shots yet. They come with the shot lists.' } : undefined}
+              markerSel={markerSel} onMarkerSelect={(i) => { setMarkerSel(i); if (i !== undefined) { setSel(undefined); setExtra(undefined); setMenu(undefined); } }}
+              onMarkerMove={(i, f) => { if (readOnly) return; const r = moveMarker(tl, i, f); if (r) void apply(r.edit).then((ok) => { if (ok) { setMarkerSel(r.i); say(`${markerName(r.edit.tl.markers[r.i])} moved to ${smpte(f / fps, fps)}.`); } }); }}
+              markerRename={markerRename} onMarkerRenamed={(i, text) => { if (text !== undefined && !readOnly) void apply(renameMarker(tl, i, text)); }}
+              onMarkerMenu={(m) => { setMenu(undefined); setHeadMenu(undefined); setRate(0); setFrame(toF(tl.markers[m.i]?.at ?? 0, fps)); setMarkerMenu(m); }}
               nameOf={noteName} clipText={(c, t) => { if (t.id !== mainV) return undefined; const n = shotNo(c, by); return n ? { title: `Shot ${n}${c.panel && c.panel.of > 1 ? ` · ${c.panel.k}/${c.panel.of}` : ''}`, sub: c.plan ? c.text ?? '' : takeLabel(c) } : undefined; }} />
           </div>
           {menu && menuItems && <ContextMenu x={menu.x} y={menu.y} title={menuItems.title} items={menuItems.items} onClose={closeMenu} />}
           {headMenu && headItems && <ContextMenu x={headMenu.x} y={headMenu.y} title={headItems.title} items={headItems.items} onClose={closeHeadMenu} />}
+          {markerMenu && tl.markers[markerMenu.i] && (() => {
+            // a bookmark's flag: rename, delete, and the two ways of telling Alma about it
+            const i = markerMenu.i, m = tl.markers[i], at = smpte(m.at, fps);
+            const chip = { id: `marker:${at}`, label: `Bookmark · ${unnamed(m) ? at : `${m.text.trim()} · ${at}`}` };
+            const words = `the bookmark at ${at} in cut ${almaCut}${unnamed(m) ? '' : ` (“${m.text.trim()}”)`}`;
+            return (
+              <ContextMenu x={markerMenu.x} y={markerMenu.y} title={unnamed(m) ? `Bookmark · ${at}` : `${m.text.trim()} · ${at}`} onClose={closeMarkerMenu} items={[
+                { label: unnamed(m) ? 'Name it…' : 'Rename…', hint: 'Enter', disabled: readOnly, onPick: () => nameMarker(i) },
+                { label: 'Delete', hint: isMac ? '⌫' : 'Delete', danger: true, disabled: readOnly, onPick: () => dropMarker(i) },
+                { label: 'Ask Alma about this bookmark…', sepBefore: true, onPick: () => ui.about(chip, words, 'Say something about this moment…') },
+                { label: 'Add to what Alma sees', onPick: () => ui.addChip(chip) },
+              ]} />
+            );
+          })()}
+          {panel && (() => {
+            // the clip's panel: what it tries is on the tracks and in the player at once; kept as one step on
+            // Enter, Done or a click elsewhere, put back with Esc
+            const keepWith = (p: PanelTry) => { const e = panelEdit(p, tl, noteNameOf); setPanel(undefined); void apply(e); };
+            const drop = () => setPanel(undefined);
+            const setVal = (v: PanelTry['val']) => setPanel((p) => (p ? ({ ...p, val: v } as typeof p) : p));
+            let body: React.ReactNode = null;
+            if (panel.kind === 'speed') {
+              const cs = panel.refs.map((r) => findClip(tl, r)?.clip).filter((c): c is TimelineClip => !!c);
+              body = <SpeedControl key="speed" mode="panel" autoFocus pct={panel.start as number} srcs={cs.map((c) => c.out - c.in)} nowF={cs.reduce((n, c) => n + lenF(c, fps), 0)} fps={fps} disabled={readOnly}
+                onChange={(p) => setVal(p)} onCommit={(p) => keepWith({ ...panel, val: p })} onCancel={drop} />;
+            } else if (panel.kind === 'level') {
+              body = <LevelBody db={panel.val ?? (panel.start as number)} onValue={(v) => setVal(v)} onCommit={() => keepWith(panel)} onCancel={drop} />;
+            } else {
+              const c = findClip(tl, panel.ref);
+              const v = panel.val ?? (panel.start as { fin: number; fout: number });
+              body = c ? <FadesBody fin={v.fin} fout={v.fout} max={lenF(c.clip, fps)} fps={fps} sound={c.track.kind === 'audio'} onValue={(x) => setVal(x)} onCommit={() => keepWith(panel)} onCancel={drop} /> : null;
+            }
+            return <ClipPanel key={`${panel.kind}:${panel.title}`} anchor={panel.anchor} title={panel.title} label={panel.kind === 'speed' ? 'Speed' : panel.kind === 'level' ? 'Level' : 'Fades'} onDismiss={() => keepWith(panel)} onDone={() => keepWith(panel)}>{body}</ClipPanel>;
+          })()}
           {!empty && bar}
           <FilesPanel open={!!files} film={film} mode={files?.mode ?? filesWas.mode} data={filmFiles} tl={tl} replacing={files?.replacing ?? filesWas.replacing}
             target={(() => {
@@ -2309,6 +2558,7 @@ export function EditPage() {
             {check && fullFor && <FullBar shots={check.shots} takes={check.takes} marks={seedance.marks} onUpscale={() => askUpscale()} onSeedance={askSeedance} />}
             {/* how many things wait for the user, for What's next's tab, read apart so the page is drawn only when it changes */}
             <WaitingCount onCount={setWaitingN} />
+            <div className="flex flex-wrap items-center gap-1">
             <div role="tablist" aria-label="Under the timeline" className="flex flex-wrap gap-1">
               {(check && fullFor ? ['takes', 'left', 'upscale', 'renders', 'history'] as const : ['takes', 'left', 'renders', 'history'] as const).map((k) => (
                 <button key={k} type="button" role="tab" aria-selected={lowerTab === k} onClick={() => setLowerTab(k)} data-tab={k}
@@ -2317,10 +2567,17 @@ export function EditPage() {
                 </button>
               ))}
             </div>
+              {inboxWords && (
+                <Link href={`/films/${film}/takes`} data-new-takes-link
+                  className="ml-auto inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 text-[12.5px] text-ink-3 no-underline transition-colors duration-200 animate-in fade-in-0 hover:bg-raised hover:text-ink">
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-warn" />{inboxWords}<span aria-hidden="true" className="text-sub">›</span>
+                </Link>
+              )}
+            </div>
           </div>
           {lowerTab === 'left' && leftInput ? (
             <div key="left" className="duration-200 animate-in fade-in-0 slide-in-from-bottom-1">
-              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} here="/edit" from="What's next on the Edit page" />
+              <LeftTab film={film} tl={leftTl ?? tl} input={leftInput} onDo={doLeft} onUntick={untick} error={left.error} here="/edit" from="What's next on the Edit page" fresh={freshN} focus={focusStep} />
             </div>
           ) : empty && lowerTab !== 'left' ? (
             <div key={`empty-${lowerTab}`} className="duration-200 animate-in fade-in-0">
@@ -2371,13 +2628,13 @@ export function EditPage() {
                 <EmptyCard title={`No take of Layout ${layView.n} yet.`} text={layForeign ? `Its storyboard is above. “Use Layout ${layView.n} in the film” puts its boards and lines in ${gridScene.id}’s place.` : `Its boards are in the film. Shots of the other layouts’ takes can go into its places: open their layout above and click one.`} />
               ) : (
               <ShotGrid scene={gridScene} takes={layView && sceneLays.length > 1 ? shots.takes.filter((t) => t.scene !== gridScene.id || !layoutOfTake(sceneLays, t.src) || layView.takes.some((x) => x.src === t.src)) : shots.takes}
-                by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} seenKey={`hh:takes-seen:${film}`}
+                by={by} names={names} tl={tl} watching={watching} picks={pickSet} selecting={picks.length > 0} isNew={isNew} other={shots.other} alias={shots.alias} stands={shots.stands}
                 selShot={layForeign ? undefined : watching ? gridHead?.n ?? watching.n : selShotN ?? (picScene === openId ? picShot : undefined)} base={base} onShot={clickShot} onUnpick={unpick} head={layForeign ? undefined : gridHead}
                 onMenu={(at, t, n, tag) => { setMenu(undefined); setHeadMenu(undefined); setTakeMenu({ ...at, src: t.src, n, ...(tag ? { tag } : {}) }); }}
                 onSeek={layForeign ? undefined : seekTakes} onSeekEdge={seekEdge}
                 foreign={layForeign && layView && layIn ? { from: layView.n, into: layIn.n } : undefined} markOf={layForeign ? (t, n, tag) => swapOf(t, n, undefined, tag) : undefined}
                 onBring={readOnly ? undefined : (t, n, tag) => void bringBack(t, n, tag)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)}
-                views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} />
+                views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} onDragTake={setDragTake} />
               )}
               <PicksBox count={picksCount} hover={picksHover} open={picks.length > 0} folded={boxFolded} onFold={setBoxFolded} disabled={readOnly}
                 onBack={backToFilm} onUse={() => void putPicks()} />
@@ -2391,7 +2648,7 @@ export function EditPage() {
           {details && sel && (
             <aside className="rounded-[10px] border border-line" aria-label="Clip details">
               <Inspector tl={tl} sel={sel} state={state} base={base} steps={inspectorSteps} readOnly={readOnly} srcSeconds={srcSeconds} framesOf={framesOf}
-                onEdit={(e) => void apply(e)} onClose={() => setDetails(false)} onAsk={askAlma}
+                onEdit={(e) => { void apply(e); setRowTry(undefined); }} onTrySpeed={(ref, pct) => setRowTry(pct === undefined ? undefined : { ref, pct })} onClose={() => setDetails(false)} onAsk={askAlma}
                 onChip={() => { const f = selClip(); if (f) ui.addChip(clipChip(f.track, f.clip)); }} />
             </aside>
           )}
@@ -2448,8 +2705,8 @@ function phonePick(p: { viewing?: { proxy?: string; master?: string }; equals?: 
 // with both rows the lane keeps only the picture row, so nothing is ever cut by Alma's bar
 const PIC_MIN = 120, PIC_MAX = 340, ONE_ROW = 240, RULER = 24, ROW = 52;
 
-function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, playing, onPlay, viewer, transport, file, smoother, crumbs, onNote, ahead }: {
-  state: FilmState; tl: Timeline; name: string; frame: number; fps: number; total: number; setFrame: (f: number) => void; ahead?: string;
+function PhoneEdit({ state, tl, pic, name, frame, fps, total, setFrame, playing, onPlay, viewer, transport, file, smoother, crumbs, onNote, ahead }: {
+  state: FilmState; tl: Timeline; pic: { width: number; height: number }; name: string; frame: number; fps: number; total: number; setFrame: (f: number) => void; ahead?: string;
   /** The film plays; `onPlay` plays or pauses it (the full screen's own button). */
   playing: boolean; onPlay: () => void;
   viewer: React.ReactNode; transport: React.ReactNode; crumbs: { label: string; href?: string }[]; onNote: () => void;
@@ -2488,11 +2745,11 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, playing, onPl
   const box = useRef<HTMLDivElement>(null);
   const laneBox = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<{ w: number; h: number; rows: 1 | 2 }>();
-  const ratio = tl.width / tl.height;
+  const ratio = pic.width / pic.height;
   const tracks = audio && video ? 2 : 1;
   // full screen: the picture's own box, so the same player keeps playing; a landscape film turns sideways.
   // While it is full screen the page's sizes are left as they were, so it comes back exactly where it went from.
-  const fs = usePhoneFull(box, tl.width > tl.height);
+  const fs = usePhoneFull(box, pic.width > pic.height);
   const isFull = useRef(false);
   useEffect(() => { isFull.current = fs.full; }, [fs.full]);
   useLayoutEffect(() => {
@@ -2546,7 +2803,7 @@ function PhoneEdit({ state, tl, name, frame, fps, total, setFrame, playing, onPl
             fs.full ? 'fixed inset-0 z-[100] rounded-none border-0 duration-200 animate-in fade-in-0' : 'relative rounded-[14px] border border-edge',
             !fs.full && back && 'duration-200 animate-in fade-in-0',
             !fs.full && !fit && 'h-[min(42dvh,340px)]', !fs.full && eased && 'transition-[width,height] duration-300 ease-out motion-reduce:transition-none')}
-          style={fs.full ? undefined : fit ? { width: fit.w, height: fit.h } : { aspectRatio: `${tl.width} / ${tl.height}` }}>
+          style={fs.full ? undefined : fit ? { width: fit.w, height: fit.h } : { aspectRatio: `${pic.width} / ${pic.height}` }}>
           {/* the picture and what is drawn over it; turned a quarter for a landscape film while the window stands upright */}
           <div data-phone-stage data-sideways={fs.sideways || undefined} onClick={fs.full ? wake : undefined}
             className="absolute inset-0"

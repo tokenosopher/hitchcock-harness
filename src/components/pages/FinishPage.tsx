@@ -20,6 +20,8 @@ import { Feed, ShownLink } from '@/components/feed/Feed';
 import { StepRunning } from '@/components/flow/RunningNow';
 import { FullCutLink } from '@/components/media/MasterPlayer';
 import { StepIntro } from '@/components/intro/StepIntro';
+import { aspectStyle, isWide } from '@/lib/frame';
+import { refData } from '@/components/lib/refPick';
 
 
 export function FinishPage() {
@@ -116,9 +118,10 @@ export function FinishPage() {
             {master ? (
               <div className="flex flex-col gap-1 border-b border-line px-4 py-3">
                 <SubLabel>{`The master${f.cut?.render ? ` · ${f.cut.render}` : ''}`}</SubLabel>
-                <div className="flex gap-3">
-                  <Media path={p(master.path)} w={320} t={2} play fit="cover" onPlay={() => chip(`master:${master.path}`, `1080p master · ${baseName(master.path)}`, p(master.path))}
-                    className="aspect-[9/16] w-[72px] flex-none rounded-[6px] border border-edge bg-black" />
+                {/* a landscape film's master: the picture across the card, the facts under it */}
+                <div className={cn('flex gap-3', isWide(state.film.aspect) && 'flex-col')}>
+                  <Media path={p(master.path)} w={320} t={2} play fit="cover" style={aspectStyle(state.film.aspect)} onPlay={() => chip(`master:${master.path}`, `1080p master · ${baseName(master.path)}`, p(master.path))}
+                    className={cn('aspect-[9/16] flex-none rounded-[6px] border border-edge bg-black', isWide(state.film.aspect) ? 'w-full' : 'w-[72px]')} />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <KV k="Length" mono>{master.frames !== undefined ? smpteFrames(master.frames, fps) : '—'}{f.cut?.timelineFrames !== undefined && master.frames !== undefined && f.cut.timelineFrames !== master.frames && !settled && <ToConfirm title={`cut/${f.cut.version}.json runs ${f.cut.timelineFrames} frames`} />}</KV>
                     <KV k="Frames" mono>{master.frames ?? '—'}</KV>
@@ -191,7 +194,7 @@ export function FinishPage() {
                 {f.music.source.takes.map((t) => {
                   const picked = f.music.pick && new RegExp(`\\b${t.label.replace(/^take\s*/i, '')}\\b|${t.id ?? '#'}`, 'i').test(f.music.pick.pick);
                   return (
-                    <button key={t.label} type="button" onClick={() => chip(`music:${t.id ?? t.label}`, `music · ${t.label}${t.id ? ` ${t.id}` : ''}`)}
+                    <button key={t.label} type="button" {...refData({ kind: 'text', label: `music · ${t.label}${t.id ? ` ${t.id}` : ''}`, page: 'finish', section: 'Music', item: t.id, words: [f.music.source?.name, t.label, t.id].filter(Boolean).join(' · ') })} onClick={() => chip(`music:${t.id ?? t.label}`, `music · ${t.label}${t.id ? ` ${t.id}` : ''}`)}
                       className={cn('flex w-full cursor-pointer items-center gap-3 border-b border-line px-4 py-3 text-left hover:bg-raised', ui.hasChip(`music:${t.id ?? t.label}`) && 'bg-raised')}>
                       <span aria-hidden="true" className="flex size-8 flex-none items-center justify-center rounded-full border border-edge-strong"><IconPlay size={11} /></span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">

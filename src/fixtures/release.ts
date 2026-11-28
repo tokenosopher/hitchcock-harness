@@ -16,7 +16,7 @@
 //                          posted by hand as a reply to the post
 //   sample-release-empty   a final named and no platforms yet: Alma has not written the texts
 // The clock: the pages take ?now=2026-11-14T18:52 outside production (src/components/release/clock.ts).
-import type { FilmRef, FilmState, PictureMade, Timeline } from '@/server/types';
+import type { FilmRef, FilmState, PictureMade, RenderState, Timeline } from '@/server/types';
 import type { ReleaseFile, ReleaseFinal } from '@/components/release/file';
 import { COMPANION_LABEL, finalNames, masterRows, type CompanionStatus, type MasterOption } from '@/components/release/masters';
 import { parseKit, type ReleaseInfo } from '@/server/films/read/release';
@@ -97,16 +97,22 @@ export function sampleFinal(title: string, m: MasterOption, now: Date): ReleaseF
 }
 
 /** The companions of a sample final: queued, then rendering, then done, a few seconds after the naming (the open
- *  sample's are done). */
-export function sampleCompanions(final: ReleaseFinal, now: Date): CompanionStatus[] {
+ *  sample's are done). `live`: the sample render queue's state of a companion (src/fixtures/renders.ts), when it has
+ *  one: naming a final asks it for the copy without subtitles and the smaller file, and the 480p preview only on "Make
+ *  it", so those follow it, a cancel included. Without one, the 480p of a final named now is "not made". */
+export function sampleCompanions(final: ReleaseFinal, now: Date, live?: (kind: 'proxy' | 'master', options?: Record<string, unknown>) => RenderState | undefined): CompanionStatus[] {
   const t = (now.getTime() - Date.parse(final.namedAt)) / 1000;
   const old = t > 3600 || t < -60;
   const bytes = { clean: 98_000_000, phone: 14_000_000, srt: 3_100, post: 60_000_000 } as const;
   return (['clean', 'phone', 'srt', 'post'] as const).filter((k) => final.companions[k]).map((key, i): CompanionStatus => {
     const label = COMPANION_LABEL[key];
-    const path = final.companions[key]!.path;
+    const c = final.companions[key]!;
+    const path = c.path;
     if (key === 'post' && path === final.path) return { key, label, path, state: 'same', bytes: 60_000_000 };
     if (key === 'srt' || old) return { key, label, path, state: 'done', bytes: bytes[key] };
+    const st = live?.(key === 'phone' ? 'proxy' : 'master', c.options);
+    if (st && st.state !== 'none') return st.state === 'done' ? { key, label, path, state: 'done', bytes: bytes[key] } : { key, label, path, state: st.state, percent: st.percent, error: st.error };
+    if (key === 'phone') return { key, label, path, state: 'none' };
     const start = 1 + i * 2.5, end = start + 2.5;
     if (t < start) return { key, label, path, state: 'queued' };
     if (t < end) return { key, label, path, state: 'running', percent: Math.round(((t - start) / (end - start)) * 100) };
@@ -167,7 +173,8 @@ export function boardRelease(): ReleaseFile {
           { id: 'comment', label: 'First comment', part: 'comment', text: 'Made alone in {days} days with Seedance 2.5 on Higgsfield. Happy to answer how.', own: true, candidates: [] },
         ],
         upload: { bufferSets: [], after: [], hand: [step('save', 'Save the video', at('17:58')), step('title', 'Copy the title', at('17:59')), step('open', 'Open r/aivideo and post', at('18:01')), step('comment', 'Copy the first comment', at('18:03')), step('link', 'Paste the post\'s link', at('18:04'))] },
-        send: { posted: { at: at('18:04'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2/a_letter_in_a_bottle_reaches_a_lighthouse/' } },
+        // posted in both its places: r/aivideo, and the same in r/aivideos just before
+        send: { posted: { at: at('18:04'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2/a_letter_in_a_bottle_reaches_a_lighthouse/' }, postedIn: { aivideos: { at: at('18:03'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7/a_letter_in_a_bottle_reaches_a_lighthouse/' } } },
       },
       {
         id: 'youtube-shorts', kind: 'youtube-shorts', name: 'YouTube Shorts', account: 'Sample Studio', route: 'hand', wave: { day: 'today', about: '18:00' },
@@ -397,7 +404,7 @@ function moment(slug: string): ReleaseFile | undefined {
       tt.upload.hand = [step('save', 'Save the video', at('18:58')), step('copy', 'Copy the caption', at('18:59')), step('open', 'Open TikTok', at('19:00')),
         step('checks', 'I turned on AI-generated content and turned off auto-captions'), step('link', 'Paste the post\'s link')];
       const rd = f.platforms.find((p) => p.id === 'reddit')!;
-      rd.send = { posted: { at: at('18:04') } };
+      rd.send = { posted: { at: at('18:04') }, postedIn: { aivideos: { at: at('18:03'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7/a_letter_in_a_bottle_reaches_a_lighthouse/' } } };
       rd.upload.hand = rd.upload.hand.map((s) => (s.id === 'link' ? { id: s.id, text: s.text } : s));
       break;
     }
@@ -524,7 +531,7 @@ export function longRelease(): ReleaseFile {
   // a long account name and a long link: Reddit posted
   p('reddit').account = 'your personal account, posting to r/aivideo and r/filmmakers and r/shortfilms';
   p('reddit').fields.forEach((k) => Object.assign(k, { text: k.candidates[0].text, pick: 'a' }));
-  p('reddit').send = { posted: { at: at('16:10'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2zq9/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' } };
+  p('reddit').send = { posted: { at: at('16:10'), link: 'https://www.reddit.com/r/aivideo/comments/1gx4k2zq9/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' }, postedIn: { aivideos: { at: at('16:08'), link: 'https://www.reddit.com/r/aivideos/comments/1gx4m7zq2/i_made_a_one_minute_film_alone_about_a_lighthouse_keeper_who_finds_a_letter_in_a_bottle/' } } };
   // six notes on X's post
   const x = p('x').fields[0];
   Object.assign(x, { text: x.candidates[0].text, pick: 'a' });
@@ -546,3 +553,44 @@ Object.assign(RELEASE_SAMPLES, {
   'sample-release-long': ref('sample-release-long', 'Sample · the longest texts, names and links a release can have', 12),
 });
 Object.assign(RELEASE_SEEDS, { 'sample-release-today': todayRelease, 'sample-release-long': longRelease });
+
+// ---- a field's candidates as radio options with their whole text
+//   sample-release-radios  the day's release as Alma writes it now: Reddit's title the user's own words with three
+//                          candidates, its first comment of about 450 characters to pick from three, and TikTok's
+//                          caption shared with Instagram; each field with the note that offered its candidates as two
+//                          buttons ("Use it", "Use this one instead"), which the options now replace.
+export const RADIO_COMMENT = 'Made with Hitchcock Harness, the app I use to make these films with one agent.\nThe story: a lighthouse keeper on a rock finds a letter in a bottle, and it is in his own handwriting.\nThe hardest part was the lamp room: Seedance kept lighting the lamp in the day, and the whole film waits for night.\nWhat would you have cut? I read every comment.';
+export function radiosRelease(): ReleaseFile {
+  const f = todayRelease();
+  const p = (id: string) => f.platforms.find((x) => x.id === id)!;
+  const plainNote = (id: string, text: string, platforms: string[], field: string, a: string, b: string) => ({
+    id, at: at('16:20'), text,
+    actions: [
+      { id: 'a', label: 'Use it', effect: [{ kind: 'set' as const, field, platforms, text: a }], small: a.slice(0, 80) },
+      { id: 'b', label: 'Use this one instead', effect: [{ kind: 'set' as const, field, platforms, text: b }], small: b.slice(0, 80) },
+    ],
+  });
+  const title = [
+    { id: 'a', text: 'A lighthouse keeper finds a letter in his own handwriting', does: 'the premise, flat' },
+    { id: 'b', text: 'Maren reads the letter. Tobias says he never wrote it.', does: 'premise with a turn' },
+    { id: 'c', text: 'The letter in the bottle', does: 'short' },
+  ];
+  const comment = [
+    { id: 'a', text: RADIO_COMMENT, does: 'source, the app, the hardest part, a question (your last film’s shape)' },
+    { id: 'b', text: 'Made with Hitchcock Harness.\nAn original story.\nSeedance 2.5 on Higgsfield, voices on Higgsfield.', does: 'source and the app only' },
+    { id: 'c', text: 'Happy to answer how it was made.', does: 'one line' },
+  ];
+  const rd = p('reddit');
+  rd.fields = [
+    { id: 'title', label: 'Title', part: 'title', text: 'The keeper who wrote himself a letter', own: true, candidates: title, aim: { max: 60, words: 'under 60 characters, so it reads whole in a feed' },
+      notes: [plainNote('n-title', 'The premise said flatly, the way your last title went.', ['reddit'], 'title', title[0].text, title[1].text)], readByAlma: { at: at('15:58'), text: '' } },
+    { id: 'comment', label: 'First comment', part: 'comment', text: '', candidates: comment,
+      notes: [plainNote('n-comment', 'Your last film’s comment, with this film’s source and hardest part.', ['reddit'], 'comment', comment[0].text, comment[1].text)], readByAlma: { at: at('15:58'), text: '' } },
+  ];
+  f.facts[0] = { ...f.facts[0], value: '6', confirmedAt: at('16:00') };
+  const tt = p('tiktok').fields.find((x) => x.id === 'first')!;
+  tt.notes = [plainNote('n-first', 'The premise in one line; the twist stays out.', ['tiktok', 'instagram-reels'], 'first', tt.candidates[0].text, tt.candidates[1].text)];
+  return f;
+}
+Object.assign(RELEASE_SAMPLES, { 'sample-release-radios': ref('sample-release-radios', 'Sample · the texts to choose from', 12) });
+Object.assign(RELEASE_SEEDS, { 'sample-release-radios': radiosRelease });

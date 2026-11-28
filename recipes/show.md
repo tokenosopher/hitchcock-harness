@@ -125,6 +125,7 @@ When you need the user to choose among options, say yes to what is shown, or giv
 - **A card about the story or the script does not paste their text.** Put it `"at": "story"` and name the thing and its version in the title (`"Script v2: lock it?"`, `"Story v8: settle it?"`); the harness gives the card a "Read the script ›" or "Read the story ›" link that opens the Story page at that version. Every other card shows its thing in the card itself (its pictures, clips, sounds), so the user can answer without leaving it.
 - **The card needs an `"id"` of its own**, and it cannot be an `asset` card (an asset card's id is the asset's). Use any other card type (`card`, `video`, `videos`, `images`, `audio`). A `card` with one file per block works too: each block's `file` is an option. Two asking cards never share an id.
 - **The options of a pick are the card's own files**, in order: the card's `items` (or each block's `file`). Give each one an `"id"` (it is what comes back, and what goes into `taste.md`). Add an `"options"` list, `{id, label}` each or plain strings, only when the choices are not files (two wordings of a line, two release times).
+- **The card's `"sub"` is one short sentence** under the title, about 20 words at most. Anything longer, or anything with a list, goes in `"text"`. (A `"sub"` with line breaks or more than about 320 characters is drawn as `"text"` is, folded, so nothing shows as one unbroken paragraph; write it short anyway.)
 - **The card's `"text"` is a few short lines.** Where it names several things (scenes, takes, beats), write a list, one short `- ` line per item; the details go in the thread or on the page the card links. Long text is folded under "Show more".
 - `"who"`: for a card about a character, who they are in a sentence or two (the part, where they speak, the look in the brief). The harness shows it at the top of the card. Without it the harness shows that character's line from the `## Cast` list of `brief.md`, so write `who` only when the brief's line is not the right words for this choice. On a card that is not a face round the harness also shows the character's picked face by itself (from `"for"`), so a voice is picked looking at the face it belongs to: no extra picture card is needed.
 - `"prediction"`: the option you expect the user to take, as `taste.md` asks, written before the pick.
@@ -166,6 +167,28 @@ When the sound designer's tries of a scene's sounds are made, write one card tha
 - **Recording the pick**: the harness runs the studio's `tools/sound/sfx.py "$FILM" <sound> --pick N [--note "<their words>"] [--predicted M]` itself, which writes the sound's `pick.json`, `prompts.json` "picked" and the `taste.md` row; do not run it again. If that tool is missing, the harness writes nothing in the film folder and its message asks you to record those three yourself. A pick reaches you as `<harness-action kind="pick" what="sfx" target="<sound>" candidate="<N>" card="<the card>"/>`; "None of these" as `candidate="none"`, with the user's words for the next prompt when they gave some.
 - The card stops asking once every sound on it has an answer. Then set `"answer"` on it yourself, as for any card.
 - More tries after "None of these" are a new round: a new card with a new id, naming only the sounds it asks about.
+- Each try plays on the card, and "In the film" plays the sound's moment of the current cut with that try laid at the plan's place, level and fades (below).
+
+## A pick among sounds: heard on the card and in the film
+
+A pick among sound files (tries of one effect, music takes) can be written with its options as words and a plain list of `"files"` beside them, **one file per option, in the options' order**; options after the last file (`"none of these"`) have none. Each option then plays on the card (a play button and the sound's shape), on the phone too.
+
+```json
+{
+  "type": "card", "id": "ASK-sfx2-surf-wash", "title": "Which surf wash?", "at": "sound", "for": "film",
+  "updated": "2026-11-25T01:06:00Z", "ask": "pick", "prediction": "7",
+  "options": ["try 1", "try 5", "try 6", "try 7", "none of these"],
+  "files": ["audio/sfx/surf-wash/surf-wash-try1.wav", "audio/sfx/surf-wash/surf-wash-try5.wav",
+            "audio/sfx/surf-wash/surf-wash-try6.wav", "audio/sfx/surf-wash/surf-wash-try7.wav"],
+  "lay": "audio/sfx/lay-v2.json"
+}
+```
+
+**"In the film"**: where the card says where its sounds sit, each option can also be heard in place: the moment of the current cut, picture and all, from 2 s before to 2 s after, with that option laid in and the sound the cut has there now taken out ("Without" plays the moment with none of them). The user taps one option, then another, to hear them on the same picture at the same instant. The harness renders these clips from the cut's newest 480p and its sound tracks, and keeps them under its own folder. Say where, in one of two ways:
+- `"lay"`: the sound designer's lay file (`audio/sfx/lay-v2.json`: `sounds`, each with `place`, `fade_in_frames`, `fade_out_frames`, `recommend`, and per try a variation with `file`, `at`, `in`, `out`, `level_db`). Every sound of it with a variation whose `file` is one of the card's files is a moment of the card. Without `"lay"` (and without `"places"`) the harness looks in the film's newest `audio/sfx/lay*.json`.
+- `"places"`: one list per option, in the options' order, of where that option is laid: `{"moment": "into S2", "at": 26.0, "in": 2.25, "out": 3.75, "gain_db": -21.5, "fade_in": 0.75, "fade_out": 0.5}` (`at` on the cut, `in` and `out` in the file, seconds; `moment` names the place, so options laid at the same one are heard against each other).
+
+An option laid nowhere still plays on the card; it has no "In the film". A card of sound picks (`"sfx"`) is heard in the film at each sound's place in the plan without either field.
 
 ## A why card: the reason for one change
 
@@ -244,22 +267,31 @@ Picks made on an asset's own page:
 
 Each item is one answer or one pick, exactly as its own message would be: an answer line names the card by its id, a pick keeps its whole text. The harness has written what it writes for each (the `taste.md` row of every pick, a picked asset's files). Do your steps for every item in one turn, then continue the flow once. A go in the list covers the quote on its own card and nothing more. The user can still send one answer by itself; that arrives as before.
 
+A sheet the harness itself shows in "Waiting for you" (a made sheet with no card of yours about it) is approved the same way: one tap, sent with "Done picking". It arrives under "Sheets approved in "Waiting for you":" as a line such as `- Sheet approved: C04 (cast/C04-cup-servant/pick.png)`: the character or form, and the exact sheet file the user saw. It is the user's yes to that file and no other version. The harness wrote nothing for it: record the approval and do what follows, exactly as when the user writes "I approve the C04 sheet.".
+
+Any entry of "Waiting for you" (a card of yours or one the harness shows by itself) also has "Remove": the user takes it off the list because it no longer applies, set aside the same way and sent with "Done picking". It arrives under "Removed from "Waiting for you" (not answered; close these, start no work from them):", one line each: `- card="<id>" · “<title>”` for a card of yours, or `- gate:pick:C05:sheet · “<title>” (the harness's own entry, no card of yours)`. A removal is not an answer: never a yes, a go, a pick or an approval, so record none, spend nothing and start no work from it. Close each card of yours with `"answer": {"option": "removed", "note": "removed by the user from Waiting for you", "at": "<now>"}` (the harness reads "removed" as closed, never as a yes) and ask again only if the question comes back on its own. A harness entry needs nothing from you: it stays off the list until the thing it is about changes (a new sheet file, a new round).
+
 When the user answers in words instead, do all of it yourself: the `answer` on the card, the whole `taste.md` row, the work.
 
 ## References in the user's words
 
-The user can put a thing into a sentence as they write it: they Option-click it on the page, pick it with the button by the message box, press Ctrl-M for the playhead, or choose it from the list that "@" opens. In their message each one reaches you in its place in the words as a tag:
+The user can put a thing into a sentence as they write it: they Option-click it on the page (anything on any page can go in), pick it with the button by the message box, press Ctrl-M for the playhead, or choose it from the list that "@" opens. In their message each one reaches you in its place in the words as a tag:
 
 ```
 Now <harness-ref kind="clip" label="S6 · take 1 · shot 4" scene="S6" shot="4" take="take 1" track="V1" clip="s6-take~4" cut="v33" rev="412" at="00:01:56:10" sec="116.417" frame="2794" length="5" from="12.6" to="17.6" file="assets/films/the-lighthouse/generations/S6/takes/take1/S6-take1-480p.mp4"/> after <harness-ref kind="moment" label="00:01:52:10 · v33" cut="v33" edited="yes" rev="412" at="00:01:52:10" frame="2698" track="V1" clip="s6-take~3" file="…/S6-take1-480p.mp4" from="9.917" title="S6 · take 1 · shot 3"/>, and hold it to the wave
 ```
 
-- `kind`: `clip` (a clip on the timeline), `panel` (a storyboard panel on the timeline), `moment` (the playhead), `take`, `shot` (a scene's shot, or with `take` and `file` a shot of that take), `scene`, `card`, `character`, `view` (a painted view), `location`.
+- `kind`: `clip` (a clip on the timeline), `panel` (a storyboard panel on the timeline), `moment` (the playhead), `take`, `shot` (a scene's shot, or with `take` and `file` a shot of that take), `scene`, `card`, `character` (with `item`, one of its face candidates), `view` (a painted view), `location` (with `item`, one of its candidates), `stage` (a step of the flow board, `place` its key), `voice` (a voice option: `character`, the round in `item`, the option in `option`), `prompt` (a scene's prompt for the video, its words), `qc` (a QC round: the stage in `place`, the target in `item`, `round`, the qc file), `finding` (one miss of that round: its id in `item`, what is wrong and the fix in `words`), `line` (a line of the script: `scene`, `line` its number among the scene's spoken lines, the speaker in `title`, the id in `item`; a direction has no `line`).
+- The Release pages, all read in `social/release.json`: `platform` (a platform, `platform` its id), `field` (a box of "The text": `platform`, `field` the field's id, or ids joined with " + " for a box of several, the words in it now in `words`), `option` (one option of a field: `platform`, `field`, `option` the candidate's id, or `own` for the user's own words; what it is going for in `title`, its whole text in `words`), `note` (your note under a field: `platform`, `field`, `note` its id), `step` (a step of sending: `platform`, `step` its id, which list in `item`: `upload.hand`, `upload.after` or `send.sending.steps`, whose steps are named `sending-<n>` by their place), `final` (the final: `cut` its version, `title` its name, `file`).
+- `kind="text"` is anything else on a page: a card, a row, a paragraph, a button, a field. It carries `page` (the page under /films/<film>, "" for the film's own page, a `?open=<step>` for an open step of the board), `section` (the heading above it) and `words`: the block's visible words, at most about 600 characters, or the words the user had selected in it, when they selected some (then the label is those words in quotes). Read the words to know what they mean; when it is a thing you keep in a file, find it there by its words.
+- `quote`: on any named thing, the words the user had selected inside it when they picked it: the part they mean.
+- `page` on any kind: the page it was picked on.
 - `label`: the words the user saw on the chip.
-- The ids: `scene`, `shot`, `take`, `track` and `clip` (the clip's id in the cut file), `card` and its `place`, `character`, `location`, `view`.
+- The ids: `scene`, `shot`, `take`, `track` and `clip` (the clip's id in the cut file), `card` and its `place`, `character`, `location`, `view`, `platform`, `field`, `option`, `note`, `step`, `item`.
 - For things on the timeline and a moment: `cut` is the version the page showed, `edited="yes"` when the working cut had edits since that version, `rev` the working cut's step (the `rev` of `cut/working.json` then). `at` is the place on the cut as a timecode, `sec` and `frame` the same in seconds and frames, `length` in seconds.
 - `file` is relative to the film repo: the take, the clip's source, the panel's picture, the view, the face. `from` and `to` are seconds in that file (a moment's `from` is the frame under the playhead).
 - `title`: a longer name (the card's question, the character's name, the clip under a moment).
+- `words`: the thing's own text as it was on the page when it was put in (a field's text, an option's, your note, a step, a prompt, a QC miss and its fix, a script line), capped at about 600 characters.
 
 Each was frozen when it was put in: a clip names that clip of that version and step, not what sits at that place now. If the cut has changed since, find the clip by its `clip` id in the newest version, and say so when it has moved or gone. Read "this one" or "that one" as the tag beside the words. The chips above the box ("Alma sees", the `selected` list of `<harness-context>`) are everything the user had selected; a tag in the words is the one thing that sentence is about. Answer in words: name a thing by its label, never write the tag back.
 

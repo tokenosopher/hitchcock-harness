@@ -9,6 +9,8 @@ import type { FilmState } from '@/server/types';
 import { fmtDate, repoPath } from '@/components/lib/format';
 import { mediaUrl } from '@/components/media/Media';
 import { IconChevronRight } from '@/components/shell/icons';
+import { aspectStyle, isWide } from '@/lib/frame';
+import { cn } from '@/lib/utils';
 
 /** The key the Edit page reads for its 480p · 1080p choice, kept for the tab. */
 export const resKey = (film: string) => `hh:edit-res:${film}`;
@@ -22,7 +24,7 @@ export function FullCutLink({ s, base }: { s: FilmState; base: string }) {
   return (
     <section id="master" aria-label="The 1080p cut" className="flex scroll-mt-4 items-center gap-4 duration-300 animate-in fade-in-0 motion-reduce:animate-none">
       {/* eslint-disable-next-line @next/next/no-img-element -- a WebP still from /api/media */}
-      <img alt="" src={still} className="aspect-[9/16] w-[64px] flex-none rounded-[6px] border border-edge bg-black object-cover" />
+      <img alt="" src={still} style={aspectStyle(s.film.aspect)} className={cn('aspect-[9/16] flex-none rounded-[6px] border border-edge bg-black object-cover', isWide(s.film.aspect) ? 'w-[114px] max-[760px]:w-[72px]' : 'w-[64px]')} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="lbl">The 1080p cut</span>
         <span className="text-[13.5px] leading-normal">

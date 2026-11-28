@@ -50,6 +50,8 @@ export function ContextMenu({ x, y, title, items, onClose }: { x: number; y: num
     const scroll = (e: Event) => {
       const t = e.target as HTMLElement | null;
       if (t && typeof t.closest === 'function' && t.closest('aside')) return;
+      // …nor its own list, which scrolls when it is taller than the window
+      if (t && box.current?.contains(t)) return;
       if (performance.now() - born > 350) onClose();
     };
     window.addEventListener('pointerdown', down, true);
@@ -67,7 +69,7 @@ export function ContextMenu({ x, y, title, items, onClose }: { x: number; y: num
   }, [onClose]);
   return (
     <div ref={box} role="menu" aria-label={title ?? 'Timeline menu'} onContextMenu={(e) => e.preventDefault()}
-      className={cn('fixed z-[70] w-[264px] origin-top-left rounded-[11px] border border-edge-strong bg-[#18181b] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none',
+      className={cn('fixed z-[70] max-h-[calc(100vh-16px)] w-[264px] origin-top-left overflow-y-auto overscroll-contain rounded-[11px] border border-edge-strong bg-[#18181b] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none',
         on ? 'scale-100 opacity-100' : 'scale-[0.96] opacity-0')}
       style={pos}>
       {open ? (

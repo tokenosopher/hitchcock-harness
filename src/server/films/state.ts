@@ -15,6 +15,8 @@ import { readPreviz, type PrevizInfo } from './read/previz';
 import { readQC } from './read/qc';
 import { readPickupWork } from './read/pickups';
 import { feedSummary, isWaiting, readFeed } from './read/feed';
+import { readRemoved } from '../actions/removed';
+import { isRemovedAnswer } from '@/components/lib/remove';
 import { soundCounts } from './read/sound';
 import { readResearch } from './read/research';
 import { readStory } from './read/story';
@@ -73,6 +75,7 @@ export async function buildFilmState(film: FilmRefX): Promise<FilmStateX> {
   ].filter((e) => e.dir && /^FIX-/.test(e.name)).map((e) => e.name);
   const review = await readReview(ctx, pickupFolders);
   const feed = await readFeed(ctx, film.slug);
+  const removed = await readRemoved(film.slug);
   for (const w of feed.warnings) if (!warn.list.includes(w)) warn.list.push(w);
   const { scenes, layout, unassignedPickups } = await readScenes(ctx, spendLines, review?.misses ?? []);
 
@@ -107,7 +110,8 @@ export async function buildFilmState(film: FilmRefX): Promise<FilmStateX> {
   // the same as the taste.md row the reader looks for (12 Nov: sheets locked by button kept asking at the gate)
   for (const c of characters) {
     if (!c.sheet?.path || c.sheet.approved) continue;
-    if (feed.cards.some((k) => k.place === 'sheet' && k.ids.includes(c.id) && k.ask?.kind === 'yes' && k.ask.answer)) c.sheet.approved = true;
+    // (a card Alma closed because the user removed it is no yes)
+    if (feed.cards.some((k) => k.place === 'sheet' && k.ids.includes(c.id) && k.ask?.kind === 'yes' && k.ask.answer && !isRemovedAnswer(k.ask.answer.option))) c.sheet.approved = true;
   }
 
   // the scene files name the location (the truth) and the props each scene uses
@@ -203,6 +207,8 @@ export async function buildFilmState(film: FilmRefX): Promise<FilmStateX> {
     qc,
     scenesRest,
     feed: feed.cards.length ? feedSummary(feed) : undefined,
+    // what the user removed from "Waiting for you": the harness's own record, never the film's
+    ...(removed.length ? { removed } : {}),
     sound: withMasterYes(await soundCounts(ctx), masterYesOf(feed.cards)),
     pickups: await readPickupWork(ctx, scenes, unassignedPickups, qc),
     research: await readResearch(ctx),

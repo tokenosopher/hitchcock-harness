@@ -69,8 +69,15 @@ export function isDoubleTap(prev: { t: number; x: number } | undefined, t: numbe
  *  script. The chosen width comes in as --viewer-w (set by ViewerEdge.tsx). */
 export function colWidthCss(w: number, h: number): string {
   const { initial, min, rightMin } = VIEWER_W;
-  return `clamp(${min}px, var(--viewer-w, ${initial}px), max(${initial}px, min(100% - ${rightMin}px, ${picWidthCss(w, h)} + ${COL_CHROME_X}px)))`;
+  const most = `max(${initial}px, min(100% - ${rightMin}px, ${picWidthCss(w, h)} + ${COL_CHROME_X}px))`;
+  // a landscape film: the picture is as wide as the row allows until a width is chosen
+  return `clamp(${min}px, var(--viewer-w, ${isWideFrame(w, h) ? most : `${initial}px`}), ${most})`;
 }
+
+/** A frame wider than tall: the viewer opens at its widest, and its chosen width is kept apart from a portrait film's. */
+export const isWideFrame = (w: number, h: number): boolean => Number.isFinite(w) && Number.isFinite(h) && w > h;
+/** Where the chosen width is kept: one for portrait films (as always), one for landscape ones. */
+export const widthKey = (aspect: number): string => (aspect > 1 ? `${VIEWER_W.key}-wide` : VIEWER_W.key);
 
 /** The picture's widest in CSS: as picMaxWidth, from the window's height. */
 function picWidthCss(w: number, h: number): string {

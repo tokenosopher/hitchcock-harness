@@ -4,10 +4,11 @@
 import type { FeedCard, FilmState, TaskCard } from '@/server/types';
 import {
   atStoryStage, clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
-  partsStatus, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
-  type StoryWait, type TaskAim,
+  partsStatus, releaseWaiting, roundNo, sheetParts, storyWait, storyWaiting, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
+  type ReleaseWait, type StoryWait, type TaskAim,
 } from './derive';
 import { fmtDate } from './format';
+import { asksLeft } from './remove';
 import { editWork, type EditWork } from './editWork';
 
 /** locked = a check; done = white dot; running = pulsing dot; pick = ring (waits for the user); waiting = dashed border. */
@@ -44,6 +45,8 @@ export interface Flow {
   waitWords: string;
   /** The story or the script waiting on the user, as "Waiting for you" lists it (derive.ts storyWait). */
   story?: StoryWait;
+  /** The film waiting for the user to post it (derive.ts releaseWait). */
+  release?: ReleaseWait;
   faceGate: number;       // face picks still open (the small gate in chain B)
   masterGate: number;     // master picks still open (the small gate in chain A)
   /** The film went out: the board reads as a record. `deliveredOn` is the day, as shown ("9 Nov"). */
@@ -67,8 +70,8 @@ export const THEN: FlowKey[] = ['gate', 'edit', 'release'];
 export const BOX_OF: Partial<Record<FlowKey, FlowKey>> = { scenes: 'edit', finish: 'edit', sound: 'edit' };
 /** The steps whose content is their own page: a press on the flow opens that page at once.
  *  Every other step shows its content under the flow on Main. */
-export const PAGE_STEPS: FlowKey[] = ['story', 'scenes', 'finish', 'sound', 'release'];
-const PAGE_OF: Partial<Record<FlowKey, string>> = { story: 'story', scenes: 'scenes', finish: 'finish', sound: 'sound', release: 'release' };
+export const PAGE_STEPS: FlowKey[] = ['story', 'shots', 'scenes', 'finish', 'sound', 'release'];
+const PAGE_OF: Partial<Record<FlowKey, string>> = { story: 'story', shots: 'shots', scenes: 'scenes', finish: 'finish', sound: 'sound', release: 'release' };
 /** Where a press on a step goes: its page, or Main with the step open under the flow. */
 export const stepHref = (base: string, k: FlowKey): string => (PAGE_OF[k] ? `${base}/${PAGE_OF[k]}` : `${base}?open=${k}`);
 
@@ -100,7 +103,8 @@ export function releaseWords(f: FilmState['film']): string {
 export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const delivered = s.film.status === 'delivered';
   const gate = gateItems(s, tasks);
-  const asks = s.feed?.asks ?? [];
+  // Alma's cards that ask, less what the user removed from "Waiting for you"
+  const asks = asksLeft(s);
   // what the user can choose now, as "Waiting for you" lists it: the story or the script waiting on them, each card that
   // asks, and each pick whose round landed
   const keys = waitingKeys(s, tasks, gate);
@@ -109,6 +113,9 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // move until the files show it (lib/sent.ts)
   const sw = storyWait(s, tasks);
   const storyWaits = sw && !sw.sent ? sw : undefined;
+  const releaseWaits = releaseWaiting(s);
+  // removed from "Waiting for you": not listed there, though the script still waits for its lock
+  const storyListed = storyWaits && storyWaiting(s, tasks);
   const node = (key: FlowKey, num: string, name: string, { also = 0, ...o }: Partial<FlowNode> & { state: NodeState; status: string; also?: number }): FlowNode => {
     const aims = o.aims ?? allAims(o.parts ?? []);
     // a live sub-agent makes a node run; a delivered film has nothing left waiting
@@ -155,7 +162,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
 
   // Chain A · places
   const locs = locationParts(s, tasks);
-  const props = s.locations.flatMap((l) => l.props ?? []);
+  const props = [...new Map(s.locations.flatMap((l) => l.props ?? []).map((p) => [p.id, p])).values()];
   const propsNote = props.length ? ` · ${plural(props.length, 'prop')}` : '';
   const settled = s.locations.filter(locationSettled);
   const open = locs.filter((p) => p.state !== 'done');
@@ -191,9 +198,10 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     state: !s.scenes.length ? (shotAims.length ? 'running' : 'waiting') : written.length === s.scenes.length ? 'done' : shotAims.length ? 'running' : 'waiting',
     status: !s.scenes.length ? (locked ? 'not started' : 'after the script lock') : `${written.length} of ${plural(s.scenes.length, 'scene file')} written`,
     short: !s.scenes.length ? (locked ? 'not started' : 'after lock')
-      : written.length === s.scenes.length && s.scenes.some((sc) => sc.shots) ? `${plural(s.scenes.length, 'scene')}, ${plural(s.scenes.reduce((n, sc) => n + (sc.shots ?? 0), 0), 'shot')}`
+      : written.length === s.scenes.length ? `${plural(s.scenes.length, 'scene')} planned`
       : `${written.length} of ${s.scenes.length}`,
-    aims: shotAims, href: 'scenes', kicker: 'Stage 5 · chain A, before the Blender previz',
+    // its own page (components/shots/ShotsPage.tsx): the scenes' places and every version made
+    aims: shotAims, href: 'shots', kicker: 'Stage 5 · chain A, before the Blender previz',
     parts: s.scenes.map((sc) => ({ id: sc.id, name: sc.title, state: sc.sceneFile ? 'done' : 'waiting', line: sc.sceneFile ? [sc.shots ? plural(sc.shots, 'shot') : '', sc.seconds ? `${sc.seconds} s` : ''].filter(Boolean).join(' · ') || 'written' : 'not written', aims: liveAims(tasks, 'shots', sc.id) })),
     body: 'One scene file per scene: the shot list, the acting task of everyone in frame, any fight beats, and where everyone starts and ends. The Blender previz is built from it, and once the previz is approved the scene prompt is assembled from the same text, so the boards and the prompt cannot disagree.',
   });
@@ -356,7 +364,8 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     working: s.feed?.working ?? [],
     waiting,
     waitWords: waiting ? waitingWords(keys) : '',
-    ...(storyWaits ? { story: storyWaits } : {}),
+    ...(storyListed ? { story: storyListed } : {}),
+    ...(releaseWaits ? { release: releaseWaits } : {}),
     faceGate: faceP.filter((p) => p.state !== 'done').length,
     masterGate: open.length,
     done: delivered,

@@ -201,7 +201,7 @@ export async function readSettings(): Promise<SettingsInfo> {
     envFile: names.length || linkTo ? { path: envPath, shown: `${path.basename(cfg.filmRepo)}/.env`, names, linkTo: linkTo?.replace(/^\/(?:Users|home)\/[^/]+\//, '~/') } : undefined,
     lastInit: lastInit ? { at: lastInit.at, thread: lastInit.thread, model: lastInit.model, permissionMode: lastInit.permissionMode } : undefined,
     defaults: [
-      { label: 'Aspect', value: '9:16' },
+      { label: 'Aspect', value: '9:16, unless the brief says 16:9, 21:9 or 1:1 (the cut takes its frame)' },
       { label: 'Voices', value: 'Higgsfield voices' },
       { label: 'Video elements', value: '1920×1080 side-by-side split, 5 s, a hard cut each second' },
       { label: '1080p', value: 'Seedance 2.5, per take, on your word' },

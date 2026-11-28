@@ -16,11 +16,16 @@ export interface SceneLayouts { scene: string; layouts: Layout[] }
 
 const readJson = async (f: string): Promise<unknown> => fs.readFile(f, 'utf8').then((t) => JSON.parse(t) as unknown, () => undefined);
 
-/** The layout a take's record of what was sent names: the previz take's number and the storyboard version. */
-export function sentLayout(raw: unknown): { previzTake?: number; storyboard?: string } {
+/** The layout a take's record of what was sent names: the previz take's number and the storyboard version. With
+ *  `scene`, only a previz take of that scene's own (previz/<scene>/…): a pick-up's record names its own previz
+ *  (previz/FIX-egg-S2/FIX-egg-S2-previz-take-3.json), whose number is not the scene's previz take 3 (such a
+ *  pick-up was put under an older layout and left out of the Takes view). It is then placed by its date. */
+export function sentLayout(raw: unknown, scene?: string): { previzTake?: number; storyboard?: string } {
   const lay = raw && typeof raw === 'object' ? (raw as { layout?: unknown }).layout : undefined;
   if (!lay || typeof lay !== 'object') return {};
   const l = lay as { previz_take_number?: unknown; previz_take?: unknown; storyboard_version?: unknown };
+  const pv = typeof l.previz_take === 'string' ? l.previz_take.replace(/\\/g, '/') : undefined;
+  if (scene && pv && !new RegExp(`(^|/)previz/${scene}/`).test(pv)) return {};
   const n = typeof l.previz_take_number === 'number' ? l.previz_take_number : Number(/take-(\d+)/.exec(String(l.previz_take ?? ''))?.[1]);
   return { ...(Number.isInteger(n) && n > 0 ? { previzTake: n } : {}), ...(typeof l.storyboard_version === 'string' ? { storyboard: l.storyboard_version } : {}) };
 }
@@ -43,7 +48,7 @@ export async function readLayouts(film: FilmTarget, only?: string): Promise<Scen
       if (!abs) continue;
       const dir = path.dirname(abs);
       const sent = (await fs.readdir(dir).catch(() => [] as string[])).find((n) => /-sent\.json$/.test(n));
-      const rec = sent ? sentLayout(await readJson(path.join(dir, sent))) : {};
+      const rec = sent ? sentLayout(await readJson(path.join(dir, sent)), scene) : {};
       const made = await fs.stat(abs).then((x) => x.mtimeMs, () => undefined);
       mine.push({ src: t.src, name: t.name, landed: t.state !== 'failed', ...(t.seconds !== undefined ? { seconds: t.seconds } : {}), ...(made !== undefined ? { made } : {}), ...rec });
     }

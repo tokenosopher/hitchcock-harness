@@ -3,7 +3,7 @@
 // could lay a file into the cut). Pure: each returns the next timeline and its one-line note, or why not.
 import type { Timeline, TimelineClip, TimelineTrack } from '@/server/types';
 import { smpte } from '@/components/lib/format';
-import { clipName, endF, findClip, mainTrackIds, pasteClip, startF, swapSound, type ClipRef, type Edit } from './model';
+import { clipName, endF, findClip, mainTrackIds, newLink, pasteClip, startF, swapSound, type ClipRef, type Edit } from './model';
 
 /** What the page knows of a file (FilmFile, src/server/edit/files.ts). */
 export interface PlaceableFile { src: string; name: string; kind: 'sound' | 'picture' | 'subtitles'; seconds?: number; audio?: boolean }
@@ -41,7 +41,7 @@ export function trackForFile(tl: Timeline, kind: 'video' | 'audio', prefer: (str
 
 /** A track for a hand-placed file when no track takes it: "Effects" under the sound tracks; over the picture
  *  "Inserts", or "Over n" when the inserts are taken there (as a clip dragged over another gets). */
-function makeTrack(tl: Timeline, kind: 'video' | 'audio'): TimelineTrack {
+export function makeTrack(tl: Timeline, kind: 'video' | 'audio'): TimelineTrack {
   const prefix = kind === 'video' ? 'V' : 'A';
   const n = Math.max(0, ...tl.tracks.filter((t) => t.id.startsWith(prefix)).map((t) => Number(t.id.slice(1)) || 0)) + 1;
   const pictures = tl.tracks.filter((t) => t.kind === 'video').length;
@@ -59,7 +59,8 @@ export const fileFrames = (seconds: number | undefined, fps: number) => (seconds
  * through `pasteClip`: a sound that would land on another sound goes on the track beside it, a picture is refused
  * where one already sits. A picture file with sound of its own brings it as a second clip at the same place and
  * length: on the dialogue track when the picture went on the main picture track (so the two are linked as a take
- * and its sound are), else on the effects and music tracks as a sound would go. One edit, one note.
+ * and its sound are), else on the effects and music tracks as a sound would go; the two carry the same `link` id, so
+ * they stay together on whatever tracks they landed. One edit, one note.
  */
 export function placeFile(tl0: Timeline, file: PlaceableFile, f: number, prefer: (string | undefined)[] = []): { edit?: Edit & { ref: ClipRef }; error?: string } {
   const fps = tl0.fps;
@@ -87,6 +88,9 @@ export function placeFile(tl0: Timeline, file: PlaceableFile, f: number, prefer:
     const r2 = pasteClip(tl2, clip, at2.id, at);
     if (!r2.edit) return { error: r2.error };
     const sound = r2.edit.tl.tracks.find((t) => t.id === r2.edit!.ref.trackId)!;
+    const link = newLink();
+    findClip(r2.edit.tl, r.edit.ref)!.clip.link = link;
+    findClip(r2.edit.tl, r2.edit.ref)!.clip.link = link;
     note += `, its sound on ${sound.id} ${sound.name}`;
     return { edit: { tl: r2.edit.tl, note, ref: r.edit.ref } };
   }

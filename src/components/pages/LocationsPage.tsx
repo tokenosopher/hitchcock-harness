@@ -18,7 +18,7 @@ import { Media } from '@/components/media/Media';
 import { cn } from '@/lib/utils';
 import { Feed } from '@/components/feed/Feed';
 import { refData } from '@/components/lib/refPick';
-import { viewRefOf } from '@/components/shell/refItems';
+import { locationRefOf, viewRefOf } from '@/components/shell/refItems';
 import { StepIntro } from '@/components/intro/StepIntro';
 import { MakingLines, useMaking } from '@/components/flow/Making';
 import { makingFor } from '@/components/lib/making';
@@ -44,7 +44,8 @@ export function LocationsPage() {
   usePage(l ? `4 Locations · ${l.id} ${st === 'picked' ? 'master picked' : r ? `round ${rn(r)}` : 'not started'}` : undefined, undefined,
     l && chosen && st !== 'picked' ? [`Pick ${chosen} as master`, `Show the ${l.props?.[0]?.name.replace(/^the /, '') ?? 'props'} alone`] : []);
   if (!state) return <Loading error={error} />;
-  const props = locs.flatMap((x) => x.props ?? []);
+  // a prop used in several places is listed under each of them: once here (two children keyed P04)
+  const props = [...new Map(locs.flatMap((x) => x.props ?? []).map((p) => [p.id, p])).values()];
 
   return (
     <>
@@ -60,7 +61,7 @@ export function LocationsPage() {
             // a sub-agent painting it before its round is on disk: being made, not "not started"
             const s2 = s2r === 'waiting' && makingFor(making, ['loc'], x.id).length ? 'running' : s2r;
             return (
-              <button key={x.id} type="button" aria-current={x.id === l?.id ? 'true' : undefined} onClick={() => { setSelId(x.id); setCand(undefined); setRoundId(undefined); ui.addChip({ id: `loc:${x.id}`, label: `${x.id} · ${x.name}` }); }}
+              <button key={x.id} type="button" aria-current={x.id === l?.id ? 'true' : undefined} {...refData(locationRefOf(x))} onClick={() => { setSelId(x.id); setCand(undefined); setRoundId(undefined); ui.addChip({ id: `loc:${x.id}`, label: `${x.id} · ${x.name}` }); }}
                 className={cn('flex cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left', x.id === l?.id ? 'bg-panel' : 'hover:bg-panel')}>
                 <span className="flex items-center gap-2"><span className="font-mono text-[11.5px] text-sub">{x.id}</span><span className="flex-1 truncate text-[13px] font-medium">{x.name}</span><Dot state={s2 === 'running' ? 'running' : s2 === 'waiting' ? 'waiting' : 'done'} /></span>
                 <span className="text-[11.5px] text-sub">{s2 === 'picked' ? `master picked · ${x.styleImages?.length ?? 0} rounds` : rr ? `round ${rn(rr)} · ${s2 === 'running' ? 'being painted' : 'your pick'}` : s2 === 'running' ? 'being painted' : 'not started'}</span>
@@ -111,7 +112,7 @@ export function LocationsPage() {
                   {r.candidates.map((k) => {
                     const on = k.id === chosen;
                     return (
-                      <button key={k.id} type="button" disabled={!k.path} aria-pressed={on} data-zoom-choose onClick={() => { setCand(k.id); ui.addChip({ id: `cand:${l.id}`, label: `${l.id} · ${k.id}`, ref: k.path }); }}
+                      <button key={k.id} type="button" disabled={!k.path} aria-pressed={on} data-zoom-choose {...refData({ kind: 'location', label: `${l.id} · ${k.id}`, location: l.id, item: k.id, title: `${l.name}, candidate ${k.id}`, page: 'locations', ...(k.path ? { file: filmPath(state, k.path) } : {}) })} onClick={() => { setCand(k.id); ui.addChip({ id: `cand:${l.id}`, label: `${l.id} · ${k.id}`, ref: k.path }); }}
                         className="flex cursor-pointer flex-col gap-2 text-left disabled:cursor-default">
                         <span className={cn('relative block aspect-[16/9] w-full rounded-[7px] border', !k.path ? 'border-dashed border-edge-strong' : on ? 'border-ink bg-tile outline outline-1 outline-offset-2 outline-ink' : 'border-edge bg-tile hover:border-sub')}>
                           {k.path && <Media path={filmPath(state, k.path)} w={640} className="absolute inset-0 rounded-[6px]" />}

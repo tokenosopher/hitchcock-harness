@@ -55,8 +55,8 @@ export interface LeftParts {
   marks: Parameters<typeof fullCounts>[1];
   /** Any full-size picture exists (useFullView().has). */
   hasFull: boolean;
-  /** The master render of `ref`, as the page follows it. */
-  masterState: LeftInput['master']['state'] | undefined;
+  /** The master render of `ref`, as the page follows it (a cancelled one counts as not made). */
+  masterState: LeftInput['master']['state'] | 'cancelled' | undefined;
   /** masterStaleOf(…).reason. */
   masterStale: string | undefined;
   gapOf: (v: string | undefined, since?: string) => CutGap | undefined;
@@ -84,7 +84,7 @@ export function leftInputOf(p: LeftParts): LeftInput | undefined {
     full: p.masterNow ? { ...fullCounts(p.masterNow.pieces, p.marks), has: p.hasFull } : undefined,
     sound: soundCounts(tl), subs: subsCounts(tl),
     // the master the store follows is of the newest version: not this cut's while it has edits since
-    master: { state: edited ? 'none' : p.masterState ?? 'none', stale: edited ? undefined : p.masterStale, newest, ...(gap ? { gap } : {}) },
+    master: { state: edited || p.masterState === 'cancelled' ? 'none' : p.masterState ?? 'none', stale: edited ? undefined : p.masterStale, newest, ...(gap ? { gap } : {}) },
     release: d?.release, ...(finalGap ? { finalGap } : {}), ticks: d?.ticks ?? {},
     ...(p.early?.length ? { early: p.early } : {}),
   };

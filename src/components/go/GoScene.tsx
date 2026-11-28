@@ -17,6 +17,9 @@ import { Media, isVideoPath, mediaUrl } from '@/components/media/Media';
 import { creditsBasis, fmtCr } from './lib';
 import { cn } from '@/lib/utils';
 import { Reveal } from '@/components/shell/Reveal';
+import { useFilm } from '@/components/data/film';
+import { refData } from '@/components/lib/refPick';
+import { capWords } from '@/components/lib/refBlock';
 
 const CLAMP = 12;
 
@@ -55,6 +58,7 @@ type Row = { op: '=' | '+' | '-'; text: string; n?: number };
  *  two lines of context, the unchanged runs folded). */
 export function PromptText({ scene }: { scene: GoScene }) {
   const p = scene.prompt;
+  const { state } = useFilm();
   const [open, setOpen] = useState(false);
   const [diff, setDiff] = useState(false);
   const lines = useMemo(() => (p?.text ?? '').replace(/\s+$/, '').split('\n'), [p?.text]);
@@ -87,8 +91,9 @@ export function PromptText({ scene }: { scene: GoScene }) {
   })();
   // folded, the box shows 12 lines of text (wrapped lines count), then a fade and "Show all"
   const long = lines.length > CLAMP || p.chars > 1400;
+  const file = state ? repoPath(state.film.folder, state.film.repo, p.path) : undefined;
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2" {...refData({ kind: 'prompt', label: `${scene.id} · prompt ${p.version}`, scene: scene.id, title: scene.title, page: 'go', words: capWords(p.text), ...(file ? { file } : {}) })}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-baseline gap-2">
           <span className="lbl">Prompt</span>
@@ -236,7 +241,7 @@ export function GoSceneCard({ scene, s, review, selected, onSelect, base }: {
     <article id={`go-${scene.id}`} aria-label={`${scene.id} ${scene.title}`}
       className={cn('flex min-w-0 scroll-mt-4 flex-col rounded-[12px] border bg-well', selected ? 'border-sub' : 'border-edge', !scene.ready && 'border-dashed')}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 pb-3 pt-3.5">
-        <button type="button" onClick={() => { onSelect(); ui.addChip(chip); }} aria-pressed={selected} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
+        <button type="button" onClick={() => { onSelect(); ui.addChip(chip); }} aria-pressed={selected} {...refData({ kind: 'scene', label: scene.id, scene: scene.id, title: scene.title, ...(scene.duration !== undefined ? { length: scene.duration } : {}) })} className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 border-0 bg-transparent p-0 text-left text-ink">
           <span className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-mono text-[12.5px] text-sub">{scene.id}</span>
             <span className="truncate text-[15px] font-semibold tracking-[-0.01em]">{scene.title}</span>

@@ -13,7 +13,7 @@ import { Reveal } from '@/components/shell/Reveal';
 import type { Chip } from '@/server/types';
 import { changedSinceRead, fieldList } from './derive';
 import type { Platform, ReleaseFinal } from './file';
-import { draftAsk, editedChip, editedChipId, readAsk } from './alma';
+import { draftAsk, editedChip, editedChipId, readAsk, textsAsked } from './alma';
 
 /** Sends words to Alma as the user's own message, with what "Alma sees" holds (plus `extra`), as the composer does:
  *  the removable chips that went out leave, a chip a page keeps stays. The words in the message box are left alone. */
@@ -73,11 +73,13 @@ export function SinceRead({ film, p }: { film: string; p: Platform }) {
  *  task of hers about the release) it says so. */
 export function NoTexts({ film, final }: { film: string; final: ReleaseFinal }) {
   const sendAs = useSendAsUser(film);
-  const { workingSince, tasks } = useThread();
+  const { workingSince, tasks, events } = useThread();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string>();
   const releaseTask = tasks.some((t) => (t.state === 'running' || t.state === 'queued') && /release|texts?\b|caption/i.test(t.title));
-  const working = (sent && workingSince !== undefined) || releaseTask;
+  // naming the final already asked for them: said as sent, not offered again
+  const asked = useMemo(() => textsAsked(events, tasks, { final: { version: final.version }, platforms: 0 }), [events, tasks, final.version]);
+  const working = (sent && workingSince !== undefined) || releaseTask || asked;
   const ask = async () => {
     const ok = await sendAs(draftAsk(film, final));
     setSent(ok);
@@ -89,7 +91,7 @@ export function NoTexts({ film, final }: { film: string; final: ReleaseFinal }) 
         <p className="m-0 text-[13px] font-medium text-ink">Alma has not written the texts yet.</p>
         <p className="m-0 text-[12.5px] text-sub">She adds each platform with its texts, its account and when it goes out.</p>
       </div>
-      <Btn data-ask-draft onClick={() => void ask()} disabled={working}>{sent ? 'Asked Alma' : 'Ask Alma to draft them'}</Btn>
+      <Btn data-ask-draft onClick={() => void ask()} disabled={working}>{sent || asked ? 'Asked Alma' : 'Ask Alma to draft them'}</Btn>
       <Reveal open={working}><p data-no-texts-working className="m-0 text-[12.5px] text-sub">Alma is working on them. They appear here as she writes them.</p></Reveal>
       {error && <span role="alert" className="text-[11.5px] text-warn">{error}</span>}
     </div>

@@ -11,6 +11,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { CharacterRef, FilmRef, FilmState, LocationRef, Round } from '@/server/types';
 import boardFilm from './boards/the-lighthouse.json';
+import { approvalBlock, type Approval } from '@/components/lib/approve';
 
 const lighthouse = boardFilm as unknown as FilmState;
 const repo = lighthouse.film.repo;
@@ -65,14 +66,47 @@ function locations(): LocationRef[] {
   ];
 }
 
-export const castSampleFilms = (): FilmRef[] => [REF];
+// sample-sheet-yes: the same cast with one more, C05 the Harbourmaster (no lines), whose sheet is made and
+// waits for the user's yes in "Waiting for you"; and C08's face picked, so that sheet is the one thing waiting. The yes
+// is set aside in one tap and sent with "Done picking"; here the send only marks the sheet approved in memory (as Alma
+// would record it) and answers the message the real send would give her.
+export const SHEET_SLUG = 'sample-sheet-yes';
+const SHEET_REF: FilmRef = { ...REF, slug: SHEET_SLUG, title: 'Sample · a sheet waiting for your yes', folder: `${repo}/assets/films/${SHEET_SLUG}` };
+const SHEET_PATH = 'cast/C05-harbourmaster/pick.png';
+const g = globalThis as unknown as { __hhSheetYes?: Set<string> };
+const sheetApproved = (g.__hhSheetYes ??= new Set());
+
+export const castSampleFilms = (): FilmRef[] => [REF, SHEET_REF];
 export function castSampleState(slug: string): FilmState | undefined {
-  if (slug !== CAST_SLUG) return undefined;
+  if (slug !== CAST_SLUG && slug !== SHEET_SLUG) return undefined;
   const scenes = lighthouse.scenes.map((sc, i) => ({ ...sc, location: i < 1 ? 'L01 the shore' : 'L02 the lamp room' }));
-  return {
+  const base: FilmState = {
     ...lighthouse, film: REF, characters: characters(), locations: locations(), scenes, master: undefined, cut: undefined,
     post: { cuts: [], masters: [], captions: [] }, feed: { counts: {}, asks: [] }, qc: {}, warnings: [],
   };
+  if (slug === CAST_SLUG) return base;
+  const cast = base.characters.map((c) => (c.id === 'C08' ? { ...c, face: { rounds: c.face!.rounds, pick: { candidateId: 'neighbour-r1-2', date: '2026-11-12' } }, picks: { face: 'cast/C08-neighbour/pick-face.png' }, sheet: { path: 'cast/C08-neighbour/pick.png', approved: true } } : c));
+  const servant: CharacterRef = { id: 'C05', name: 'the Harbourmaster (no lines)', folder: 'cast/C05-harbourmaster', silent: true, imageElement: true, role: 'silent',
+    face: { rounds: [faceRound('C05', 'harbourmaster', 4, 1)], pick: { candidateId: 'harbourmaster-r1-1', date: '2026-11-22' } },
+    picks: { face: 'cast/C05-harbourmaster/pick-face.png' }, sheet: { path: SHEET_PATH, approved: sheetApproved.has('C05') }, element: { state: 'none' } };
+  const at = cast.findIndex((c) => c.id === 'C06-C07');
+  return { ...base, film: SHEET_REF, characters: [...cast.slice(0, at), servant, ...cast.slice(at)] };
+}
+
+/** POST …/done on sample-sheet-yes: the sheet approved in memory and the message the real send would give Alma, with
+ *  nothing written. Any other film: undefined. */
+export function sheetMockDone(slug: string, answers: unknown[], picks: unknown[], approvals: Approval[]): Response | undefined {
+  if (slug !== SHEET_SLUG) return undefined;
+  if (answers.length || picks.length) return Response.json({ error: 'sample-sheet-yes takes only the sheet\'s yes' }, { status: 400 });
+  if (!approvals.length) return Response.json({ error: 'no choices given' }, { status: 400 });
+  for (const a of approvals) if (a.id !== 'C05' || a.path !== SHEET_PATH) return Response.json({ error: `no sheet ${a.path} for ${a.id}` }, { status: 404 });
+  for (const a of approvals) sheetApproved.add(a.id);
+  const n = approvals.length;
+  const message = [
+    `<harness-action kind="answers" count="${n}"/> The user is done choosing and sent ${n === 1 ? 'one choice' : `${n} choices`} with one button, in Hitchcock Harness. Each item below is one answer, one pick or one sheet approved, exactly as it would say by itself. Apply them all in this turn, then continue the flow once.`,
+    ...approvalBlock(approvals),
+  ].join('\n');
+  return Response.json({ ok: true, dryRun: true, film: slug, answers: [], picks: [], approvals, message, notified: false });
 }
 
 /** The sample's pictures: every image path of the film is one of the drawings, by what it is. */
@@ -89,8 +123,8 @@ export function drawingFor(rel: string): string | undefined {
   return undefined;
 }
 export async function castMedia(p: string | null): Promise<{ abs: string; real: string; stat: import('node:fs').Stats; type: string } | undefined> {
-  const prefix = `assets/films/${CAST_SLUG}/`;
-  if (!p?.startsWith(prefix)) return undefined;
+  const prefix = [CAST_SLUG, SHEET_SLUG].map((x) => `assets/films/${x}/`).find((x) => p?.startsWith(x));
+  if (!p || !prefix) return undefined;
   const d = drawingFor(p.slice(prefix.length));
   if (!d) return undefined;
   const real = path.join(DRAWINGS, d);

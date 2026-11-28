@@ -28,6 +28,11 @@ export interface PartFacts {
   optional?: true;
 }
 
+/** One place a platform is posted in, every time (Reddit goes to r/aivideo and r/aivideos): its id (as a post's link
+ *  names it, `placeIn`), its name as the user says it, and the web address where the user posts there. The first
+ *  place's post is `send.posted`; the others' are `send.postedIn[<id>]` (file.ts). */
+export interface Place { id: string; name: string; url: string }
+
 export interface PlatformFacts {
   kind: PlatformKind;
   /** Its name as the user says it. */
@@ -41,6 +46,10 @@ export interface PlatformFacts {
   video: { min?: Sourced; max?: Sourced; bytes?: Sourced };
   /** The upload settings that exist on the platform (whoever sets them). */
   settings: string[];
+  /** Posted in each of these, the same text in each (places.ts). Absent: one post. */
+  places?: Place[];
+  /** How a post's link names its place: the first group of this, matched on the link's path, is the place's id. */
+  placeIn?: RegExp;
 }
 
 // ---- sources (read on the day below)
@@ -61,6 +70,12 @@ export const PLATFORMS: Record<PlatformKind, PlatformFacts> = {
     parts: [{ id: 'title', label: 'Title', limit: about(300), join: ' ' }, { id: 'comment', label: 'First comment', limit: about(10000), join: '\n\n' }],
     video: { max: about(900), bytes: about(1_000_000_000) },
     settings: ['subreddit', 'flair', 'NSFW and spoiler marks'],
+    // every time in both subreddits, the same title and first comment
+    places: [
+      { id: 'aivideo', name: 'r/aivideo', url: 'https://www.reddit.com/r/aivideo/submit' },
+      { id: 'aivideos', name: 'r/aivideos', url: 'https://www.reddit.com/r/aivideos/submit' },
+    ],
+    placeIn: /^\/r\/([A-Za-z0-9_]+)/,
   },
   'youtube-shorts': {
     kind: 'youtube-shorts', name: 'YouTube Shorts', short: 'YT',

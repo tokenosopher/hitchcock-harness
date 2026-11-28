@@ -1,5 +1,6 @@
 // brief.md (or story.md for the audio-first films): the title line, the working title, the start date.
 import { abs, firstDate, readText, type FilmCtx } from '../util';
+import { briefAspect, type Aspect } from '@/lib/frame';
 
 export interface BriefInfo {
   path: string;
@@ -7,7 +8,7 @@ export interface BriefInfo {
   title?: string;
   workingTitle?: string;
   started?: string;
-  aspect?: '9:16' | '16:9';
+  aspect?: Aspect;
 }
 
 /** "# <Title> (named by the user …; working title was …)" → title and working title. */
@@ -35,8 +36,7 @@ export async function readBrief(ctx: FilmCtx): Promise<BriefInfo | undefined> {
     const { title, workingTitle } = parseTitleLine(head);
     const top = markdown.split('\n').slice(0, 12).join('\n');
     const started = firstDate(/Started ([^.]+)\./.exec(top)?.[1]) ?? firstDate(top);
-    const aspectM = /\b(9:16|16:9)\b/.exec(markdown);
-    return { path: rel, markdown, title, workingTitle, started, aspect: aspectM?.[1] as BriefInfo['aspect'] };
+    return { path: rel, markdown, title, workingTitle, started, aspect: briefAspect(markdown) };
   }
   return undefined;
 }

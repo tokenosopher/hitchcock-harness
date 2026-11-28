@@ -130,3 +130,13 @@ ok('timing: "4" is 4 s', timing('4') === 4);
 
 console.log(`\n${n - bad} of ${n} checks passed`);
 if (bad) process.exit(1);
+
+// The script's scenes in the order of its headings, not by ID number; an earlier draft's headings do not count.
+{
+  const md = ['## Script', '### S1 · The rock · L02', 'A: one.', '### S2 · The boat · L01', 'A: two.', '### S7 · The telling · L01', 'A: seven.', '### S4 · The letter · L02', 'A: four.', '### S3 · The lamp · L03', 'A: three.', '## Earlier drafts', '### S1 · The rock · L02', '### S3 · The lamp · L03'].join('\n');
+  const scenes = ['S1', 'S2', 'S3', 'S4', 'S5', 'S7'].map((id) => ({ id, title: id }));
+  const got = scriptScenes({ ...W, scenes, script: { versions: [], lines: [], markdown: md } } as never).map((x) => x.id).join();
+  if (got !== 'S1,S2,S7,S4,S3,S5') throw new Error(`scenes in the script's order: ${got}`);
+  console.log('ok · the script\'s scenes in the order of its headings, an unwritten scene after');
+}
+

@@ -1,6 +1,8 @@
 // Hitchcock Harness · shared types between the server (files, claude -p) and the UI.
 // This file is the contract of build step 1. Change it only by agreement (note the change in ARCHITECTURE.md).
 
+import type { Aspect } from '@/lib/frame';
+export type { Aspect } from '@/lib/frame';
 export type Stage =
   | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12; // Film Flow v3 numbering (1 Setup and story … 12 Release)
 
@@ -31,7 +33,7 @@ export interface FilmRef {
    *  phone, not a release. `date` is the day of the newest video in it (13 Nov, ASKS 37). */
   copies?: { date: string; folder: string }[];
   stage?: Stage;                // the stage the film is at, when derivable
-  aspect?: '9:16' | '16:9';
+  aspect?: Aspect;              // the brief's aspect ratio (src/lib/frame.ts: the cut's frame follows it)
   supersededBy?: string;        // slug of the film that carried this draft folder on; the sidebar hides it (integration, 8 Nov)
 }
 
@@ -230,6 +232,10 @@ export interface FilmState {
    *  "Lock vN" or "Settle vN" just pressed is here by its whole key ("story:script-v3"; lib/sent.ts storySent), and
    *  derive.ts storyWait marks it sent. */
   sentKeys?: string[];
+  /** What the user removed from "Waiting for you" with "Remove" and "Done picking", from the harness's own
+   *  harness/removed.json: each entry by its key, with what it was about (`mark`) for an entry the app makes itself.
+   *  lib/remove.ts reads it: a removed entry is never an answer. */
+  removed?: { key: string; title: string; mark?: string; at?: string }[];
 }
 
 // ---- QC (build step 3, 8 Nov). The critic sub-agent (recipes/qc-critic.md) writes one file per round:
@@ -323,7 +329,11 @@ export interface PostInfo {
   pieces?: string[];
   /** The film's release file, social/release.json (Release, 14 Nov), in brief: there, and the master named as the final
    *  when one is (Film Flow v3.3: the release starts from it; no social/kit.md is made). */
-  release?: { path: string; final?: { path: string; version?: string } };
+  release?: { path: string; final?: { path: string; version?: string };
+    /** How many platforms the file has (Alma writes them with their texts) and how many are posted; `done`: when the
+     *  user ticked publishing done in What's next (harness/left.json, the `posted` tick); read for "Waiting
+     *  for you" (derive.ts releaseWait). */
+    platforms?: number; posted?: number; done?: string };
   /** When each cut and finished film was last written (ISO), so a page can list them newest first (11 Nov). */
   written?: Record<string, string>;
 }
@@ -392,7 +402,19 @@ export interface FeedCard {
   /** The place on the cut the card is about: the card's "See it in the cut" or "Hear it in the cut" opens
    *  the Edit page there (components/edit/openAt.ts). */
   cut?: FeedCut;
+  /** Where each option of a sound pick sits in the film: the moments the card's sounds are laid at, each
+   *  option's placement there. Read from the card's "places", its "lay" file, else the film's audio/sfx/lay*.json;
+   *  for a card of sound picks ("sfx"), from each sound's place in the plan. Absent when nothing places them. */
+  hear?: FeedHear;
 }
+
+/** A sound option's placement at one moment of the film: its file, where it starts on the cut (`at`, seconds),
+ *  the stretch of its file played (`in`, `out`, seconds), and its clip gain (dB). */
+export interface HearPlace { file: string; at: number; in: number; out: number; gainDb?: number; fadeIn?: number; fadeOut?: number }
+/** One moment of the film a card's sound is laid at: where it plays (`at` to `ends`, seconds on the cut), its fades
+ *  (seconds), and the placement of each option there, by option id (an option missing from it is not laid here). */
+export interface HearMoment { id: string; label: string; at: number; ends: number; fadeIn?: number; fadeOut?: number; places: Record<string, HearPlace>; recommend?: string }
+export interface FeedHear { moments: HearMoment[]; from?: string }
 
 /** A card's "cut", as Alma writes it in review/cards.json: one clip of the cut, a take tried in its shot's
  *  place (`shot` "S4:7" when the take's name does not say which), a sound's try heard in its place, or a moment
@@ -549,9 +571,13 @@ export interface TimelineClip {
   takeRef?: { scene: string; take: string };
   gain?: number;                // dB, audio clips and the audio of video clips; default 0
   fadeIn?: number; fadeOut?: number;   // seconds
+  /** Sound clips: the level a fade in starts from and a fade out ends at, dB on the scale of `gain`
+   *  (−13.5 = "from −13.5 dB"), straight in dB over the fade (components/edit/fades.ts). Unset: from or to silence. */
+  fadeInFrom?: number; fadeOutTo?: number;
   muted?: boolean;
   speed?: number;               // playback rate, default 1 (0.75 = slowed); the clip lasts (out − in) / speed on the timeline (step 4a, 8 Nov)
   unlinked?: boolean;           // a picture clip or its sound, set free of the other (13 Nov): an edit on one no longer touches the other
+  link?: string;                // a picture clip and its sound kept together on any tracks: the same id on exactly the two; a move, trim, split, delete or speed change of one does the other too. Without it the V1/A1 pair is found by place. `unlinked` still sets the two free
   flip?: 'h';                   // picture clips: mirrored left to right (the render's hflip), wherever the clip is used
   dissolve?: number;            // seconds of dissolve (picture) or cross-fade (sound) with the clip that ends where this one starts on its track, centred on the join
   gainPoints?: { t: number; db: number }[];   // sound: level changes inside the clip, t in seconds of the source file (the clock of in and out), dB added to gain, linear in dB between points, flat before the first and after the last
@@ -656,7 +682,7 @@ export interface RenderLoudness {
 export interface RenderState {
   version: string;
   kind: RenderKind;
-  state: 'none' | 'queued' | 'running' | 'done' | 'failed';
+  state: 'none' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled';   // cancelled: stopped on request, asked again like one never made
   percent?: number;             // 0–100 while running
   path?: string;                // cut/renders/<version>-<kind>.mp4, relative to the film folder
   log?: string;                 // cut/renders/<version>.log
@@ -696,8 +722,9 @@ export interface SentRef {
   order: number;                // 1-based place in the order sent
   kind: 'VIDEO' | 'IMAGE' | 'AUDIO';
   n: number;                    // its number within its kind
-  label: string;                // "IMAGE REFERENCE 1", as the prompt names it
-  name: string;                 // "Image 1"
+  label: string;                // "IMAGE REFERENCE 1", as the prompt names it; "END IMAGE" for a frame
+  name: string;                 // "Image 1"; "End image"
+  frame?: 'START' | 'END';      // sent as the start or end image (kind START / END, role start_image / end_image)
   tag?: string;                 // "MAREN", "PAGE 2"; none when no media list named it
   file?: string;                // the file that media id was uploaded from, relative to the film folder
   what: string;                 // "C01 element", "P02 prop", "L01 view", "boards v4 · page 2", "voice line"

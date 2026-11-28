@@ -84,6 +84,9 @@ const EDIT_SAYS = [
   // a variation of a take (ASKS 51): the folder's variation.json, and never put in the film by her
   '`{"from": "<the source take\'s file, exactly as the chip gave it>", "note": "<the user\'s words>", "startedAt": "<ISO time>"}`',
   '**A variation is never put in the film by you.**',
+  // only some shots of the take changed: the shots, named as the Takes view names them
+  '- **When only some shots change**, add `"shots"` to that `variation.json`',
+  'for example `"shots": ["3"]` or `"shots": ["3", "4a"]`',
   'You change it with one drop file per piece of work: the harness checks it, takes it in as one step the user can undo, and saves it as a version with your note.',
   '**You change the cut only with a drop.** Read `cut/working.json`, keep its `rev`, and write your change as one new file, `cut/alma/<YYYYMMDD-HHMMSS>.json`, with a one-line note. One drop per piece of work.',
   'Never write `cut/working.json`, a version `cut/v<n>.json`, the history (`harness/cut-history.json`, `harness/cut-states/`) or an answer file, yours or anyone\'s, and never delete a file in `cut/`.',

@@ -21,10 +21,12 @@ import { Feed } from '@/components/feed/Feed';
 import { VideoShelf, day, newestFirst } from '@/components/media/Shelf';
 import type { FlowKey } from '@/components/lib/derive';
 import { LocationsStep, PlaceDeep, ViewsStep } from './Places';
-import { EditNext, ShotsStep } from './CutSteps';
+import { EditNext } from './CutSteps';
 import { CharacterCards, type CastPart } from '@/components/characters/Cards';
 import { RunningLines } from './RunningNow';
 import { rememberBack } from '@/components/shell/BackLink';
+import { refData } from '@/components/lib/refPick';
+import { sceneRefOf } from '@/components/shell/refItems';
 
 /** The flow's people steps: each shows the same Characters cards with its own part to the fore. */
 const CAST_STEP: Partial<Record<FlowKey, CastPart>> = { faces: 'faces', clothing: 'clothing', sheet: 'sheet', voices: 'voices', elements: 'elements' };
@@ -135,7 +137,7 @@ function PrevizPage({ s, onChip }: { s: FilmState; onChip: (id: string, label: s
           <span>Scene</span><span>Name</span><span className="text-right">Length</span><span className="max-[760px]:hidden">Previz · boards</span>
         </div>
         {s.scenes.map((sc) => (
-          <button key={sc.id} type="button" onClick={() => onChip(`scene:${sc.id}`, `${sc.id} · ${sc.title}`)}
+          <button key={sc.id} type="button" onClick={() => onChip(`scene:${sc.id}`, `${sc.id} · ${sc.title}`)} {...refData(sceneRefOf(sc))}
             className="box-border grid h-11 w-full cursor-pointer grid-cols-[52px_minmax(0,1fr)_64px_120px] items-center gap-x-3 border-0 border-b border-line bg-transparent px-4 text-left text-[13.5px] text-ink last:border-b-0 hover:bg-tile max-[760px]:grid-cols-[40px_minmax(0,1fr)_52px]">
             <span className="font-mono text-[12px] text-sub">{sc.id}</span>
             <span className="flex min-w-0 items-center gap-2.5">
@@ -191,7 +193,6 @@ export function NodePage({ s, n, base, onChip, at, onAt }: {
       {n.key === 'edit' && <VideoShelf s={s} title="Title cards and made pieces" note="cut/cards/ and edits/" files={s.post?.pieces ?? []} onChip={onChip} />}
       {n.key === 'loc' ? <LocationsStep s={s} onAt={open} onChip={onChip} />
         : n.key === 'views' ? <ViewsStep s={s} onAt={open} onChip={onChip} />
-        : n.key === 'shots' ? <ShotsStep s={s} base={base} fallback={<Rows parts={n.parts} onChip={onChip} />} />
         : n.key === 'edit' ? null
         : CAST_STEP[n.key] ? <CharacterCards s={s} part={CAST_STEP[n.key]!} base={base} onChip={onChip} parts={n.key === 'elements' ? n.parts : undefined} />
         : n.parts.length ? <Rows parts={n.parts} onChip={onChip} /> : null}

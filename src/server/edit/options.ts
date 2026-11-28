@@ -26,7 +26,7 @@ const g = globalThis as unknown as { __soundPeaks?: Map<string, { mtime: number;
 const kept = (g.__soundPeaks ??= new Map());
 
 /** The loudest sample in each of 96 slices, read by ffmpeg as mono at 4 kHz: enough for a drawing. */
-async function peaksOf(abs: string): Promise<number[] | undefined> {
+export async function peaksOf(abs: string): Promise<number[] | undefined> {
   const st = await fs.stat(abs).catch(() => undefined);
   if (!st) return undefined;
   const hit = kept.get(abs);

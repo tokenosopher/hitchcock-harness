@@ -1,6 +1,8 @@
 // Small shared pieces: status dots, badges, chips, cards. Values copied from the boards.
 import { cn } from '@/lib/utils';
 import { Media } from '@/components/media/Media';
+import { refData } from '@/components/lib/refPick';
+import type { InlineRef } from '@/lib/refs';
 
 export type DotState = 'done' | 'running' | 'queued' | 'waiting' | 'failed' | 'ready' | 'picked' | 'locked';
 
@@ -61,10 +63,11 @@ export function Btn({ children, primary, ghost, className, ...rest }: React.Butt
 }
 
 /** A candidate tile: the picture itself when `src` (a path relative to the film repo) is given, else a grey tile with the id. */
-export function Tile({ label, selected, alma, kept, onClick, className, ariaLabel, faded, src, w = 320, choose }: { label: string; selected?: boolean; alma?: boolean; kept?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number; /** a click chooses it: the full-screen view offers the same choice (Lightbox) */ choose?: boolean }) {
+export function Tile({ label, selected, alma, kept, onClick, className, ariaLabel, faded, src, w = 320, choose, mark }: { label: string; selected?: boolean; alma?: boolean; kept?: boolean; onClick?: () => void; className?: string; ariaLabel?: string; faded?: boolean; src?: string; w?: number; /** a click chooses it: the full-screen view offers the same choice (Lightbox) */ choose?: boolean; /** what Option-click puts into Alma's message box (refPick.ts) */ mark?: InlineRef }) {
   return (
     <button
       type="button"
+      {...(mark ? refData(mark) : {})}
       onClick={onClick}
       aria-label={`${ariaLabel ?? `Candidate ${label}`}${kept ? ', in the library' : ''}`}
       aria-pressed={selected}

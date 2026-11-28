@@ -8,7 +8,7 @@
 //   POST {tick, cut} | {untick} → one tick set on the cut version shown, or taken back; answers the ticks file.
 // In sample-data mode everything is read from the samples and the ticks are kept in memory; nothing is written.
 import { connection } from 'next/server';
-import { isMock, mockCut } from '@/fixtures/mock';
+import { isMock, mockCut, mockPoke } from '@/fixtures/mock';
 import { sampleFeed } from '@/fixtures/masters';
 import { leftReleaseSeed, leftSampleFeed, leftTicksSeed } from '@/fixtures/left';
 import { releaseSeed } from '@/fixtures/release';
@@ -79,11 +79,13 @@ export async function POST(req: Request, ctx: Ctx): Promise<Response> {
   let body: unknown;
   try { body = await req.json(); } catch { return Response.json({ error: 'The tick was not JSON' }, { status: 400, headers: NO_STORE }); }
   const op = parseTickOp(body);
-  if (!op) return Response.json({ error: 'A tick names a step (approved, sound or subs) and the cut version it is made on' }, { status: 400, headers: NO_STORE });
+  if (!op) return Response.json({ error: 'A tick names a step (approved, sound, subs or posted) and the cut version it is made on' }, { status: 400, headers: NO_STORE });
   const now = new Date().toISOString();
   if (isMock()) {
     const next = applyTick(mockTicks(slug), op, now);
     mockLeft.set(slug, next);
+    // the "Done" on publishing is in the sample's state (fixtures/mock.ts): sent again, as the watcher does for a film
+    mockPoke(slug);
     return Response.json(next, { headers: NO_STORE });
   }
   try {

@@ -14,19 +14,26 @@
 //     shot that redoes the scene's shot 2, in its own generation folder whose shots file (`PICKUP_FILE`) lists one shot
 //     with id "2"; read as the server reads a real one (readShotTags, shotTagsFor), it carries `ids: [2]`.
 //   - S3 has three variations: one of "sample take A" landed, a second of it being made (no video yet), and
-//     one of "sample take B" that could not be made. `landSample` lands the one being made, in this server's memory
+//     one of "sample take B" that could not be made. The landed one changed only shot 2 (its variation.json's
+//     `shots`): the Takes view marks that shot and shows shot 1 as the same as sample take A. `landSample` lands the one being made, in this server's memory
 //     only (the browser tests ask for it through POST …/shots in sample mode); nothing is written to disk.
 // Later test work reuses this: keep it pure and free of randomness.
 import type { TakeShots } from '@/server/edit/shots';
 import { readShotTags, shotTagsFor } from '@/components/edit/shotCols';
 import cutFilm from './boards/cut-the-lighthouse.json';
 import { trimSampleShots } from './trim';
+import { gapsSampleShots } from './framegaps';
+import { INBOX_SAMPLE, inboxLanded } from './takesinbox-takes';
 
 interface FixtureClip { id: string; src: string; in: number; out: number; at: number; takeRef?: { scene: string; take: string } }
 interface FixtureCut { current: { tracks: { id: string; kind: string; clips: FixtureClip[] }[] }; sourceSeconds?: Record<string, number> }
 
 /** The sample pick-up's `generations/FIX-cork-S2/FIX-cork-S2-shots.json`, the shape of a real film's. */
 export const PICKUP_FILE = { duration: 13.5, shots: [{ id: '2', t0: 0, t1: 13.5, in_frame: ['MAREN', 'TOBIAS'] }] };
+
+// the sample pick-up and the landed variations landed after the sample's other takes (which say no day), after the day
+// the sample list of takes looked at begins (server/edit/seenTakes.ts): they are new takes, "new" in the Takes view
+const LATE = Date.UTC(2026, 10, 12, 12);
 
 const FOLD = 1.5;                       // seconds: a gap shorter than this between two clips is a trim, not a shot
 const r3 = (s: number) => Math.round(s * 1000) / 1000;
@@ -72,14 +79,35 @@ function derive(film: string, cut: FixtureCut): TakeShots[] {
       const seconds = cuts.pop()!;
       out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-take${k}-480p.mp4`, scene, name: `sample take ${k}`, seconds, cuts, state: 'ready' });
     });
+    if (scene === 'S1' && film === PICKUP_ROWS_FILM) out.push(...pickupRows(film, base));
     if (scene === 'S2') {
       out.push({ src: `assets/films/${film}/blocks/${scene}/takes/${scene}-sample-takeC-480p.mp4`, scene, name: 'sample take C', state: 'failed' });
       const tg = shotTagsFor([readShotTags(PICKUP_FILE)], []);
-      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(tg ?? {}), state: 'ready' });
+      out.push({ src: `assets/films/${film}/generations/FIX-cork-S2/takes/take1/FIX-cork-S2-take1-480p.mp4`, scene, name: 'FIX-cork-S2 · take 1', seconds: 13.5, cuts: [], ...(tg ?? {}), state: 'ready', made: LATE });
     }
   }
   out.sort((a, b) => a.scene.localeCompare(b.scene, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   return out;
+}
+
+// The pick-ups as rows of their scene: the-lighthouse's S1 has a one-shot pick-up of its shot 2 with two
+// takes (FIX-rock-S1), a pick-up of its shots 3 and 4 (FIX-hall-S1: take 1 cut into those two shots; take 2 cut into
+// three, which its shot list does not say, so its shots are "other shots"), and a copy of FIX-rock-S1 take 1 kept by
+// hand as a variation of the scene's take (its variation.json's copyOf), which the Takes view leaves out. They landed
+// before the sample's list of takes looked at began, so none is "new" (the copy says later: left out, it is not new
+// either). Their shot lists are in shotlist.ts (PICKUP_ROWS_GENS).
+export const PICKUP_ROWS_FILM = 'the-lighthouse';
+export const pickupRowsSrc = (film: string, g: string, k: number) => `assets/films/${film}/generations/${g}/takes/take${k}/${g}-take${k}-480p.mp4`;
+function pickupRows(film: string, base: TakeShots): TakeShots[] {
+  const copy = `assets/films/${film}/blocks/S1/takes/S1-grey-take1-variation1/S1-grey-take1-variation1-480p.mp4`;
+  return [
+    { src: pickupRowsSrc(film, 'FIX-rock-S1', 1), scene: 'S1', name: 'FIX-rock-S1 · take 1', seconds: 4.5, cuts: [], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-rock-S1', 2), scene: 'S1', name: 'FIX-rock-S1 · take 2', seconds: 5.2, cuts: [], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-hall-S1', 1), scene: 'S1', name: 'FIX-hall-S1 · take 1', seconds: 8, cuts: [3.5], state: 'ready' },
+    { src: pickupRowsSrc(film, 'FIX-hall-S1', 2), scene: 'S1', name: 'FIX-hall-S1 · take 2', seconds: 9, cuts: [2.5, 5.5], state: 'ready' },
+    { src: copy, scene: 'S1', name: 'grey-take1 variation 1', seconds: 4.5, cuts: [], state: 'ready', made: LATE,
+      variation: { from: base.src, note: 'A copy of FIX-rock-S1 take 1, to switch it in', startedAt: '2026-11-25T18:10:00Z', copyOf: pickupRowsSrc(film, 'FIX-rock-S1', 1) } },
+  ];
 }
 
 /** The sample variations of S3 (see the head of this file). `landed`: the second one has its video too. */
@@ -97,11 +125,11 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
     const seconds = cuts.pop()!;
     return { seconds, cuts };
   };
-  const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const,
-    variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00' } };
+  const one = { src: `${dir}/S3-sample-takeA-variation1/S3-sample-takeA-variation1-480p.mp4`, scene: 'S3', name: 'sample take A variation 1', ...like(a, 1), state: 'ready' as const, made: LATE,
+    variation: { from: a.src, note: 'Maren looks up at the end. Keep the rest as it is.', startedAt: '2026-11-14T09:40:00', shots: ['2'] } };
   const twoV = { from: a.src, note: 'Slower, and hold on her face a moment longer.', startedAt: '2026-11-14T10:58:00' };
   const two: TakeShots = landed
-    ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', variation: twoV }
+    ? { src: `${dir}/S3-sample-takeA-variation2/S3-sample-takeA-variation2-480p.mp4`, scene: 'S3', name: 'sample take A variation 2', ...like(a, 2), state: 'ready', made: LATE + 3600000, variation: twoV }
     : { src: `${dir}/S3-sample-takeA-variation2`, scene: 'S3', name: 'sample take A variation 2', state: 'making', variation: twoV };
   const three: TakeShots = { src: `${dir}/S3-sample-takeB-variation1`, scene: 'S3', name: 'sample take B variation 1', state: 'making',
     variation: { from: b.src, note: 'Make the light warmer.', startedAt: '2026-11-14T10:20:00', failed: 'Seedance refused the picture of the lamp twice.' } };
@@ -110,9 +138,28 @@ function variations(film: string, takes: TakeShots[], landed: boolean): TakeShot
 
 // sample-sound-picks (soundpick.ts) has the-lighthouse's picture, and its takes say when they landed: all on one day,
 // S1's "sample take A" ten days later, so its shots show as new takes on the cut
-const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut };
+// sample-left-landed (left.ts) the same, its files in its own folder as the left samples' cut has them, and
+// "sample take A" of S1, S2 and S3 landed later: three new takes to check
+const LANDED_SAMPLE = 'sample-left-landed';
+const ownCut = (slug: string): FixtureCut => JSON.parse(JSON.stringify(cutFilm).split('assets/films/the-lighthouse/').join(`assets/films/${slug}/`)) as FixtureCut;
+const CUTS: Record<string, FixtureCut> = { 'the-lighthouse': cutFilm as unknown as FixtureCut, 'sample-sound-picks': cutFilm as unknown as FixtureCut, [LANDED_SAMPLE]: ownCut(LANDED_SAMPLE),
+  // the 16:9 samples (masters.ts): the same takes, their pictures the 1920x1080 test clip
+  'sample-wide': ownCut('sample-wide'), 'sample-wide-portrait': ownCut('sample-wide-portrait'),
+  // the New takes page's sample (fixtures/takesinbox.ts)
+  [INBOX_SAMPLE]: ownCut(INBOX_SAMPLE) };
 const LANDED = Date.UTC(2026, 10, 10, 12);
-const madeOf = (film: string, t: TakeShots): TakeShots => (film !== 'sample-sound-picks' || t.state === 'making' ? t : { ...t, made: LANDED + (t.scene === 'S1' && t.name === 'sample take A' ? 10 * 86400000 : 0) });
+const LATER: Record<string, (t: TakeShots) => boolean> = {
+  'sample-sound-picks': (t) => t.scene === 'S1' && t.name === 'sample take A',
+  [LANDED_SAMPLE]: (t) => ['S1', 'S2', 'S3'].includes(t.scene) && t.name === 'sample take A',
+};
+// sample-takes-inbox: five takes came back on one morning, each at its own time (fixtures/takesinbox.ts)
+const LATER_AT: Record<string, (t: TakeShots) => number | undefined> = { [INBOX_SAMPLE]: inboxLanded };
+const madeOf = (film: string, t: TakeShots): TakeShots => {
+  if (t.state === 'making') return t;
+  const at = LATER_AT[film];
+  if (at) return { ...t, made: LANDED + (at(t) ?? 0) };
+  return !LATER[film] ? t : { ...t, made: LANDED + (LATER[film](t) ? 10 * 86400000 : 0) };
+};
 const memo = new Map<string, TakeShots[]>();
 // which sample films have their variation being made landed (this server's memory; survives a dev reload)
 const g = globalThis as unknown as { __sampleLanded?: Set<string> };
@@ -121,7 +168,7 @@ const landedSet = (g.__sampleLanded ??= new Set());
 /** The sample film's takes with their shots ({takes, waiting: 0}); no takes for a film without a fixture cut. */
 export function mockShots(film: string): { takes: TakeShots[]; waiting: number } {
   // the sample film of a take cut into its shots (trim.ts): its takes as written there
-  const trim = trimSampleShots(film);
+  const trim = trimSampleShots(film) ?? gapsSampleShots(film);
   if (trim) return trim;
   const cut = CUTS[film];
   if (!cut) return { takes: [], waiting: 0 };

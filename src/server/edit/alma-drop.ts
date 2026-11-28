@@ -16,7 +16,8 @@ import path from 'node:path';
 import { addStep, contentOf, editsSince, markSaved, type CutHistory, type StepBy } from '@/components/edit/history';
 import type { FilmTarget } from '../actions/film';
 import type { Timeline, TimelineMarker, TimelineTrack } from '../types';
-import { CUT_DIR, CutError, isVersion, listVersions, logWrite, readVersion, validateTimeline, versionNum, writeNextVersion, writtenByServer, type NewVersion } from './timeline';
+import { dropFrame } from '@/lib/frame';
+import { CUT_DIR, CutError, MAX_SIDE, isVersion, listVersions, logWrite, readVersion, validateTimeline, versionNum, writeNextVersion, writtenByServer, type NewVersion } from './timeline';
 import {
   commitNow, contentHash, diskStore, ensureNow, historyNow, inFilmQueue, saveNow, stateNow, stepNow, WorkingError, type CutStore,
 } from './working';
@@ -50,19 +51,22 @@ async function readDrop(file: string): Promise<{ raw?: unknown; error?: string }
   return { error: `the file is not complete JSON (${last}). Write it to a temp name in cut/alma/ and rename it when it is whole` };
 }
 
-interface Drop { basedOnRev: number; note: string; tracks: TimelineTrack[]; markers?: TimelineMarker[] }
+/** `width` and `height` (or `aspect`, "16:9"): the frame Alma asks for, when she changes it. */
+interface Drop { basedOnRev: number; note: string; tracks: TimelineTrack[]; markers?: TimelineMarker[]; width?: number; height?: number }
 
 /** The drop's shape, said in plain words when it is wrong. */
 export function checkDrop(raw: unknown): { drop?: Drop; problems: string[] } {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { problems: ['the file is not a JSON object {basedOnRev, note, tracks, markers}'] };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { problems: ['the file is not a JSON object {basedOnRev, note, tracks, markers} (aspect, or width and height, when the frame changes)'] };
   const d = raw as Record<string, unknown>;
   const p: string[] = [];
   if (typeof d.basedOnRev !== 'number' || !Number.isInteger(d.basedOnRev) || d.basedOnRev < 0) p.push('basedOnRev must be the rev you read in cut/working.json (a whole number)');
   if (typeof d.note !== 'string' || !d.note.trim()) p.push('note must say in one line what you changed');
   if (!Array.isArray(d.tracks) || !d.tracks.length) p.push('tracks must be the full list of tracks of the cut');
   if (d.markers !== undefined && !Array.isArray(d.markers)) p.push('markers must be a list');
+  const fr = dropFrame(d, MAX_SIDE);
+  p.push(...fr.problems);
   if (p.length) return { problems: p };
-  return { drop: { basedOnRev: d.basedOnRev as number, note: (d.note as string).trim().replace(/\s+/g, ' ').slice(0, 300), tracks: d.tracks as TimelineTrack[], ...(d.markers ? { markers: d.markers as TimelineMarker[] } : {}) }, problems: [] };
+  return { drop: { basedOnRev: d.basedOnRev as number, note: (d.note as string).trim().replace(/\s+/g, ' ').slice(0, 300), tracks: d.tracks as TimelineTrack[], ...(d.markers ? { markers: d.markers as TimelineMarker[] } : {}), ...(fr.frame ?? {}) }, problems: [] };
 }
 
 // ---- the answer
@@ -143,7 +147,7 @@ async function answerFor(s: CutStore, name: string, file: string): Promise<DropA
   }
   let stepped: Awaited<ReturnType<typeof stepNow>>;
   try {
-    stepped = await stepNow(s, { rev: h.rev, words: drop.note, by: 'alma', tracks: drop.tracks, ...(drop.markers ? { markers: drop.markers } : {}), drop: stem });
+    stepped = await stepNow(s, { rev: h.rev, words: drop.note, by: 'alma', tracks: drop.tracks, ...(drop.markers ? { markers: drop.markers } : {}), ...(drop.width ? { width: drop.width, height: drop.height } : {}), drop: stem });
   } catch (e) {
     if (e instanceof WorkingError && e.code === 'stale') return { taken: false, rev: e.rev, why: `Not taken: the cut changed after you read it. Read cut/working.json again and make your change on it.`, since: [] };
     if (e instanceof CutError && e.status === 422) return { taken: false, rev: h.rev, why: `Not taken: the cut does not check out (${plural(e.problems.length, 'problem')}). Nothing was written to the cut. Fix them and write a new drop.`, problems: e.problems };
