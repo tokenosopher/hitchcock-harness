@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import type { Timeline, TimelineClip } from '../src/server/types';
 import { idsFor, inFilm, picksWords, putShot, readShotIds, sceneAnchor, sceneOrder, shotClips, shotNo, shotOf, shotsOf, shotTimeline, takeOutScene, takeOutShot, withPicks, type BySrc, type TakeShots } from '../src/components/edit/shots';
-import { readVariation } from '../src/server/edit/shots';
+import { readCuts, readVariation, sceneOfFolder } from '../src/server/edit/shots';
 import { landSample } from '../src/fixtures/shots';
 import { splitClip, totalF } from '../src/components/edit/model';
 import { mockShots } from '../src/fixtures/shots';
@@ -279,3 +279,28 @@ ok('a pick-up of shot 3 goes in shot 3\'s place, is shot 3 of the cut, comes out
 });
 
 console.log(`ok · ${n} checks`);
+
+// A take folder's scene: a pick-up's lowercase letter after the scene number is not part of the scene.
+{
+  const of = (p: string) => sceneOfFolder(p.split('/'));
+  assert.equal(of('generations/S6'), 'S6');
+  assert.equal(of('generations/FIX-S6'), 'S6');
+  assert.equal(of('generations/FIX-S6b'), 'S6');
+  assert.equal(of('generations/FIX-S5a'), 'S5');
+  assert.equal(of('generations/S3A'), 'S3A');
+  assert.equal(of('generations/FIX-cut-S5'), 'S5');
+  assert.equal(of('tests/model-x/S2'), 'S2');
+  assert.equal(of('generations/S6bc'), undefined);
+  assert.equal(of('generations/SHOTS'), undefined);
+  console.log('ok: a pick-up with a lowercase letter after the scene number has its scene');
+}
+
+// A take's cuts corrected by hand (cuts.json in the take's folder).
+{
+  assert.deepEqual(readCuts({ cuts: [4.042, 2.375, 8, 8] }, 10.04), [2.375, 4.042, 8]);
+  assert.deepEqual(readCuts([2.375, 0, 0.1, 9.95, 'x'], 10.04), [2.375]);
+  assert.deepEqual(readCuts({ cuts: [] }), []);
+  assert.equal(readCuts(undefined), undefined);
+  assert.equal(readCuts({ note: 'none' }), undefined);
+  console.log('ok: cuts.json is read leniently and wins over the found cuts');
+}

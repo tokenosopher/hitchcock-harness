@@ -76,6 +76,11 @@
     "cancel-render:test": "tsx scripts/cancel-render-test.ts",
     "release-waits:test": "tsx scripts/release-waits-test.ts",
     "refblock:test": "tsx scripts/refblock-test.ts",
+    "drag-take:test": "tsx scripts/drag-take-test.ts",
+    "link:test": "tsx scripts/link-test.ts",
+    "remove:test": "tsx scripts/remove-test.ts",
+    "sheet-voice:test": "tsx scripts/sheet-voice-test.ts",
+    "sheet-yes:test": "tsx scripts/sheet-yes-test.ts",
     "test:quick": "node tests/run.mjs quick",
     "test:changed": "node tests/run.mjs changed",
     "test:slow": "node tests/run.mjs slow"

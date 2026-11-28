@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { FEED_PLACES, type FeedAsk, type FeedCard, type FeedMedia, type FeedOption, type FeedPlace, type FeedSummary } from '../../types';
 import { answersStamp, readAnswers } from '../../actions/answers';
+import { isRemovedAnswer } from '../../../components/lib/remove';
 import { progressStamp, readProgress } from '../../actions/progress';
 import { abs, asRecord, asString, AUDIO_RE, IMAGE_RE, redact, VIDEO_RE, type FilmCtx } from '../util';
 import { readSounds, sfxRefs, soundAnswerKey } from './sfx';
@@ -363,7 +364,7 @@ export const isOpen = (c: FeedCard): boolean => !!c.ask && !c.ask.answer;
 export const isWaiting = (c: FeedCard): boolean => isOpen(c) && !c.ask!.progress;
 
 /** A yes the user gave: a card that asks for a yes, answered with anything but a no or "replaced by …". */
-export const isYes = (c: FeedCard): boolean => c.ask?.kind === 'yes' && !!c.ask.answer && c.ask.answer.option !== 'no' && !/^replaced by\b/i.test(c.ask.answer.option ?? '');
+export const isYes = (c: FeedCard): boolean => c.ask?.kind === 'yes' && !!c.ask.answer && c.ask.answer.option !== 'no' && !/^replaced by\b/i.test(c.ask.answer.option ?? '') && !isRemovedAnswer(c.ask.answer.option);
 
 export function feedSummary(feed: Feed): FeedSummary {
   const counts: FeedSummary['counts'] = {};

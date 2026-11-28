@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { inFilm, shotClips, shotKey, shotsOf, subTag, type BySrc, type SceneRun, type Shot, type TakeShots } from './shots';
 import { cellLabel, cellsOf, columnBox, columnsOf, columnWeights, gridColumns } from './shotCols';
 import { useNoSwipeBack } from './swipe';
+import type { TakeDrag } from './dragTake';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const secs = (n: number) => `${(Math.round(n * 10) / 10).toFixed(1)} s`;
@@ -196,7 +197,7 @@ function useSeen(key: string): [Set<string>, (src: string) => void] {
  *  ringed; a click watches another and selects it (ASKS 52). A take with no clip is one slim row; a variation sits
  *  under the take it came from (ASKS 51). The line across the takes is the film's playhead: drag it, or click the row
  *  of shot names (ASKS 53). */
-export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, seenKey, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge, foreign, markOf, views, viewSrc }: {
+export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecting, selShot, base, seenKey, onShot, onUnpick, head, onBring, onTakeOut, onSceneOut, onMenu, onSeek, onSeekEdge, foreign, markOf, views, viewSrc, onDragTake }: {
   scene: SceneRef | { id: string; title?: string; takes?: SceneRef['takes'] }; takes: TakeShots[]; by: BySrc; names: Map<string, string>; tl: Timeline;
   /** Where the video is: the shot, and how far through it (0 to 1). The line crosses a long shot slowly, a short one fast. */
   head?: { n: number; p: number };
@@ -226,6 +227,9 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
   markOf?: (t: TakeShots, n: number, tag?: string) => { to: number; safe: boolean; warnings: string[] } | undefined;
   /** The painted view behind each shot of the scene, and how to reach a view's file from the film folder. */
   views?: ShotView[]; viewSrc?: (rel: string) => string;
+  /** A shot's cell, or a take's name (the whole take), is being dragged onto the timeline; undefined: the
+   *  drag ended. Without it nothing drags. */
+  onDragTake?: (d: TakeDrag | undefined) => void;
 }) {
   const used = useMemo(() => inFilm(tl, by), [tl, by]);
   const sceneIn = useMemo(() => shotClips(tl, by, scene.id).length > 0, [tl, by, scene.id]);
@@ -410,9 +414,14 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
           const srcName = source ? cap(names.get(source.src) ?? source.name) : undefined;
           const name = v && vn ? `${srcName ?? cap(names.get(t.src) ?? t.name)}, variation ${vn}` : cap(names.get(t.src) ?? t.name);
           const isNew = !!v && t.state === 'ready' && !seen.has(t.src);
+          // the take's name is the handle that drags the whole take onto the timeline
+          const dragsWhole = !!onDragTake && t.state !== 'making' && t.state !== 'failed' && (shots.length > 0 || !!t.seconds);
           const nameCell = (
-            <span data-take-name={t.src} onContextMenu={(e) => menuAt(e, t)}
-              className={cn('relative flex min-w-0 flex-col justify-center pr-1.5 text-[12.5px] font-medium leading-tight text-ink', depth > 0 && 'pl-3')} title={t.src.replace(/^assets\/films\/[^/]+\//, '')}>
+            <span data-take-name={t.src} onContextMenu={(e) => menuAt(e, t)} draggable={dragsWhole || undefined}
+              onDragStart={dragsWhole ? (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', name); onDragTake!({ t }); } : undefined}
+              onDragEnd={dragsWhole ? () => onDragTake!(undefined) : undefined}
+              className={cn('relative flex min-w-0 flex-col justify-center pr-1.5 text-[12.5px] font-medium leading-tight text-ink', depth > 0 && 'pl-3', dragsWhole && 'cursor-grab active:cursor-grabbing')}
+              title={`${t.src.replace(/^assets\/films\/[^/]+\//, '')}${dragsWhole ? '\nDrag onto the timeline to place the whole take' : ''}`}>
               {depth > 0 && <i aria-hidden="true" className="absolute left-0.5 top-[-6px] bottom-1/2 w-1.5 rounded-bl-[4px] border-b border-l border-[#45454d]" />}
               <span className="line-clamp-2">{name}{isNew && <> <span data-new="" className="line-in inline-block rounded-[4px] border border-edge-strong px-1 align-[1px] text-[10px] font-normal leading-[13px] text-ink-3">new</span></>}</span>
               {source && t.state !== 'making' && (
@@ -467,13 +476,16 @@ export function ShotGrid({ scene, takes, by, names, tl, watching, picks, selecti
                 const bring = isOut && !!onBring && t.state === 'ready';
                 const canOut = isIn && !!onTakeOut && !selecting;
                 const mark = markOf?.(t, s.n, tag);
+                const drags = !!onDragTake && t.state === 'ready';
                 return (
                   <div key={share ? key : ck} data-col={share ? undefined : s.n} className={cn('group/cell relative rounded-[9px] p-0.5 transition-[background-color,opacity] duration-200', !share && hot === i + 1 && 'bg-[#141417]', !share && moved && 'line-in', isOut && !isWatch && 'opacity-45 hover:opacity-90 has-[:focus-visible]:opacity-90')}>
                     <button type="button" aria-pressed={isWatch} onClick={() => { if (v) markSeen(t.src); if (bring) onBring!(t, s.n, tag); else onShot(t, s.n, tag); }} data-shot={key} data-in={isIn ? '' : undefined} data-pick={isPick ? '' : undefined}
+                      draggable={drags || undefined} onDragStart={drags ? (e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', `${name} · shot ${said}`); onDragTake!({ t, n: s.n, ...(tag ? { tag } : {}) }); } : undefined}
+                      onDragEnd={drags ? () => onDragTake!(undefined) : undefined}
                       onContextMenu={(e) => menuAt(e, t, s.n, tag)} onKeyDown={(e) => menuKey(e, t, s.n, tag)}
                       data-safe={mark?.safe ? mark.to : undefined} data-warn={mark && !mark.safe ? mark.warnings.length : undefined}
-                      title={`${name} · shot ${said} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}${mark ? `\n${mark.safe ? `A safe swap for shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}: the same framing and line.` : `Goes in place of shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}.`}${mark.warnings.length ? `\n${mark.warnings.join('\n')}` : ''}` : ''}`}
-                      className={cn('group @container relative block h-[64px] w-full cursor-pointer overflow-hidden rounded-[7px] border bg-panel text-left transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] disabled:cursor-default',
+                      title={`${name} · shot ${said} · ${secs(s.out - s.in)}${isIn ? ' · in the film now · click to watch it' : bring ? ' · not in the film · click to put it back in its place (⌘Z takes it out again)' : isPick ? ' · selected · click to unselect it' : ' · click to watch it and select it'}${drags ? ' · or drag it onto the timeline to place it' : ''}${mark ? `\n${mark.safe ? `A safe swap for shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}: the same framing and line.` : `Goes in place of shot ${mark.to}${foreign ? ` of Layout ${foreign.into}` : ''}.`}${mark.warnings.length ? `\n${mark.warnings.join('\n')}` : ''}` : ''}`}
+                      className={cn('group @container relative block h-[64px] w-full overflow-hidden rounded-[7px] border bg-panel text-left transition-[border-color,box-shadow,transform] duration-200 ease-out active:scale-[0.98] disabled:cursor-default', drags ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                         isWatch ? 'border-dashed border-ink shadow-[0_0_0_1px_#FAFAFA]' : isIn ? 'border-ink shadow-[0_0_0_1px_#FAFAFA]' : isOut ? 'border-dashed border-edge-strong hover:border-sub' : 'border-edge hover:border-sub')}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- a poster frame from /api/media, cached on disk */}
                       <img alt="" draggable={false} loading="lazy" src={mediaUrl(t.src, { w: 160, t: Math.round(((s.in + s.out) / 2) * 100) / 100 })}

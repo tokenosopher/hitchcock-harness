@@ -6,6 +6,7 @@ import { fmtClock, fmtCredits, fmtDate, sumCredits, takeLabel } from './format';
 import { takesReady } from '@/components/edit/takesReady';
 import { scriptCards } from '@/lib/script-cards';
 import { sectionSpan, storyVersionOf } from '@/lib/script-edit';
+import { asksLeft, asksRemoved, gateMark, isRemoved, releaseMark } from './remove';
 
 export type PickState = 'ready' | 'running' | 'queued' | 'waiting' | 'picked';
 
@@ -320,19 +321,35 @@ export function gateItems(s: FilmState, tasks: TaskCard[]): GateItem[] {
     });
   }
   // what "Done picking" just sent is not asked again while the server catches up (data/film.tsx)
-  if (s.sentKeys?.length) { const sent = new Set(s.sentKeys); return items.filter((g) => !sent.has(g.key)); }
-  return items;
+  const sent = new Set(s.sentKeys ?? []);
+  // and what the user removed from "Waiting for you" stays out while it is the same thing,
+  // as does an entry a removed card of Alma's stood in for (one question, removed once)
+  const gone = asksRemoved(s);
+  return items.filter((g) => !sent.has(g.key) && !isRemoved(s, `gate:${g.key}`, gateMark(g, s)) && !(gone.length && coveredBy(g, gone)));
+}
+
+/** Whether Alma's card is about the sheet of `id`: a character by the card's ids; a form ("C01a") by its name in the
+ *  card's id or title, since the ids hold its character. */
+function aboutSheet(c: FeedCard, id: string): boolean {
+  const base = /^(C\d+)[a-z]$/.exec(id)?.[1];
+  if (!base) return c.ids.includes(id) && !new RegExp(`\\b${id}[a-z]\\b`).test(`${c.id ?? ''} ${c.title}`);
+  return c.ids.includes(id) || (c.ids.includes(base) && new RegExp(`\\b${id}\\b`).test(`${c.id ?? ''} ${c.title}`));
 }
 
 /** The gate's picks that ask the user to choose now ("Waiting for you" is only cards to choose from): only those whose round has landed (a round being made, queued or not started is no
  *  choice yet), and each question once: a character's voice pick goes where Alma's own card at Voices asks to pick
  *  that character's voice. */
 export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
-  return gate.filter((g) => g.state === 'ready'
-    && !(g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id)))
+  return gate.filter((g) => g.state === 'ready' && !coveredBy(g, asks));
+}
+
+/** Alma's own card among `asks` asks the same question as the gate item: a character's voice pick or sheet. */
+function coveredBy(g: GateItem, asks: FeedCard[]): boolean {
+  return (g.kind === 'voices' && asks.some((c) => c.place === 'voices' && c.ask?.kind === 'pick' && c.ids.includes(g.id)))
     // a character's sheet goes where Alma's own card at Sheet asks about that character's sheet: one question a sheet
-    //
-    && !(g.kind === 'sheet' && asks.some((c) => c.place === 'sheet' && !!c.ask && c.ids.includes(g.id))));
+    // A form's sheet ("C01a"): a card's ids keep the character only ("C01"), so the form is read from the card's own
+    // id and title, and a card about C01a does not stand in for C01b's sheet.
+    || (g.kind === 'sheet' && asks.some((c) => c.place === 'sheet' && !!c.ask && aboutSheet(c, g.id)));
 }
 
 /** Every item of "Waiting for you" now, by its key ("story:<script|story>-<version>", "card:<card key>", "gate:<gate
@@ -341,10 +358,22 @@ export function gateChoices(gate: GateItem[], asks: FeedCard[]): GateItem[] {
  *  lib/sent.ts withSent). The one rule the page (waitList.ts waitItemsOf lists these items), the sidebar's subtitle and
  *  white dot, and the server's count for every film (src/server/claude/notify.ts) all go by. */
 export function waitingKeys(s: FilmState, tasks: TaskCard[], gate: GateItem[] = gateItems(s, tasks)): string[] {
-  const asks = s.feed?.asks ?? [];
-  const story = storyWait(s, tasks);
-  const release = releaseWait(s);
-  return [...(story && !story.sent ? [story.key] : []), ...asks.map((c) => `card:${c.key}`), ...gateChoices(gate, asks).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])];
+  const asks = asksLeft(s);
+  const story = storyWaiting(s, tasks);
+  const release = releaseWaiting(s);
+  return [...(story ? [story.key] : []), ...asks.map((c) => `card:${c.key}`), ...gateChoices(gate, asks).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])];
+}
+
+/** The story or the script as "Waiting for you" lists it: waiting on the user, not just sent, not removed. */
+export function storyWaiting(s: FilmState, tasks: TaskCard[]): StoryWait | undefined {
+  const w = storyWait(s, tasks);
+  return w && !w.sent && !isRemoved(s, w.key) ? w : undefined;
+}
+/** The release as "Waiting for you" lists it: not just removed (by "Done picking", or on the server's record while the
+ *  final and its platforms are the same). */
+export function releaseWaiting(s: FilmState): ReleaseWait | undefined {
+  const w = releaseWait(s);
+  return w && !s.sentKeys?.includes(w.key) && !isRemoved(s, w.key, releaseMark(w, s)) ? w : undefined;
 }
 /** How many items "Waiting for you" lists (waitingKeys); `gate` when the caller has gateItems(s, tasks) already. */
 export const waitingCount = (s: FilmState, tasks: TaskCard[], gate?: GateItem[]): number => waitingKeys(s, tasks, gate).length;
@@ -638,7 +667,10 @@ export function scriptScenes(s: FilmState): ScriptScene[] {
       byId.get(sid)!.rows = sectionRows(body, sid, s.script?.lines ?? []);
       byId.get(sid)!.scriptSeconds = tableSeconds(body, sid);
     });
-    return [...byId.values()];
+    // in the order the script tells the story (its headings), not by ID number: a scene added later (S7 after S2)
+    // sits where the story puts it; a scene the
+    // script does not write comes after
+    return [...[...seen].map((sid) => byId.get(sid)!), ...[...byId.values()].filter((x) => !seen.has(x.id))];
   }
   const counters = new Map<string, number>();
   for (const l of s.script?.lines ?? []) {

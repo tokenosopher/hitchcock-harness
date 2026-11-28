@@ -17,16 +17,19 @@ import { Badge, Btn, Dot, type DotState } from '@/components/shell/atoms';
 import { IconBookmark } from '@/components/shell/icons';
 import { FromLibrary } from '@/components/library/FromLibrary';
 import { choosePick, pickChoiceId, PickButton, SaveButton } from '@/components/library/PickButton';
-import { useChoice } from '@/components/data/choices';
+import { choose, unchoose, useChoice } from '@/components/data/choices';
+import { removeChoiceId, waitMark } from '@/components/lib/remove';
+import { approvalChoiceId } from '@/components/lib/approve';
 import type { LibraryKind, PickBody } from '@/components/library/data';
 import type { FilmState } from '@/server/types';
 import { cn } from '@/lib/utils';
 import { AskCard } from '@/components/feed/Feed';
 import { Who } from '@/components/feed/Who';
+import { SheetVoice } from '@/components/characters/SheetVoice';
 import { castBoxLines } from '@/components/characters/Cards';
 import { VoiceRounds } from './VoiceOptions';
 import { StepIntro } from '@/components/intro/StepIntro';
-import { beingMade, waitItemsOf } from './waitList';
+import { beingMade, waitItemsOf, type WaitItem } from './waitList';
 import { useKept } from './useKept';
 import { refData } from '@/components/lib/refPick';
 import type { InlineRef } from '@/lib/refs';
@@ -59,6 +62,8 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
   const libKind: LibraryKind | undefined = p.kind === 'face' ? 'face' : p.kind === 'master' ? 'location' : undefined;
   // the candidate set aside for Done picking, if any (the tile is only selected to look at until then)
   const setAside = useChoice(film?.slug ?? '', pickKind ? pickChoiceId({ kind: pickKind, target }) : '')?.pick?.candidate;
+  // a sheet's yes set aside for Done picking
+  const sheetYes = !!useChoice(film?.slug ?? '', p.kind === 'sheet' ? approvalChoiceId({ id: p.id }) : '');
   const saveRef = (id: string) => p.round?.candidates.find((c) => c.id === id)?.path;
   return (
     <article {...refData(gateRefOf(p))} className={cn('flex min-w-0 flex-col gap-3 rounded-[10px] border bg-well px-4 py-3.5', wait ? 'border-dashed border-edge-strong' : 'border-edge')}>
@@ -104,8 +109,17 @@ export function PickCard({ p, onChip, onPrefill, from = 'the gate page', voices 
           {/* what is being approved: the sheet itself (a click opens it full screen) and who the character is */}
           {state && sheetPath && <Media path={repoPath(state.film.folder, state.film.repo, sheetPath)} w={960} fit="contain" alt={`${p.id} sheet`} className="aspect-[16/9] w-full max-w-[640px] rounded-[8px] border border-edge bg-black" />}
           {state && <Who state={state} ids={[p.id]} face={false} />}
+          {/* the sheet is approved as face, clothing and voice together: the voice plays here */}
+          {state && <SheetVoice state={state} id={p.id} />}
           <div className="flex flex-wrap items-center gap-2">
-            <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, `Approve · ${p.chip}`)} title="Puts it in Alma's box; press send there">Approve the sheet</Btn>
+            {/* one tap sets the yes aside; "Done picking" sends it with the other choices */}
+            {sheetYes ? (
+              <span data-chosen className="inline-flex h-8 items-center gap-1.5 text-[12.5px] text-ink duration-200 animate-in fade-in-0"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink" />Chosen: approve the {p.id} sheet · goes with Done picking</span>
+            ) : film && sheetPath ? (
+              <Btn primary onClick={() => choose(film.slug, { id: approvalChoiceId({ id: p.id }), label: `Approve · ${p.chip}`, approve: { kind: 'sheet', id: p.id, path: sheetPath } })}>Approve the sheet</Btn>
+            ) : (
+              <Btn primary onClick={() => onPrefill(`I approve the ${p.id} sheet.`, p.key, `Approve · ${p.chip}`)} title="Puts it in Alma's box; press send there">Approve the sheet</Btn>
+            )}
             <Btn onClick={() => ui.about({ id: p.key, label: p.chip }, `the ${p.id} sheet: a change to it`, `What should change in the ${p.id} sheet…`)}>Ask for a change</Btn>
             {film && <Link href={`/films/${film.slug}/character/${p.id}`} className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium text-sub no-underline hover:text-ink">Open {p.id}</Link>}
           </div>
@@ -233,6 +247,41 @@ export function ReleaseWaitCard({ w, base, onChip }: { w: ReleaseWait; base: str
   );
 }
 
+/** "Remove" at the foot of an entry: one tap sets it aside to come off the list, not answered, and "Done
+ *  picking" sends it with the other choices; a second tap, or an answer chosen instead, takes it back. Quiet, at the
+ *  edge, so it does not compete with the answers. */
+function RemoveToggle({ s, it, set }: { s: FilmState; it: WaitItem; set: boolean }) {
+  const film = s.film.slug;
+  const id = removeChoiceId(it.key);
+  const toggle = () => {
+    if (set) { unchoose(film, id); return; }
+    const mark = waitMark(it, s);
+    choose(film, { id, label: `Remove · ${it.title}`, remove: { key: it.key, title: it.title, ...(mark ? { mark } : {}) } });
+  };
+  return (
+    <div className="flex justify-end pt-1">
+      <button type="button" data-remove={it.key} aria-pressed={set} onClick={toggle}
+        aria-label={set ? `Keep ${it.title} in Waiting for you` : `Remove ${it.title} from Waiting for you, without answering`}
+        className={cn('inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12px] transition-colors duration-200', set ? 'text-ink-3 hover:text-ink' : 'text-mute hover:text-ink')}>
+        {set ? (
+          <span key="set" className="inline-flex items-center gap-1.5 duration-200 animate-in fade-in-0"><span aria-hidden="true" className="size-1.5 rounded-full bg-ink-3" />Removed · goes with Done picking · <span className="text-ink underline decoration-edge-strong underline-offset-4">Undo</span></span>
+        ) : <span key="unset" className="duration-200 animate-in fade-in-0">Remove</span>}
+      </button>
+    </div>
+  );
+}
+
+/** One entry of the list: its card, dimmed while it is set to be removed, and "Remove" at its foot. */
+function WaitRow({ s, it, children }: { s: FilmState; it: WaitItem; children: React.ReactNode }) {
+  const set = !!useChoice(s.film.slug, removeChoiceId(it.key));
+  return (
+    <div data-wait-item={it.key} data-removed={set || undefined} className="pb-2.5">
+      <div className={cn('transition-opacity duration-200 motion-reduce:transition-none', set && 'opacity-45')}>{children}</div>
+      <RemoveToggle s={s} it={it} set={set} />
+    </div>
+  );
+}
+
 /** The steps whose picks the gate collects, in board order. */
 const GATE_INPUTS = [...CHAIN_A, ...CHAIN_B];
 
@@ -304,13 +353,13 @@ export function GatePage({ s, flow, base, onChip, onPrefill }: { s: FilmState; f
             const g = it.gate;
             return (
               <Reveal key={it.key} open={here} className="min-w-0">
-                <div data-wait-item={it.key} className="pb-2.5">
+                <WaitRow s={s} it={it}>
                   {it.story ? <StoryWaitCard w={it.story} base={base} onChip={onChip} />
                     : it.release ? <ReleaseWaitCard w={it.release} base={base} onChip={onChip} />
                     : it.card ? <AskCard film={s.film.slug} card={it.card} toRepo={toRepo} from="the gate on Main" where={<span>{flow.nodes[it.card.place]?.name}</span>} />
                     : g?.kind === 'go' ? <GoCard p={g} base={base} onChip={onChip} />
                     : g ? <PickCard p={g} onChip={onChip} onPrefill={onPrefill} voices={it.voiceIds} /> : null}
-                </div>
+                </WaitRow>
               </Reveal>
             );
           })}

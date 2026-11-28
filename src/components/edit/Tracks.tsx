@@ -95,8 +95,9 @@ interface Props {
   /** The level point clicked last (Delete removes it), and the click that picks one or none. */
   point?: { trackId: string; clipId: string; i: number };
   onPoint?: (p: { trackId: string; clipId: string; i: number } | undefined) => void;
-  /** A file of the film being dragged from the file list (Files.tsx): a lane of its kind lights under the pointer
-   *  and takes it; `frames` is its length, for snapping its end too (14 Nov). */
+  /** A file of the film being dragged from the file list (Files.tsx), or a shot or a whole take from the Takes view
+   *  (ShotViews.tsx): a lane of its kind lights under the pointer and takes it; `frames` is its length, for
+   *  snapping its end too (14 Nov). */
   fileDrag?: { kind: 'video' | 'audio' | 'captions'; frames: number };
   onDropFile?: (trackId: string, frame: number) => void;
   /** Retype this subtitle line (Enter on the page with one line selected): its field opens over the block. */
@@ -197,7 +198,11 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    // The lane's width in whole pixels, rounded down from the box as laid out. clientWidth rounds, so with
+    // the viewer at its widest (a width in fractions of a pixel) the fit came out up to half a pixel wider than the
+    // lane: a horizontal scrollbar, and the vertical one it brings, in a browser that counts that half pixel. The
+    // vertical scrollbar's room is kept whether it shows or not (scrollbar-gutter below), so it never moves the fit.
+    const ro = new ResizeObserver(([en]) => setWidth(Math.min(el.clientWidth, Math.floor(en.contentRect.width))));
     ro.observe(el);
     setWidth(el.clientWidth);
     return () => ro.disconnect();
@@ -869,7 +874,7 @@ export function Tracks({ tl, frame, setFrame, sel, onSelect, onEdit, tool, rippl
     <div className="flex min-h-0 flex-1 flex-col gap-2.5">
       {toolbar}
       {notice}
-      <div ref={scroller} className="scroll relative min-h-0 flex-1 overflow-auto overscroll-x-contain rounded-[9px] border border-line bg-hdr" aria-label="Timeline"
+      <div ref={scroller} className="scroll relative min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-gutter:stable] rounded-[9px] border border-line bg-hdr" aria-label="Timeline"
         onDragOver={fileOver} onDragLeave={fileLeave} onDrop={fileDrop}>
         <div ref={content} className="relative" style={{ width: HEAD + laneW }}>
           {/* ruler */}

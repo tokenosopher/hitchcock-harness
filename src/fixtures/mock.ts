@@ -16,6 +16,7 @@ import { soundSampleCut, soundSampleFilms, soundSampleState } from './soundpick'
 import { AFTERLOCK_THREADS, afterlockSampleCut, afterlockSampleFilms, afterlockSampleState } from './afterlock';
 import { ELEMENTS_THREADS, elementsSampleFilms, elementsSampleState } from './elements';
 import { trimSampleCut, trimSampleFilms, trimSampleState } from './trim';
+import { withMockRemoved } from './removed';
 
 export const isMock = () => process.env.MOCK === 'boards';
 const set = () => FIXTURES_BOARDS;
@@ -34,7 +35,7 @@ const runningListeners = (store.running ??= new Set());
 
 export const mockFilms = () => [...set().films, ...sampleFilms(), ...releaseSampleFilms(), ...leftSampleFilms(), ...castSampleFilms(), ...day1SampleFilms(), ...storySampleFilms(), ...soundSampleFilms(), ...afterlockSampleFilms(), ...elementsSampleFilms(), ...trimSampleFilms()];
 export const mockLibrary = () => FIXTURE_LIBRARY;
-export const mockState = (film: string) => withRelease(film, baseState(film));
+export const mockState = (film: string) => withMockRemoved(film, withRelease(film, baseState(film)));
 /** The sample's release in brief, as the real reader puts it in the state (read/post.ts): the release file in memory
  *  (server/release/file.ts mockReleases) or its seed, and the ticks in memory (server/edit/left.ts mockLeft) or theirs,
  *  read off their shared globals so this file imports neither ("Waiting for you" for posting). */

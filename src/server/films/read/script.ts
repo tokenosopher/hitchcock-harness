@@ -57,8 +57,9 @@ export function readScriptText(markdown: string, warn: { add: (file: string, wha
       for (const part of film.split(/\s*[,·;]\s*(?=[CLP]\d)/)) {
         const m = /^([CLP]\d+[a-z]?)\s+(.+)$/.exec(part.trim());
         if (!m) continue;
-        // "Maren, the lighthouse keeper": the name, then who she is (a role; the script note's own role wins below)
-        const text = m[2].trim();
+        // "Maren, the lighthouse keeper": the name, then who she is (a role; the script note's own role wins below);
+        // a last entry with no ID after it ("… · the gulls (no IDs)") is not part of the name before it
+        const text = m[2].split(/\s+[·;]\s+/)[0].trim();
         let depth = 0, cut = -1;
         for (let i = 0; i < text.length && cut < 0; i++) {
           if (text[i] === '(') depth++;

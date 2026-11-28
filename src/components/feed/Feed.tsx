@@ -27,6 +27,7 @@ import { CutButton, sceneInCut } from './CutButton';
 import { takeCutOf } from '@/components/edit/cutLink';
 import { CardText, longSub } from './CardText';
 import { WhyPanel } from './WhyPanel';
+import { isRemovedAnswer } from '@/components/lib/remove';
 import { almaFetch } from '@/components/data/almaOutbox';
 import { askLayout, bodyMedia, optionMediaOf, readHref, readOf, wideBox } from './askMedia';
 
@@ -387,6 +388,7 @@ function HistoryRow({ card, toRepo }: { card: FeedCard; toRepo: ToRepo }) {
     : card.sounds?.length ? `${card.sounds.length} sounds answered`
       : k === 'debrief' ? `answers sent${card.debrief ? ` · ${card.debrief.answered} answered` : ''}`
         : k === 'why' ? (a.option === 'skip' ? 'skipped' : 'you said why')
+          : isRemovedAnswer(a.option) ? 'removed, not answered'
           : a.option === 'no' && card.ask!.noLabel ? card.ask!.noLabel.toLowerCase() : picked ? `you picked ${short(picked, 28)}` : k === 'go' ? 'go given' : 'yes given';
   const line = [mediaLine(card.media), said].filter(Boolean).join(' · ');
   return (

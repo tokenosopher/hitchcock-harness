@@ -53,7 +53,10 @@ interface Kept { size: number; mtime: number; seconds?: number; cuts: number[] }
 type Store = Record<string, Kept>;
 
 const ROOTS = ['generations', 'blocks', 'tests'];
-const SCENE = /(?:^|[^A-Za-z0-9])(S\d+[A-Z]?)(?![A-Za-z0-9])/;
+// A pick-up's own letter after the scene number is lowercase ("FIX-S6b" is a pick-up of S6): it is not part of the scene.
+const SCENE = /(?:^|[^A-Za-z0-9])(S\d+[A-Z]?)[a-z]?(?![A-Za-z0-9])/;
+/** The scene a take folder belongs to, from its path under the film: the folder's own name first, then the path. */
+export const sceneOfFolder = (rel: string[]): string | undefined => SCENE.exec(rel[rel.length - 1] ?? '')?.[1] ?? SCENE.exec(rel.join('/'))?.[1];
 const THRESHOLD = 0.25;         // found every cut and no false one in the fourteen takes tried (13 Nov)
 
 const g = globalThis as unknown as { __shots?: { busy: Map<string, Promise<void>>; stores: Map<string, Store>; failed: Set<string> } };
@@ -124,7 +127,7 @@ async function findTakes(film: FilmTarget): Promise<Found[]> {
       const p = path.join(dir, e.name);
       if (e.name !== 'takes') { await walk(p, depth + 1); continue; }
       const rel = path.relative(film.dir, dir).split(path.sep);
-      const scene = SCENE.exec(rel[rel.length - 1])?.[1] ?? SCENE.exec(rel.join('/'))?.[1];
+      const scene = sceneOfFolder(rel);
       if (!scene) continue;
       const tags = await shotTagsIn(dir);
       const group = rel[0] === 'tests' ? rel[1] : undefined;
@@ -176,6 +179,18 @@ function queue(film: FilmTarget, todo: { abs: string; rel: string; size: number;
   mem.busy.set(film.slug, run);
 }
 
+/** A take's cuts as corrected by hand (when the detector misses a cut or finds a false one): `cuts.json` in the
+ *  take's folder, `{"cuts":[2.375,4.042,8]}` or the bare list, in seconds. Read leniently: the numbers inside the take,
+ *  in order, once each; undefined when the file is absent or holds no list. An empty list says the take has no cut. */
+export function readCuts(v: unknown, seconds?: number): number[] | undefined {
+  const list = Array.isArray(v) ? v : v && typeof v === 'object' && Array.isArray((v as { cuts?: unknown }).cuts) ? (v as { cuts: unknown[] }).cuts : undefined;
+  if (!list) return undefined;
+  const ok = list.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x > 0.2 && (seconds === undefined || x < seconds - 0.2));
+  return [...new Set(ok.map((x) => Math.round(x * 1e6) / 1e6))].sort((x, y) => x - y);
+}
+const cutsOf = async (abs: string, kept: Kept): Promise<number[]> =>
+  readCuts(await fs.readFile(path.join(path.dirname(abs), 'cuts.json'), 'utf8').then((x) => JSON.parse(x) as unknown).catch(() => undefined), kept.seconds) ?? kept.cuts;
+
 /** The film's takes with their shots; takes not read yet are queued and come back as "waiting". */
 export async function filmShots(film: FilmTarget, onDone: () => void = () => undefined): Promise<{ takes: TakeShots[]; waiting: number }> {
   const [found, store] = await Promise.all([findTakes(film), readStore(film)]);
@@ -191,8 +206,9 @@ export async function filmShots(film: FilmTarget, onDone: () => void = () => und
     const kept = store[t.rel];
     const base = { src: film.show(t.abs), scene: t.scene, name: t.name, group: t.group, ...v, made: mtime };
     if (kept && kept.size === st.size && kept.mtime === mtime) {
-      const tg = await tagsOf(film, t.abs, t.tags, kept.cuts);
-      takes.push({ ...base, seconds: kept.seconds, cuts: kept.cuts, ...(tg ?? {}), state: 'ready' });
+      const cuts = await cutsOf(t.abs, kept);
+      const tg = await tagsOf(film, t.abs, t.tags, cuts);
+      takes.push({ ...base, seconds: kept.seconds, cuts, ...(tg ?? {}), state: 'ready' });
       continue;
     }
     if (mem.failed.has(`${film.slug}:${t.rel}:${mtime}`)) { takes.push({ ...base, state: 'failed' }); continue; }
@@ -216,8 +232,9 @@ export async function storedShots(film: FilmTarget): Promise<Map<string, TakeSho
     const src = film.show(abs);
     // <generation>/takes/<take>/<file>: the generation's shots file numbers the shots, as filmShots does
     const parts = rel.split(/[\\/]/);
-    const tg = parts.length >= 4 && parts[parts.length - 3] === 'takes' ? await tagsOf(film, abs, await shotTagsIn(path.join(film.dir, ...parts.slice(0, -3))), kept.cuts) : undefined;
-    out.set(src, { src, scene: '', name: '', seconds: kept.seconds, cuts: kept.cuts, ...(tg ?? {}), state: 'ready' });
+    const cuts = await cutsOf(abs, kept);
+    const tg = parts.length >= 4 && parts[parts.length - 3] === 'takes' ? await tagsOf(film, abs, await shotTagsIn(path.join(film.dir, ...parts.slice(0, -3))), cuts) : undefined;
+    out.set(src, { src, scene: '', name: '', seconds: kept.seconds, cuts, ...(tg ?? {}), state: 'ready' });
   }
   return out;
 }

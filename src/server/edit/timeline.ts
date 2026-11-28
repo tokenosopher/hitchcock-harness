@@ -232,6 +232,7 @@ function newFieldProblems(c: TimelineClip, kind: TrackKind, cw: string): string[
     else if (pts.some((p: { t: number; db: number }) => p.t < 0 || p.db < -96 || p.db > 24)) out.push(`${cw}: a gain point's t must be 0 or more and its db between -96 and 24`);
     else if (pts.some((p: { t: number }, i: number) => i > 0 && !(p.t > pts[i - 1].t))) out.push(`${cw}: gain points must be in time order, each later than the one before`);
   }
+  if (c.link !== undefined && (typeof c.link !== 'string' || !/^[A-Za-z0-9_.~-]{1,128}$/.test(c.link) || kind === 'captions')) out.push(`${cw}: link is an id (letters, digits, . ~ - _), the same on a picture clip and its sound`);
   if (c.dissolve !== undefined && (kind === 'captions' || !num(c.dissolve) || c.dissolve <= 0 || c.dissolve > 10)) out.push(`${cw}: dissolve must be seconds, more than 0 and at most 10, on a picture or sound clip`);
   return out;
 }

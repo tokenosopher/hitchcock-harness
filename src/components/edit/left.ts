@@ -11,6 +11,7 @@
 import type { FeedCard, PictureMade, Timeline, TimelineClip } from '@/server/types';
 import type { CutGap, RenderPart } from './sameCut';
 import { PENDING_STATE } from './history';
+import { isRemovedAnswer } from '@/components/lib/remove';
 import { EARLY_NAME, EARLY_SHORT, type EarlyDo, type EarlyId, type EarlyStep } from './early';
 
 export const LEFT_REL = 'harness/left.json';
@@ -132,7 +133,7 @@ export function approvalOf(cards: FeedCard[], versions: string[]): { version: st
   let best: { version: string; card: string } | undefined;
   for (const c of cards) {
     const a = c.ask;
-    if (!a || a.kind !== 'yes' || !a.answer || a.answer.option === 'no') continue;
+    if (!a || a.kind !== 'yes' || !a.answer || a.answer.option === 'no' || isRemovedAnswer(a.answer.option)) continue;
     const cutCard = /^(?:ASK-)?cut-v\d+$/i.test(c.id ?? '');
     if (!cutCard && (c.placed !== 'card' || (c.place !== 'edit' && c.place !== 'finish'))) continue;
     const v = /\bcut (v\d+)\b/i.exec(c.title)?.[1]?.toLowerCase() ?? /\b(v\d+)\b/i.exec(c.id ?? '')?.[1]?.toLowerCase();

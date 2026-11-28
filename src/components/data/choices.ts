@@ -6,15 +6,19 @@
 import { useSyncExternalStore } from 'react';
 import type { PickBody } from '@/components/library/data';
 import type { Sent } from '@/components/lib/sent';
+import type { Approval } from '@/components/lib/approve';
+import { waitKeysOf, type Removal } from '@/components/lib/remove';
 
 // the rule of what a batch takes out of "Waiting for you", shared with the server's count (lib/sent.ts)
 export { SENT_ALMA_MS, SENT_MS, sentItems, type Sent } from '@/components/lib/sent';
 
 export interface Choice {
-  id: string;                                   // "card:<key>" or "pick:<kind>:<target>"
+  id: string;                                   // "card:<key>", "pick:<kind>:<target>", "approve:sheet:<id>" or "remove:<entry key>"
   label: string;                                // "C02 Tobias: which voice · Option 2"
   answer?: { card: string; option?: string; kind: 'pick' | 'yes' | 'go' | 'why'; cost?: string; note?: string };
   pick?: PickBody;
+  approve?: Approval;                           // a yes to the app's own sheet entry
+  remove?: Removal;                             // the entry taken off "Waiting for you", not answered
 }
 
 const EMPTY: Choice[] = [];
@@ -39,8 +43,17 @@ function write(film: string, v: Choice[]): void {
   for (const l of listeners) l();
 }
 
-export const choose = (film: string, c: Choice): void => write(film, [...read(film).filter((x) => x.id !== c.id), c]);
+/** Sets a choice aside in place of the old one for the same thing. A removal and an answer (a pick, a yes, a go) of the
+ *  same entry of "Waiting for you" replace each other too: the last tap is the one that goes. */
+export const choose = (film: string, c: Choice): void => {
+  const keys = new Set(waitKeysOf(c));
+  const clash = (x: Choice) => !!x.remove !== !!c.remove && waitKeysOf(x).some((k) => keys.has(k));
+  write(film, [...read(film).filter((x) => x.id !== c.id && !clash(x)), c]);
+};
 export const unchoose = (film: string, ids: string | string[]): void => { const drop = new Set(Array.isArray(ids) ? ids : [ids]); write(film, read(film).filter((x) => !drop.has(x.id))); };
+
+/** The choices set aside now, outside React (a check script). */
+export const choicesNow = (film: string): Choice[] => read(film);
 
 export function useChoices(film: string): Choice[] {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => read(film), () => EMPTY);

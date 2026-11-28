@@ -11,6 +11,7 @@ import { clothingDone, faceDone, speaks, voiceDone } from '@/components/lib/deri
 import { fmtDate, repoPath } from '@/components/lib/format';
 import { Media } from '@/components/media/Media';
 import { PlayButton, PlayLine } from '@/components/media/Sound';
+import { SheetVoice } from './SheetVoice';
 import { IconChevronDown } from '@/components/shell/icons';
 import { Tile } from '@/components/shell/atoms';
 import { AskCard } from '@/components/feed/Feed';
@@ -190,7 +191,7 @@ export function CharacterView({ s, c, base, onChip, faceRounds }: {
               </div>
               <Link href={`${base}/character/voices`} onClick={() => rememberBack(`${base}/character/voices`, `Back to ${c.name}`)} className="w-max text-[12.5px] text-sub underline decoration-edge-strong underline-offset-4 hover:text-ink">Pick or change it on the Voices page</Link>
             </Fold>
-          ) : !voiceFile && <span className="text-[12.5px] text-sub">No voices yet.</span>}
+          ) : !voiceFile && <SheetVoice state={s} id={c.id} empty="No voices yet." />}
         </div>
       </section>
     ),

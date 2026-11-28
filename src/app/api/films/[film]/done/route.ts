@@ -1,4 +1,4 @@
-// POST {answers: [{card, option?}], picks: [{kind, target, round?, candidate?, …}], dryRun?} → "Done picking": every
+// POST {answers: [{card, option?}], picks: [{kind, target, round?, candidate?, …}], approvals: [{kind: 'sheet', id, path}], removals: [{key, title, mark?}], dryRun?} → "Done picking": every
 // choice the user set aside, written as each would be by itself, and ONE message to Alma that lists them.
 import { connection } from 'next/server';
 import { sendChoices } from '@/server/actions/answer';
@@ -8,6 +8,10 @@ import { LIBRARY_KINDS, LibraryUnavailable, type LibraryKind } from '@/server/li
 import { isMock } from '@/fixtures/mock';
 import { notifyHub } from '@/server/claude/notify';
 import { soundMockDone } from '@/fixtures/soundpick';
+import { sheetMockDone } from '@/fixtures/cast';
+import { parseApprovals } from '@/components/lib/approve';
+import { parseRemovals } from '@/components/lib/remove';
+import { removeMockDone } from '@/fixtures/removed';
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 const rows = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {})) : []);
@@ -35,13 +39,18 @@ export async function POST(req: Request, { params }: RouteContext<'/api/films/[f
       libraryKind: libraryKind && LIBRARY_KINDS.includes(libraryKind) ? libraryKind : undefined, from: s(x.from), card: s(x.card),
     });
   }
-  // what was answered leaves the film's count of "Waiting for you" (the sidebar's white dot) within a moment
-  const acted = () => notifyHub().userAnswered(film, answers, picks);
-  const mocked = isMock() ? soundMockDone(film, answers, picks) : undefined;
+  const approvals = parseApprovals(body.approvals);
+  if (typeof approvals === 'string') return Response.json({ error: approvals }, { status: 400 });
+  // what was removed from "Waiting for you", not answered
+  const removals = parseRemovals(body.removals);
+  if (typeof removals === 'string') return Response.json({ error: removals }, { status: 400 });
+  // what was answered or removed leaves the film's count of "Waiting for you" (the sidebar's white dot) within a moment
+  const acted = () => notifyHub().userAnswered(film, answers, picks, approvals, removals);
+  const mocked = isMock() ? removeMockDone(film, answers, picks, approvals, removals) ?? sheetMockDone(film, answers, picks, approvals) ?? soundMockDone(film, answers, picks) : undefined;
   if (mocked) { if (mocked.ok) acted(); return mocked; }
   if (!(await driveConnected())) return Response.json({ error: DRIVE_MISSING }, { status: 503 });
   try {
-    const r = await sendChoices({ answers, picks }, film, { dryRun: body.dryRun === true });
+    const r = await sendChoices({ answers, picks, approvals, removals }, film, { dryRun: body.dryRun === true });
     if (body.dryRun !== true) acted();
     return Response.json(r, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {

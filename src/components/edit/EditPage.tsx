@@ -48,6 +48,7 @@ import { RenderPlayer } from './RenderPlayer';
 import { playTag, type RenderRow } from './renderList';
 import { useDrawCount } from './drawCount';
 import { fileFrames, placeFile, replaceFile, trackForFile } from './placeFile';
+import { placeTake, takePieces, type TakeDrag } from './dragTake';
 import { clipFrames, clipTag, inFilm, mainTracks, ownShotOf, pickKey, picksWords, putShot, samePlace, sceneAnchor, sceneOrder, sceneOf, sceneRuns, shotClips, shotNo, shotOf, shotsOf, shotTimeline, subTag, takeNames, takeOutScene, takeOutShot, withPicks, type SceneRun, type TakeShots } from './shots';
 import { cellP, fromCellP } from './shotCols';
 import {
@@ -438,6 +439,8 @@ export function EditPage() {
   // what the list showed last, so it keeps its words while it closes
   const [filesWas, setFilesWas] = useState<{ mode: 'add' | 'replace'; replacing?: string }>({ mode: 'add' });
   const [dragFile, setDragFile] = useState<FilmFile>();
+  // a shot or a whole take dragged from the Takes view: it lands on the timeline as a dragged file does
+  const [dragTake, setDragTake] = useState<TakeDrag>();
   const [placing, setPlacing] = useState(false);
   const filmFiles = useFilmFiles(film, !!files);
   const srcSeconds0 = useSourceSeconds(state, cut.sourceSeconds);
@@ -916,6 +919,18 @@ export function EditPage() {
       say(`Added ${e.name} at ${smpte(at / fps, fps)}. ⌘Z takes it out.`);
     } finally { setPlacing(false); }
   };
+  /** A shot of a take, or the whole take, dropped from the Takes view on a picture track at frame `f`: laid
+   *  there with its sound as a dropped file is (dragTake.ts), one step of the history. */
+  const placeTakeAt = async (d: TakeDrag, trackId: string, f: number) => {
+    if (!tl || readOnly) return;
+    const r = placeTake(tl, d, names.get(d.t.src) ?? d.t.name, trackId, f);
+    if (!r.edit) { say(r.error ?? 'It could not be placed there.'); return; }
+    await apply(r.edit);
+    setSel(r.edit.ref); setExtra(undefined);
+    say(`${cap(r.edit.note)}. ⌘Z takes it out.`);
+  };
+  // the length the line on the timeline stands for while a shot or a take is dragged (0: it cannot be placed)
+  const dragTakeLen = (() => { if (!dragTake) return 0; const p = takePieces(dragTake, names.get(dragTake.t.src) ?? dragTake.t.name, fps); return 'error' in p ? 0 : p.frames; })();
   const replaceWith = async (e: FilmFile) => {
     const ref = files?.ref;
     if (!tl || !ref || readOnly || placing) return;
@@ -1839,8 +1854,8 @@ export function EditPage() {
         label: hit.clip.flip ? 'Stop mirroring' : 'Mirror this shot', hint: hit.clip.flip ? 'mirrored now' : 'left to right', disabled: readOnly || !!hit.track.locked,
         onPick: () => { void apply(setFlip(tl, ref, !hit.clip.flip, noteNameOf)); },
       }] : []),
-      ...(ref && hit && (hit.track.id === mainV || hit.track.kind === 'audio') ? (() => {
-        const un = hit.track.id === mainV || hit.track.id === mainTracks(tl).a?.id ? setLinked(tl, ref, false) : undefined;
+      ...(ref && hit && (hit.track.id === mainV || hit.track.kind === 'audio' || hit.clip.link) ? (() => {
+        const un = hit.track.id === mainV || hit.track.id === mainTracks(tl).a?.id || hit.clip.link ? setLinked(tl, ref, false) : undefined;
         const lined = setLinked(tl, ref, true), re = relinkOf(ref);
         const sound = hit.track.kind === 'audio';
         if (un) return [{ label: sound ? 'Unlink from the picture' : 'Unlink the sound', disabled: readOnly, onPick: () => void apply(un) }];
@@ -2279,8 +2294,8 @@ export function EditPage() {
               tryIds={tryIds} solo={soloed} onSolo={toggleSolo} onMenu={openMenu}
               clipNote={fresh?.size ? (c) => { const x = fresh.get(c.id); return x ? { text: `${x.count} new ${x.count === 1 ? 'take' : 'takes'}`, title: `${x.count === 1 ? 'A take' : `${x.count} takes`} of this shot landed after the one in the cut and ${x.count === 1 ? 'has' : 'have'} not been looked at. Click to see the newest (${names.get(x.pick.src) ?? x.name}) in place, not in the film yet.`, onPress: () => tryNew(x) } : undefined; } : undefined}
               clipMark={fullMarks && !tryEdit ? (c) => { const m = fullMarks.get(c.id); return m ? { kind: m.kind === 'take' ? 'seedance' : m.kind === 'small' ? 'small' : 'upscaled', marked: seedance.marks.has((c.src ?? '')) } : undefined; } : undefined}
-              fileDrag={dragFile && dragFile.seconds ? { kind: dragFile.kind === 'sound' ? 'audio' : dragFile.kind === 'subtitles' ? 'captions' : 'video', frames: fileFrames(dragFile.seconds, fps) } : undefined} retype={retypeCmd}
-              onDropFile={(trackId, f) => { const e = dragFile; setDragFile(undefined); if (e) void placeEntry(e, { trackId, f }); }}
+              fileDrag={dragFile && dragFile.seconds ? { kind: dragFile.kind === 'sound' ? 'audio' : dragFile.kind === 'subtitles' ? 'captions' : 'video', frames: fileFrames(dragFile.seconds, fps) } : dragTakeLen ? { kind: 'video', frames: dragTakeLen } : undefined} retype={retypeCmd}
+              onDropFile={(trackId, f) => { const e = dragFile, d = dragTake; setDragFile(undefined); setDragTake(undefined); if (e) void placeEntry(e, { trackId, f }); else if (d) void placeTakeAt(d, trackId, f); }}
               onHeadMenu={(m) => { setMenu(undefined); setHeadMenu(m); }} renaming={renaming} onPress={pressTrack} point={pointOn} onPoint={setPoint}
               onRenamed={(id, name) => { setRenaming(undefined); if (name !== undefined && !readOnly) void apply(renameTrack(tl, id, name)); }} onPeek={setPeek}
               laneNote={planned && mainV && !(mainTracks(tl).v?.clips.length) ? { [mainV]: 'No shots yet. They come with the shot lists.' } : undefined}
@@ -2370,7 +2385,7 @@ export function EditPage() {
                 onSeek={layForeign ? undefined : seekTakes} onSeekEdge={seekEdge}
                 foreign={layForeign && layView && layIn ? { from: layView.n, into: layIn.n } : undefined} markOf={layForeign ? (t, n, tag) => swapOf(t, n, undefined, tag) : undefined}
                 onBring={readOnly ? undefined : (t, n, tag) => void bringBack(t, n, tag)} onTakeOut={readOnly ? undefined : shotOut} onSceneOut={readOnly ? undefined : () => sceneOut(gridScene.id)}
-                views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} />
+                views={'shotViews' in gridScene ? gridScene.shotViews : undefined} viewSrc={(rel) => repoPath(state.film.folder, state.film.repo, rel)} onDragTake={setDragTake} />
               )}
               <PicksBox count={picksCount} hover={picksHover} open={picks.length > 0} folded={boxFolded} onFold={setBoxFolded} disabled={readOnly}
                 onBack={backToFilm} onUse={() => void putPicks()} />

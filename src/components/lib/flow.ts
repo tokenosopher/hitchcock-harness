@@ -4,10 +4,11 @@
 import type { FeedCard, FilmState, TaskCard } from '@/server/types';
 import {
   atStoryStage, clothingParts, elementParts, faceParts, gateItems, goScenes, liveAims, locationParts, locationSettled,
-  partsStatus, releaseWait, roundNo, sheetParts, storyWait, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
+  partsStatus, releaseWaiting, roundNo, sheetParts, storyWait, storyWaiting, voiceParts, waitingKeys, waitingWords, type FlowKey, type GateItem, type Part,
   type ReleaseWait, type StoryWait, type TaskAim,
 } from './derive';
 import { fmtDate } from './format';
+import { asksLeft } from './remove';
 import { editWork, type EditWork } from './editWork';
 
 /** locked = a check; done = white dot; running = pulsing dot; pick = ring (waits for the user); waiting = dashed border. */
@@ -102,7 +103,8 @@ export function releaseWords(f: FilmState['film']): string {
 export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   const delivered = s.film.status === 'delivered';
   const gate = gateItems(s, tasks);
-  const asks = s.feed?.asks ?? [];
+  // Alma's cards that ask, less what the user removed from "Waiting for you"
+  const asks = asksLeft(s);
   // what the user can choose now, as "Waiting for you" lists it: the story or the script waiting on them, each card that
   // asks, and each pick whose round landed
   const keys = waitingKeys(s, tasks, gate);
@@ -111,7 +113,9 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
   // move until the files show it (lib/sent.ts)
   const sw = storyWait(s, tasks);
   const storyWaits = sw && !sw.sent ? sw : undefined;
-  const releaseWaits = releaseWait(s);
+  const releaseWaits = releaseWaiting(s);
+  // removed from "Waiting for you": not listed there, though the script still waits for its lock
+  const storyListed = storyWaits && storyWaiting(s, tasks);
   const node = (key: FlowKey, num: string, name: string, { also = 0, ...o }: Partial<FlowNode> & { state: NodeState; status: string; also?: number }): FlowNode => {
     const aims = o.aims ?? allAims(o.parts ?? []);
     // a live sub-agent makes a node run; a delivered film has nothing left waiting
@@ -359,7 +363,7 @@ export function flowOf(s: FilmState, tasks: TaskCard[]): Flow {
     working: s.feed?.working ?? [],
     waiting,
     waitWords: waiting ? waitingWords(keys) : '',
-    ...(storyWaits ? { story: storyWaits } : {}),
+    ...(storyListed ? { story: storyListed } : {}),
     ...(releaseWaits ? { release: releaseWaits } : {}),
     faceGate: faceP.filter((p) => p.state !== 'done').length,
     masterGate: open.length,

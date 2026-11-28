@@ -13,6 +13,11 @@ import { filmTarget } from './film';
 import { makePick, PickError, type PickInput, type PickResult } from './pick';
 import { appendTasteRow, pickedWhere, type TasteRow } from './taste';
 import { Writer, type WriteRecord } from './writes';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { approvalBlock, type Approval } from '../../components/lib/approve';
+import { choicesHead, removalBlock, type Removal } from '../../components/lib/remove';
+import { saveRemoved } from './removed';
 
 export interface AnswerInput {
   card: string;                 // the card's key (its id)
@@ -136,24 +141,57 @@ async function answerWhy(card: FeedCard, input: AnswerInput, ft: NonNullable<Awa
   return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, card: card.key, kind: 'why', option, writes: w.records, message, notified };
 }
 
-export interface ChoicesResult { ok: true; dryRun: boolean; film: string; answers: AnswerResult[]; picks: PickResult[]; message: string; notified: boolean }
+export interface ChoicesResult { ok: true; dryRun: boolean; film: string; answers: AnswerResult[]; picks: PickResult[]; approvals: Approval[]; removals: Removal[]; message: string; notified: boolean }
 
 /** Everything the user chose and set aside, sent with one button ("Done picking"): answers to cards that ask, and
  *  picks made on an asset's own page (a face, a voice, a master). Every one is checked first, so one that cannot be
  *  taken stops them all before anything is written; then each is written as it would be by itself, and Alma gets
  *  ONE message that lists them, not a turn per choice. */
-export async function sendChoices(input: { answers: AnswerInput[]; picks: PickInput[] }, film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<ChoicesResult> {
+export async function sendChoices(input: { answers: AnswerInput[]; picks: PickInput[]; approvals?: Approval[]; removals?: Removal[] }, film: string, opts: { dryRun?: boolean; notify?: boolean; repo?: string } = {}): Promise<ChoicesResult> {
   const answers = input.answers.map((i) => defuseFields(i));
   const picks = input.picks.map((i) => defuseFields(i));
-  if (!answers.length && !picks.length) throw new PickError('no choices given');
+  const approvals = (input.approvals ?? []).map((i) => defuseFields(i));
+  const removals0 = (input.removals ?? []).map((i) => defuseFields(i));
+  if (!answers.length && !picks.length && !approvals.length && !removals0.length) throw new PickError('no choices given');
+  if (new Set(removals0.map((r) => r.key)).size !== removals0.length) throw new PickError('an entry is removed twice');
+  if (new Set(approvals.map((a) => a.id)).size !== approvals.length) throw new PickError('a sheet is approved twice');
   if (new Set(answers.map((i) => i.card)).size !== answers.length) throw new PickError('a card is named twice');
   if (new Set(picks.map((i) => `${i.kind}:${i.target}`)).size !== picks.length) throw new PickError('one thing is picked twice');
   for (const i of answers) await answerCard(i, film, { dryRun: true, repo: opts.repo });
   for (const i of picks) await makePick(i, film, { dryRun: true, repo: opts.repo });
+  // a sheet's yes: the harness writes nothing for it, but the sheet it names must be in the film folder
+  if (approvals.length) {
+    const ft0 = await filmTarget(film, opts.repo);
+    if (!ft0) throw new PickError(`no film "${film}"`, 404);
+    for (const a of approvals) {
+      const ok = await fs.stat(path.join(ft0.dir, a.path)).then((st) => st.isFile(), () => false);
+      if (!ok) throw new PickError(`no sheet ${a.path} for ${a.id}`, 404);
+    }
+  }
+  // a removal is no answer: it never goes through answerCard or makePick, writes no taste.md row and nothing
+  // in harness/answers.json. A card of Alma's is named by its own id and title from the record; one that no longer asks
+  // (answered meanwhile) has nothing left to remove. An answer and a removal of the same card cannot both go.
+  const ft1 = await filmTarget(film, opts.repo);
+  if (!ft1) throw new PickError(`no film "${film}"`, 404);
+  const feed0 = await readFeed({ dir: ft1.dir, warn: new Warnings() }, ft1.slug);
+  const asking = (key: string) => feed0.cards.find((c) => c.key === key && !!c.ask && !c.ask.answer);
+  for (const r of removals0) if (r.key.startsWith('card:') && answers.some((a) => `card:${a.card}` === r.key)) throw new PickError(`the card ${r.key.slice(5)} is both answered and removed`);
+  const removals: (Removal & { card?: string })[] = removals0.flatMap((r) => {
+    if (!r.key.startsWith('card:')) return [r];
+    const c = asking(r.key.slice(5));
+    return c ? [{ key: r.key, title: c.title, card: c.id ?? c.key }] : [];
+  });
+  if (!answers.length && !picks.length && !approvals.length && !removals.length) throw new PickError('nothing left to remove: those cards no longer ask', 409);
   const doneA: AnswerResult[] = [];
   const doneP: PickResult[] = [];
   for (const i of answers) doneA.push(await answerCard(i, film, { dryRun: opts.dryRun, notify: false, repo: opts.repo }));
   for (const i of picks) doneP.push(await makePick(i, film, { dryRun: opts.dryRun, notify: false, repo: opts.repo }));
+  // kept in the harness's own record, so the entries stay off the list (lib/remove.ts); a removed card Alma has closed
+  // since is dropped from it on the same write
+  if (removals.length && !opts.dryRun) {
+    await saveRemoved(ft1.slug, removals.map(({ card: _card, ...r }) => r), (k) => k.startsWith('card:') && !asking(k.slice(5)));
+    pokeFilm(ft1.slug);
+  }
   const ft = (await filmTarget(film, opts.repo))!;
   const feed = await readFeed({ dir: ft.dir, warn: new Warnings() }, ft.slug);
   const lines = doneA.map((r) => {
@@ -165,12 +203,14 @@ export async function sendChoices(input: { answers: AnswerInput[]; picks: PickIn
   });
   // a pick's own message already says what was picked, what the harness wrote and what is Alma's: it is kept whole
   const blocks = doneP.map((r) => r.message.split('\n').filter(Boolean).map((l, n) => (n ? `  ${l}` : `- ${l.replace(/ Continue the flow from there\.$/, '')}`)).join('\n'));
-  const n = doneA.length + doneP.length;
+  const n = doneA.length + doneP.length + approvals.length + removals.length;
   const tasteRows = doneA.filter((r) => r.kind === 'pick').length;
   const message = [
-    `<harness-action kind="answers" count="${n}"/> The user is done choosing and sent ${n === 1 ? 'one choice' : `${n} choices`} with one button, in Hitchcock Harness. Each item below is one answer or one pick, exactly as it would say by itself. Apply them all in this turn, then continue the flow once.`,
+    choicesHead(n, approvals.length > 0, removals.length > 0),
     ...(lines.length ? ['', 'Answers to cards that ask:', ...lines, tasteRows ? `The harness already wrote the taste.md row of ${tasteRows === 1 ? 'the pick' : `each of the ${tasteRows} picks`} among them. Yours: set "answer" on each of those cards in review/cards.json, each row's "What it says" cell and the score in taste.md, and the work the answers start. A go covers the quote on its card and nothing more.` : 'The harness wrote nothing in the film folder for these. Yours: set "answer" on each of those cards in review/cards.json and do the work the answers start. A go covers the quote on its card and nothing more.'] : []),
     ...(blocks.length ? ['', 'Picks made on an asset\'s own page:', ...blocks] : []),
+    ...approvalBlock(approvals),
+    ...removalBlock(removals),
   ].join('\n');
   let notified = false;
   if (!opts.dryRun && opts.notify !== false) {
@@ -178,7 +218,7 @@ export async function sendChoices(input: { answers: AnswerInput[]; picks: PickIn
     await sendToAlma(ft.slug, message);
     notified = true;
   }
-  return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, answers: doneA, picks: doneP, message, notified };
+  return { ok: true, dryRun: !!opts.dryRun, film: ft.slug, answers: doneA, picks: doneP, approvals, removals, message, notified };
 }
 
 export interface AnswersResult { ok: true; dryRun: boolean; film: string; answers: AnswerResult[]; message: string; notified: boolean }

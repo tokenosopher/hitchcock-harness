@@ -1,7 +1,8 @@
 // The edit operations on a Timeline, done in whole frames at the film's fps and written back as
 // seconds. Each returns a new Timeline and the one-line note its version carries ("moved S3 · take 4 +12 f"),
 // or undefined when nothing would change. V1 and A1 of a block move together: an A1 clip with the same
-// source, in-point and position as a V1 clip is its partner.
+// source, in-point and position as a V1 clip is its partner. A picture and its sound carrying the same `link` id
+// (a take dropped from the Takes view, a file from the Files list) are partners on whatever tracks they are.
 import type { Timeline, TimelineClip, TimelineTrack, TrackKind } from '@/server/types';
 import { followFilm, isLine, oneRow, rippleChange, splitText, type FilmChange } from './subs';
 
@@ -99,21 +100,42 @@ export function ripples(tl: Timeline, r: ClipRef): boolean {
   if (r.trackId === pair[0]) return true;
   // a sound on the dialogue track that is not linked to a picture (its picture was replaced by another file, or
   // it was pasted or moved there) is a sound on its own: closing up behind it would drag the whole picture along
-  // and leave it over itself (14 Nov: deleting such a sound was refused by the cut's own rules)
-  return r.trackId === pair[1] && !!partnerOf(tl, r);
+  // and leave it over itself (14 Nov: deleting such a sound was refused by the cut's own rules). Nor is one linked to
+  // a picture on another picture track: closing gaps stays the main picture's and its dialogue's
+  return r.trackId === pair[1] && partnerOf(tl, r)?.trackId === pair[0];
 }
 
-/** The other half of a V1/A1 block, when there is one. */
+let linkSeq = 0;
+/** A new `link` id, for a picture clip and its sound placed together. */
+export const newLink = () => `l${Date.now().toString(36)}${(linkSeq++).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+
+/** The one other clip of the cut carrying the same `link` as this one, on any track, linked or unlinked; undefined
+ *  when it has none, or when the id is not on exactly two clips. */
+function linkMate(tl: Timeline, r: ClipRef): ClipRef | undefined {
+  const id = findClip(tl, r)?.clip.link;
+  if (!id) return undefined;
+  let hit: ClipRef | undefined, n = 0;
+  for (const t of tl.tracks) for (const c of t.clips) if (c.link === id && !(t.id === r.trackId && c.id === r.clipId)) { hit = { trackId: t.id, clipId: c.id }; n++; }
+  return n === 1 ? hit : undefined;
+}
+/** Whether a clip belongs to a pair kept by `link` (its mate is in the cut): such a clip is never matched by place. */
+const linkedByLink = (tl: Timeline, trackId: string, c: TimelineClip) => !!c.link && !!linkMate(tl, { trackId, clipId: c.id });
+
+/** The other half of a picture and its sound: the clip with the same `link` on any track, else the V1/A1
+ *  block's other half found by place. */
 export function partnerOf(tl: Timeline, r: ClipRef): ClipRef | undefined {
-  const pair = linkedTracks(tl);
   const found = findClip(tl, r);
-  if (!pair || !found || !pair.includes(r.trackId)) return undefined;
-  const other = tl.tracks.find((t) => t.id === (r.trackId === pair[0] ? pair[1] : pair[0]));
+  if (!found) return undefined;
   const { clip } = found;
   // unlinked (13 Nov): the picture and its sound are edited apart, even while they still line up
   if (clip.unlinked) return undefined;
+  const mate = linkMate(tl, r);
+  if (mate) return findClip(tl, mate)?.clip.unlinked ? undefined : mate;
+  const pair = linkedTracks(tl);
+  if (!pair || !pair.includes(r.trackId)) return undefined;
+  const other = tl.tracks.find((t) => t.id === (r.trackId === pair[0] ? pair[1] : pair[0]));
   const fps = tl.fps;
-  const same = other?.clips.filter((c) => !c.unlinked && startF(c, fps) === startF(clip, fps) && lenF(c, fps) === lenF(clip, fps)) ?? [];
+  const same = other?.clips.filter((c) => !c.unlinked && startF(c, fps) === startF(clip, fps) && lenF(c, fps) === lenF(clip, fps) && !linkedByLink(tl, other.id, c)) ?? [];
   // the same file from the same point; else the one clip that sits exactly under (or over) it for exactly its
   // length: a picture replaced by an edited copy of itself keeps its sound (14 Nov: such a sound was left on its own)
   const p = same.find((c) => c.src === clip.src && toF(c.in, fps) === toF(clip.in, fps)) ?? (same.length === 1 ? same[0] : undefined);
@@ -128,7 +150,9 @@ export function setLinked(tl0: Timeline, r: ClipRef, linked: boolean): Edit | un
   const fps = tl.fps;
   const me = findClip(tl, r);
   const pair = linkedTracks(tl);
-  if (!me || !pair || !pair.includes(r.trackId)) return undefined;
+  // a pair kept by `link` is on any tracks; a pair found by place, on V1 and A1 only
+  const byLink = linkMate(tl0, r);
+  if (!me || (!byLink && (!pair || !pair.includes(r.trackId)))) return undefined;
   if (me.track.locked) return refuse(`${me.track.id} ${me.track.name} is locked: unlock it to change this.`);
   if (!linked) {
     const p = partnerOf(tl0, r);
@@ -139,8 +163,10 @@ export function setLinked(tl0: Timeline, r: ClipRef, linked: boolean): Edit | un
     return { tl, note: `unlinked the sound of ${clipName(me.clip)}` };
   }
   if (!me.clip.unlinked) return undefined;
-  const other = tl.tracks.find((t) => t.id === (r.trackId === pair[0] ? pair[1] : pair[0]));
-  const mate = other?.clips.find((c) => c.unlinked && c.src === me.clip.src && startF(c, fps) === startF(me.clip, fps) && toF(c.in, fps) === toF(me.clip.in, fps) && lenF(c, fps) === lenF(me.clip, fps));
+  const lined = (c: TimelineClip) => c.unlinked && c.src === me.clip.src && startF(c, fps) === startF(me.clip, fps) && toF(c.in, fps) === toF(me.clip.in, fps) && lenF(c, fps) === lenF(me.clip, fps);
+  // the clip with its `link`, lined up as it was; else, on V1/A1, the one lined up under or over it (and kept by no link)
+  const other = byLink ? findClip(tl, byLink)!.track : tl.tracks.find((t) => t.id === (r.trackId === pair![0] ? pair![1] : pair![0]));
+  const mate = byLink ? [findClip(tl, byLink)!.clip].find(lined) : other?.clips.find((c) => lined(c) && !linkedByLink(tl0, other.id, c));
   if (!mate) return undefined;
   if (other?.locked) return refuse(`${other.id} ${other.name} is locked: unlock it to link the two again.`);
   delete me.clip.unlinked; delete mate.unlinked;
@@ -151,7 +177,7 @@ export function setLinked(tl0: Timeline, r: ClipRef, linked: boolean): Edit | un
  *  the next shot moved under it), the overlapping one goes to a track of its own beside it ("Dialogue 2"),
  *  made when missing. The same timeline comes back when nothing overlaps. */
 /** A sound track beside `t` with room from `from` to `to`: "Effects 2", "Effects 3"…, made when missing. */
-function sideTrack(tl: Timeline, t: TimelineTrack, from: number, to: number): TimelineTrack | undefined {
+export function sideTrack(tl: Timeline, t: TimelineTrack, from: number, to: number): TimelineTrack | undefined {
   const fps = tl.fps;
   for (let n = 2; n < 9; n++) {
     const name = `${t.name} ${n}`;
@@ -259,17 +285,46 @@ export function canMoveToTrack(tl: Timeline, r: ClipRef, toId: string, d = 0): b
  *  has a clip at that time. */
 export function moveToTrack(tl0: Timeline, r: ClipRef, toId: string, d = 0): Edit | undefined {
   if (!canMoveToTrack(tl0, r, toId, d)) return undefined;
+  // a picture and its sound kept by `link` stay linked on any track: moved later or earlier as well, the
+  // other half goes by as many frames on its own track, as a move along the track takes it (refused when it is locked)
+  const lm = linkMate(tl0, r), p = partnerOf(tl0, r);
+  const mate = d && p && lm && p.trackId === lm.trackId && p.clipId === lm.clipId ? p : undefined;
+  if (mate) { const lock = lockedWhy(tl0, [r]); if (lock) return refuse(lock); }
   const tl = clone(tl0);
   const fps = tl.fps;
   const x = findClip(tl, r)!;
   const to = tl.tracks.find((t) => t.id === toId)!;
   x.track.clips = x.track.clips.filter((c) => c.id !== x.clip.id);
-  // `unlinked` goes with the clip, as it does when a sound is carried to "Dialogue 2" (14 Nov: one rule). Only a paste,
-  // which makes a new clip, starts linked to nothing
+  // `unlinked` (and `link`) go with the clip, as it does when a sound is carried to "Dialogue 2" (14 Nov: one rule).
+  // Only a paste, which makes a new clip, starts linked to nothing
   const c: TimelineClip = { ...x.clip, at: Math.round((Math.max(0, startF(x.clip, fps) + d) / fps) * 1e6) / 1e6 };
   to.clips.push(c);
   sortClips(to, fps);
-  return { tl, note: `moved ${clipName(c)} from ${x.track.id} ${x.track.name} to ${to.id} ${to.name}${d ? `, ${signed(d)} f` : ', same time'}` };
+  let other = '';
+  if (mate) {
+    const m = findClip(tl, mate)!;
+    const at = Math.max(0, startF(m.clip, fps) + startF(c, fps) - startF(x.clip, fps)), len = lenF(m.clip, fps);
+    m.clip.at = toS(at, fps);
+    const home = landing(tl, m.track, m.clip, at, len);
+    if (home === null) return undefined;
+    other = `, its ${m.track.kind === 'audio' ? 'sound' : 'picture'} with it${home ? ` (now on ${home})` : ''}`;
+  }
+  return { tl, note: `moved ${clipName(c)} from ${x.track.id} ${x.track.name} to ${to.id} ${to.name}${d ? `, ${signed(d)} f` : ', same time'}${other}` };
+}
+
+/** A clip just moved to frame `at` on its track that now overlaps another there goes on the track above (a picture) or
+ *  beside (a sound), as a plain move does: the track's id and name when it went, '' when it stays, null when no track
+ *  takes it (a subtitle line, or every track there is full). */
+function landing(tl: Timeline, track: TimelineTrack, clip: TimelineClip, at: number, len: number): string | null {
+  const fps = tl.fps;
+  sortClips(track, fps);
+  if (!track.clips.some((c) => c.id !== clip.id && startF(c, fps) < at + len && endF(c, fps) > at)) return '';
+  const home = track.kind === 'video' ? upperTrack(tl, track, at, at + len) : track.kind === 'audio' ? sideTrack(tl, track, at, at + len) : undefined;
+  if (!home) return null;
+  track.clips = track.clips.filter((c) => c.id !== clip.id);
+  home.clips.push(clip);
+  sortClips(home, fps);
+  return `${home.id} ${home.name}`;
 }
 
 /** The part of an option's file a clip would play: the clip's own stretch when the file is long enough,
@@ -328,6 +383,8 @@ export function pasteClip(tl0: Timeline, c: TimelineClip, trackId: string, f: nu
   const at = Math.max(0, Math.round(f));
   const copy: TimelineClip = { ...c, id: `p${Date.now().toString(36)}${(pasteSeq++).toString(36)}`, at: Math.round((at / fps) * 1e6) / 1e6 };
   delete copy.unlinked;
+  // a copy is linked to nothing; pasted with its picture or sound, pasteClips gives the two a new link of their own
+  delete copy.link;
   // a dissolve belongs to the join the clip was copied from, not to wherever it lands
   delete copy.dissolve;
   const to = at + lenF(copy, fps);
@@ -363,6 +420,9 @@ export function pasteClips(tl0: Timeline, items: Copied[], f: number, mark: { vi
   let tl = tl0;
   const refs: ClipRef[] = [];
   let note = '';
+  // a picture and its sound kept by `link`, copied together: the two pasted copies get a new link of their own
+  const links = new Map<string, string>();
+  const both = (l?: string) => !!l && items.filter((i) => i.clip.link === l).length === 2;
   for (const it of order) {
     const usable = (id?: string) => (id ? tl.tracks.find((t) => t.id === id && t.kind === it.kind && !t.locked) : undefined);
     const to = (count(it.kind) === 1 ? usable(mark[it.kind]) : undefined) ?? usable(it.trackId) ?? tl.tracks.find((t) => t.kind === it.kind && !t.locked);
@@ -370,6 +430,11 @@ export function pasteClips(tl0: Timeline, items: Copied[], f: number, mark: { vi
     const r = pasteClip(tl, it.clip, to.id, Math.max(0, Math.round(f)) + startF(it.clip, fps) - base);
     if (!r.edit) return { error: items.length > 1 ? `${clipName(it.clip)} does not fit, so nothing was pasted. ${r.error ?? ''}`.trim() : r.error };
     tl = r.edit.tl; refs.push(r.edit.ref); note = r.edit.note;
+    if (both(it.clip.link)) {
+      const l = links.get(it.clip.link!) ?? newLink();
+      links.set(it.clip.link!, l);
+      findClip(tl, r.edit.ref)!.clip.link = l;
+    }
   }
   return { edit: { tl, note: items.length === 1 ? note : `pasted ${items.length} clips at ${Math.max(0, Math.round(f))} f on ${[...new Set(refs.map((r) => r.trackId))].join(', ')}`, refs } };
 }
@@ -430,8 +495,10 @@ function rippleRest(tl: Timeline, tl0: Timeline, r: ClipRef, from: number, d: nu
   for (const m of tl.markers) if (toF(m.at, fps) >= from) m.at = toS(Math.max(0, toF(m.at, fps) + d), fps);
 }
 
-/** Split a clip that straddles frame `f` into two (used before inserting at f). */
-function splitIn(t: TimelineTrack, f: number, fps: number) {
+/** Split a clip that straddles frame `f` into two (used before inserting at f). The right piece of a clip kept by
+ *  `link` gets a new link, the one `links` holds for its old link when its other half is split in the same edit (so the
+ *  two right pieces are linked, and the two left ones keep the old link), else a new one of its own. */
+function splitIn(t: TimelineTrack, f: number, fps: number, links: Map<string, string> = new Map()) {
   const c = t.clips.find((x) => startF(x, fps) < f && endF(x, fps) > f);
   if (!c) return;
   const cut = f - startF(c, fps);
@@ -445,6 +512,11 @@ function splitIn(t: TimelineTrack, f: number, fps: number) {
   }
   const len = lenF(c, fps);
   const right: TimelineClip = { ...c, id: newId(c.id), in: srcPlus(c, c.in, cut, fps), at: toS(f, fps), fadeIn: undefined, dissolve: undefined };
+  if (c.link) {
+    const l = links.get(c.link) ?? newLink();
+    links.set(c.link, l);
+    right.link = l;
+  }
   c.out = srcPlus(c, c.in, cut, fps);
   c.fadeOut = undefined;
   // each piece keeps its own end's fade, never longer than the piece (the server refuses a fade past the clip: found
@@ -480,6 +552,7 @@ export function moveClip(tl0: Timeline, r: ClipRef, d: number, shuffle: boolean)
     if (drop === s0) return undefined;
   }
   const over: string[] = [];
+  const links = new Map<string, string>();
   for (const ref of refs) {
     const f = findClip(tl, ref);
     if (!f || f.track.locked) continue;
@@ -489,7 +562,7 @@ export function moveClip(tl0: Timeline, r: ClipRef, d: number, shuffle: boolean)
     if (ripple) {
       track.clips = track.clips.filter((c) => c.id !== clip.id);
       shiftFrom(track, s + len, -len, fps);
-      splitIn(track, to, fps);
+      splitIn(track, to, fps, links);
       shiftFrom(track, to, len, fps);
       clip.at = toS(to, fps);
       track.clips.push(clip);
@@ -644,6 +717,12 @@ export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
   // a subtitle line has no file: its head can go back to the start of the film
   const inF = isLine(clip) ? s : Math.floor(toF(clip.in, fps) / sp);
   const others = track.clips.filter((c) => c.id !== clip.id);
+  // a picture kept by `link` to this sound on another track is trimmed with it: it stops at its own
+  // neighbours too when gaps stay open (a sound kept with a picture that runs over another goes beside, tidyOverlaps)
+  const lm = ripple || overNeighbours ? undefined : linkMate(tl, r);
+  const pm = lm && partnerOf(tl, r)?.clipId === lm.clipId ? findClip(tl, lm) : undefined;
+  const mate = pm && pm.track.kind === 'video' && pm.track.id !== track.id ? pm : undefined;
+  const mateOthers = mate ? mate.track.clips.filter((c) => c.id !== mate.clip.id) : [];
   if (edge === 'head') {
     let lo = -inF;                                   // the source's first frame
     if (shot) lo = Math.max(lo, 0 - shotRoom(clip, shot, 'head', fps));     // …its shot's first frame
@@ -651,6 +730,10 @@ export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
     else if (!ripple) {
       const prevEnd = Math.max(0, ...others.filter((c) => endF(c, fps) <= s).map((c) => endF(c, fps)));
       lo = Math.max(lo, prevEnd - s);
+      if (mate) {
+        const ms = startF(mate.clip, fps);
+        lo = Math.max(lo, Math.max(0, ...mateOthers.filter((c) => endF(c, fps) <= ms).map((c) => endF(c, fps))) - ms);
+      }
     }
     return Math.max(lo, Math.min(d, len - 1));
   }
@@ -661,6 +744,10 @@ export function clampTrim(tl: Timeline, r: ClipRef, edge: 'head' | 'tail', d: nu
   if (!ripple && !overNeighbours) {
     const nextStart = Math.min(Infinity, ...others.filter((c) => startF(c, fps) >= e).map((c) => startF(c, fps)));
     hi = Math.min(hi, nextStart - e);
+    if (mate) {
+      const me = endF(mate.clip, fps);
+      hi = Math.min(hi, Math.min(Infinity, ...mateOthers.filter((c) => startF(c, fps) >= me).map((c) => startF(c, fps))) - me);
+    }
   }
   return Math.min(hi, Math.max(d, -(len - 1)));
 }
@@ -793,9 +880,12 @@ export function pictureOfSound(tl: Timeline, r: ClipRef): ClipRef | undefined {
   const p = partnerOf(tl, r);
   if (p) return p;
   const f = findClip(tl, r), v = tl.tracks.find((t) => t.id === linkedTracks(tl)?.[0]);
-  if (!f || !v || f.track.kind !== 'audio') return undefined;
   const fps = tl.fps;
-  const best = v.clips.filter((c) => inSync(c, f.clip, fps) && overlapF(c, f.clip, fps) >= 0 && !partnerOf(tl, { trackId: v.id, clipId: c.id }))
+  // a sound kept by `link` has that picture, on any track, while it is still in sync with it
+  const lm = f?.track.kind === 'audio' ? linkMate(tl, r) : undefined;
+  if (lm) { const m = findClip(tl, lm)!; return m.track.kind === 'video' && inSync(m.clip, f!.clip, fps) && overlapF(m.clip, f!.clip, fps) >= 0 ? lm : undefined; }
+  if (!f || !v || f.track.kind !== 'audio') return undefined;
+  const best = v.clips.filter((c) => inSync(c, f.clip, fps) && overlapF(c, f.clip, fps) >= 0 && !partnerOf(tl, { trackId: v.id, clipId: c.id }) && !linkedByLink(tl, v.id, c))
     .sort((a, b) => overlapF(b, f.clip, fps) - overlapF(a, f.clip, fps))[0];
   return best ? { trackId: v.id, clipId: best.id } : undefined;
 }
@@ -806,10 +896,13 @@ export function soundOfPicture(tl: Timeline, r: ClipRef): ClipRef | undefined {
   const p = partnerOf(tl, r);
   if (p) return p;
   const f = findClip(tl, r), pair = linkedTracks(tl);
-  if (!f || !pair || f.track.id !== pair[0]) return undefined;
   const fps = tl.fps;
+  // a picture kept by `link` has that sound, on any track, while it is still in sync with it
+  const lm = f?.track.kind === 'video' ? linkMate(tl, r) : undefined;
+  if (lm) { const m = findClip(tl, lm)!; return m.track.kind === 'audio' && inSync(m.clip, f!.clip, fps) && overlapF(m.clip, f!.clip, fps) >= 0 ? lm : undefined; }
+  if (!f || !pair || f.track.id !== pair[0]) return undefined;
   const cands = tl.tracks.filter((t) => t.kind === 'audio').flatMap((t) => t.clips
-    .filter((c) => inSync(c, f.clip, fps) && overlapF(c, f.clip, fps) >= 0 && !partnerOf(tl, { trackId: t.id, clipId: c.id }))
+    .filter((c) => inSync(c, f.clip, fps) && overlapF(c, f.clip, fps) >= 0 && !partnerOf(tl, { trackId: t.id, clipId: c.id }) && !linkedByLink(tl, t.id, c))
     .map((c) => ({ ref: { trackId: t.id, clipId: c.id }, k: (t.id === pair[1] ? 1e9 : 0) + overlapF(c, f.clip, fps) })));
   return cands.sort((a, b) => b.k - a.k)[0]?.ref;
 }
@@ -853,13 +946,18 @@ function besideIfOver(tl: Timeline, t: TimelineTrack, c: TimelineClip): string |
   const fps = tl.fps;
   const s = startF(c, fps), e = endF(c, fps);
   if (!t.clips.some((k) => k.id !== c.id && startF(k, fps) < e && endF(k, fps) > s)) return undefined;
-  const base = /^(.*) \d+$/.exec(t.name)?.[1];
-  const from = (base && tl.tracks.find((x) => x.kind === 'audio' && x.name === base)) || t;
+  const from = besideOf(tl, t);
   t.clips = t.clips.filter((k) => k.id !== c.id);
   const home = sideTrack(tl, from, s, e);
   if (!home) { t.clips.push(c); sortClips(t, fps); return undefined; }
   home.clips.push(c); sortClips(home, fps);
   return home.name;
+}
+
+/** The sound track a track beside it was made for ("Dialogue" for "Dialogue 2"), else the track itself. */
+function besideOf(tl: Timeline, t: TimelineTrack): TimelineTrack {
+  const base = /^(.*) \d+$/.exec(t.name)?.[1];
+  return (base && tl.tracks.find((x) => x.kind === 'audio' && x.name === base)) || t;
 }
 
 /** Where a sound's edge now is against its picture's, in plain words. */
@@ -959,17 +1057,24 @@ export function relinkSound(tl0: Timeline, r: ClipRef, nameOf?: NameOf): Edit | 
   const pair = linkedTracks(tl0);
   const f = findClip(tl0, r);
   if (!pair || !f) return undefined;
-  const sRef = f.track.kind === 'audio' ? r : f.track.id === pair[0] ? soundOfPicture(tl0, r) : undefined;
-  const pRef = f.track.kind === 'audio' ? pictureOfSound(tl0, r) : f.track.id === pair[0] ? r : undefined;
+  // a picture off the main track has its sound only by `link`: soundOfPicture finds no other
+  const linkedOff = f.track.kind === 'video' && f.track.id !== pair[0] && !!linkMate(tl0, r);
+  const sRef = f.track.kind === 'audio' ? r : f.track.id === pair[0] || linkedOff ? soundOfPicture(tl0, r) : undefined;
+  const pRef = f.track.kind === 'audio' ? pictureOfSound(tl0, r) : f.track.id === pair[0] || linkedOff ? r : undefined;
   if (!sRef || !pRef || partnerOf(tl0, sRef) || partnerOf(tl0, pRef)) return undefined;
   const fps = tl0.fps;
   const P0 = findClip(tl0, pRef)!.clip, S0 = findClip(tl0, sRef)!;
-  const dlg0 = tl0.tracks.find((t) => t.id === pair[1])!;
-  if (S0.track.locked || dlg0.locked || findClip(tl0, pRef)!.track.locked) return undefined;
   const ps = startF(P0, fps), pe = endF(P0, fps);
+  const room = (t: TimelineTrack) => !t.locked && !t.clips.some((c) => c.id !== S0.clip.id && startF(c, fps) < pe && endF(c, fps) > ps);
+  // the sound goes back on the dialogue track; one kept by `link`, on the track it was put beside when
+  // carried ("Dialogue" for "Dialogue 2"), else where it is
+  const lm = linkMate(tl0, sRef);
+  const byLink = !!lm && lm.trackId === pRef.trackId && lm.clipId === pRef.clipId;
+  const dlg0 = byLink ? [besideOf(tl0, S0.track), S0.track].find(room) : tl0.tracks.find((t) => t.id === pair[1])!;
+  if (!dlg0 || S0.track.locked || dlg0.locked || findClip(tl0, pRef)!.track.locked) return undefined;
   if (dlg0.clips.some((c) => c.id !== S0.clip.id && startF(c, fps) < pe && endF(c, fps) > ps)) return undefined;
   const tl = clone(tl0);
-  const S = findClip(tl, sRef)!, P = findClip(tl, pRef)!.clip, dlg = tl.tracks.find((t) => t.id === pair[1])!;
+  const S = findClip(tl, sRef)!, P = findClip(tl, pRef)!.clip, dlg = tl.tracks.find((t) => t.id === dlg0.id)!;
   const c = S.clip;
   const offTail = endF(c, fps) - pe, offHead = ps - startF(c, fps);
   if (offTail > 0 && c.fadeOut !== undefined && Math.abs(toF(c.fadeOut, fps) - offTail) <= 1) delete c.fadeOut;
@@ -996,10 +1101,11 @@ export function splitClip(tl0: Timeline, r: ClipRef, f: number): Edit | undefine
   const lock = lockedWhy(tl0, [r]);
   if (lock) return refuse(lock);
   if (isLine(main.clip) && !splitText(main.clip.text ?? '', 0.5)) return refuse('A line of one word cannot be split: retype it, or trim it.');
+  const links = new Map<string, string>();
   for (const ref of withPartner(tl0, r)) {
     const x = findClip(tl, ref);
     if (!x || x.track.locked) continue;
-    splitIn(x.track, f, fps);
+    splitIn(x.track, f, fps, links);
     sortClips(x.track, fps);
   }
   // named as it was before the cut (a line's words are halved by it)
@@ -1122,10 +1228,14 @@ export function retimeClips(tl0: Timeline, refs: ClipRef[], speed: number, what?
       for (const t of tl.tracks) if (t.kind !== 'captions') for (const c of t.clips) if (!mine.has(c.id) && startF(c, fps) >= oldEnd) c.at = toS(Math.max(0, startF(c, fps) + d), fps);
       for (const m of tl.markers) if (toF(m.at, fps) >= oldEnd) m.at = toS(Math.max(0, toF(m.at, fps) + d), fps);
     } else if (d > 0) {
-      // grown alone into the next clip on its track: a sound goes on the track beside, a picture is refused
-      const c = main.clip, t = main.track;
-      if (t.clips.some((k) => k.id !== c.id && startF(k, fps) < endF(c, fps) && endF(k, fps) > startF(c, fps))) {
-        if (t.kind !== 'audio') return refuse(`${clipName(findClip(tl0, g.r)!.clip)} would run ${d} f into the next clip on ${t.id} ${t.name} at that speed. Make room after it first.`);
+      // grown alone into the next clip on its track: a sound goes on the track beside, a picture is refused. Each
+      // clip of the group: a picture and its sound kept by `link` on other tracks grow together
+      for (const ref of g.ids) {
+        const x = findClip(tl, ref);
+        if (!x) continue;
+        const c = x.clip, t = x.track;
+        if (!t.clips.some((k) => k.id !== c.id && startF(k, fps) < endF(c, fps) && endF(k, fps) > startF(c, fps))) continue;
+        if (t.kind !== 'audio') return refuse(`${clipName(findClip(tl0, ref)!.clip)} would run ${d} f into the next clip on ${t.id} ${t.name} at that speed. Make room after it first.`);
         const home = besideIfOver(tl, t, c);
         if (!home) return refuse(`No room on ${t.id} ${t.name} or the tracks beside it for ${clipName(c)} at that speed.`);
         beside.push(home);

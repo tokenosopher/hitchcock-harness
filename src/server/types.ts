@@ -230,6 +230,10 @@ export interface FilmState {
    *  "Lock vN" or "Settle vN" just pressed is here by its whole key ("story:script-v3"; lib/sent.ts storySent), and
    *  derive.ts storyWait marks it sent. */
   sentKeys?: string[];
+  /** What the user removed from "Waiting for you" with "Remove" and "Done picking", from the harness's own
+   *  harness/removed.json: each entry by its key, with what it was about (`mark`) for an entry the app makes itself.
+   *  lib/remove.ts reads it: a removed entry is never an answer. */
+  removed?: { key: string; title: string; mark?: string; at?: string }[];
 }
 
 // ---- QC (build step 3, 8 Nov). The critic sub-agent (recipes/qc-critic.md) writes one file per round:
@@ -556,6 +560,7 @@ export interface TimelineClip {
   muted?: boolean;
   speed?: number;               // playback rate, default 1 (0.75 = slowed); the clip lasts (out − in) / speed on the timeline (step 4a, 8 Nov)
   unlinked?: boolean;           // a picture clip or its sound, set free of the other (13 Nov): an edit on one no longer touches the other
+  link?: string;                // a picture clip and its sound kept together on any tracks: the same id on exactly the two; a move, trim, split, delete or speed change of one does the other too. Without it the V1/A1 pair is found by place. `unlinked` still sets the two free
   flip?: 'h';                   // picture clips: mirrored left to right (the render's hflip), wherever the clip is used
   dissolve?: number;            // seconds of dissolve (picture) or cross-fade (sound) with the clip that ends where this one starts on its track, centred on the join
   gainPoints?: { t: number; db: number }[];   // sound: level changes inside the clip, t in seconds of the source file (the clock of in and out), dB added to gain, linear in dB between points, flat before the first and after the last

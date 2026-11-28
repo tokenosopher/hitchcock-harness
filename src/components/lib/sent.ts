@@ -4,7 +4,9 @@
 // Each card and pick of the batch leaves "Waiting for you" the moment "Done picking" is pressed and stays gone until the
 // film's state shows it answered, or for a while at most (a location's master is made by Alma from the pick).
 import type { FilmState } from '@/server/types';
-import { gateItems, releaseWait, storyWait } from './derive';
+import { gateItems, releaseWaiting, storyWait } from './derive';
+import { approvalWaitKey } from './approve';
+import { asksLeft, isRemoved, type Removal } from './remove';
 
 export interface Sent {
   /** The item of "Waiting for you" it answers: "card:<card key>", "gate:<gate item key>" or "story:<script|story>-<version>"
@@ -24,15 +26,19 @@ export const SENT_MS = 2 * 60_000;
 export const SENT_ALMA_MS = 30 * 60_000;
 
 /** What sentItems needs of a choice: choices.ts's Choice has it, and so do the answers and picks POST …/done gets. */
-export interface SentSource { label: string; answer?: { card: string }; pick?: { kind: string; target: string; card?: string } }
+export interface SentSource { label: string; answer?: { card: string }; pick?: { kind: string; target: string; card?: string }; approve?: { id: string }; remove?: Pick<Removal, 'key'> }
 
 /** The keys of "Waiting for you" a set of choices answers. A card's answer is its card; a pick is its gate item (C04's
- *  clothing is "gate:pick:C04:clothing"); a card of sounds goes once every sound still open on it is in the batch. */
+ *  clothing is "gate:pick:C04:clothing"); a sheet's yes is the sheet's entry ("gate:pick:C04:sheet"); a card of sounds goes once every sound still open on it is in the batch. */
 export function sentItems(choices: SentSource[], openSounds: (card: string) => string[] | undefined, now = Date.now()): Sent[] {
   const out: Sent[] = [];
   const add = (key: string, label: string, alma?: boolean) => out.push({ key, label, at: now, until: now + (alma ? SENT_ALMA_MS : SENT_MS), ...(alma ? { alma } : {}) });
   for (const c of choices) {
+    // a removal: its entry leaves at once; the server's record keeps it out after
+    if (c.remove) { add(c.remove.key, c.label); continue; }
     if (c.answer) { add(`card:${c.answer.card}`, c.label); continue; }
+    // a sheet's yes: its entry stays out until the state shows the sheet approved (Alma records it)
+    if (c.approve) { add(approvalWaitKey(c.approve), c.label, true); continue; }
     const p = c.pick;
     if (!p) continue;
     const t = p.target;
@@ -63,9 +69,10 @@ export function storySent(kind: 'script' | 'story', version: string, now = Date.
 /** The keys of "Waiting for you" the server's state still lists: the story or the script waiting, its cards that ask,
  *  its gate's picks. A sent item not among them is answered there and no longer kept aside. */
 export function listedKeys(s: FilmState): Set<string> {
+  // what the user removed is not listed: a removal is kept aside only until the server's record has it
   const story = storyWait(s, []);
-  const release = releaseWait(s);
-  return new Set([...(story ? [story.key] : []), ...(s.feed?.asks ?? []).map((c) => `card:${c.key}`), ...gateItems(s, []).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])]);
+  const release = releaseWaiting(s);
+  return new Set([...(story && !isRemoved(s, story.key) ? [story.key] : []), ...asksLeft(s).map((c) => `card:${c.key}`), ...gateItems(s, []).map((g) => `gate:${g.key}`), ...(release ? [release.key] : [])]);
 }
 
 /** The sent items still kept aside: not run out, and still listed by the state. */
@@ -84,6 +91,6 @@ export function withSent(s: FilmState, sent: Sent[]): FilmState {
   return {
     ...s,
     ...(s.feed ? { feed: { ...s.feed, asks: s.feed.asks.filter((c) => !keys.has(`card:${c.key}`)) } } : {}),
-    sentKeys: sent.flatMap((x) => (x.key.startsWith('gate:') ? [x.key.slice(5)] : x.key.startsWith('story:') ? [x.key] : [])),
+    sentKeys: sent.flatMap((x) => (x.key.startsWith('gate:') ? [x.key.slice(5)] : x.key.startsWith('story:') || x.key.startsWith('release:') ? [x.key] : [])),
   };
 }

@@ -15,7 +15,7 @@
 // Left out because the render never reads them: the version's name, basedOn, note, by, at, markers and renders; a
 // track's name (said only in the stems' file names and the leave-out summary, never in the picture or the mix) and
 // locked; a clip's id (it names a clip in a log line and in a "More renders" leave-out only), label (read only by the
-// "leave out the title cards" option of More renders, never by the plain master), takeRef and unlinked (edit
+// "leave out the title cards" option of More renders, never by the plain master), takeRef, unlinked and link (edit
 // behaviour). The files themselves are not read: an .srt or a take whose file changed under the same name is the
 // master's own out-of-date check's business (masters.ts), not this one's.
 import type { TimelineClip, TimelineTrack } from '@/server/types';

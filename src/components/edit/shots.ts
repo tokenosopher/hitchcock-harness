@@ -162,6 +162,20 @@ export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
     used.add(id);
     return id;
   };
+  // a picture and its sound kept by `link`, split at the same cuts: piece n of each gets the same new link
+  // (the first pieces keep the old one), never one another clip has
+  const usedLinks = new Set(tl.tracks.flatMap((t) => t.clips.flatMap((c) => (c.link ? [c.link] : []))));
+  const links = new Map<string, string>();
+  const linkFor = (link: string, i: number): string => {
+    const k = `${link}|${i}`;
+    let l = links.get(k);
+    if (!l) {
+      l = `${link}~${i + 1}`;
+      for (let n = 2; usedLinks.has(l); n++) l = `${link}~${i + 1}.${n}`;
+      usedLinks.add(l); links.set(k, l);
+    }
+    return l;
+  };
   const split = (t: TimelineTrack): TimelineClip[] => t.clips.flatMap((c) => {
     const take = by.get((c.src ?? ''));
     if (!take?.cuts || speedOf(c) !== 1) return [c];
@@ -177,7 +191,7 @@ export function shotTimeline(tl: Timeline, by: BySrc): Timeline {
       // a shot with a letter is named by it ("shot 7b"), as Alma names it
       const own = n ? ownShotOf(piece, by) : undefined;
       if (n) piece.label = `${baseLabel(c)} · shot ${own && own.n === n ? subTag(own) ?? n : n}`;
-      if (i > 0) { delete piece.fadeIn; delete piece.dissolve; }
+      if (i > 0) { delete piece.fadeIn; delete piece.dissolve; if (c.link) piece.link = linkFor(c.link, i); }
       if (i < bounds.length - 2) delete piece.fadeOut;
       return piece;
     });

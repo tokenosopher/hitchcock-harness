@@ -13,6 +13,7 @@
 import type { CutInfo, FeedCard, FilmMaster, PostInfo } from '../../types';
 import { abs, natCmp, type FilmCtx } from '../util';
 import { fileFact } from './record';
+import { isRemovedAnswer } from '../../../components/lib/remove';
 
 /** A name that says a size under full size ("…-480p-no-music.mp4", "…_720p.mp4") or a proxy. */
 const SMALL = /(^|[^0-9])(1[0-9]{2}|[2-9][0-9]{2})p([^a-z0-9]|$)|proxy/i;
@@ -50,7 +51,7 @@ export function masterYesOf(cards: FeedCard[]): { key: string; id?: string; titl
   let best: FeedCard | undefined;
   for (const c of cards) {
     const a = c.ask;
-    if (!a || a.kind !== 'yes' || !a.answer || a.answer.option === 'no') continue;
+    if (!a || a.kind !== 'yes' || !a.answer || a.answer.option === 'no' || isRemovedAnswer(a.answer.option)) continue;
     if (c.place !== 'sound' || c.placed !== 'card' || !/\bmaster\b/i.test(c.title)) continue;
     if (!best || (c.date ?? '') > (best.date ?? '')) best = c;
   }

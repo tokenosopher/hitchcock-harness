@@ -126,7 +126,8 @@ export function useHoverCard<T>() {
   return { open, setOpen, show, hide, keep };
 }
 
-/** A chip in a sent message: hover for its card, click to go to it; on a touch screen a tap opens the card. */
+/** A chip in a sent message: hover for its card, click to go to it; on a touch screen a tap opens the card.
+ *  Never wider than the bubble's text: a label longer than the line wraps inside the chip. */
 function SentChip({ r, film, open, onOpen, onClose, onKeep }: { r: InlineRef; film: string; open?: DOMRect; onOpen: (rect: DOMRect, now?: boolean) => void; onClose: () => void; onKeep: () => void }) {
   const go = useGoToRef(film);
   const touch = useRef(false);
@@ -136,7 +137,7 @@ function SentChip({ r, film, open, onOpen, onClose, onKeep }: { r: InlineRef; fi
         onPointerDown={(e) => { touch.current = e.pointerType !== 'mouse'; }}
         onMouseEnter={(e) => onOpen(e.currentTarget.getBoundingClientRect())} onMouseLeave={onClose}
         onClick={(e) => { if (touch.current) { if (open) onClose(); else onOpen(e.currentTarget.getBoundingClientRect(), true); } else go(r); }}
-        className={cn('mx-px inline cursor-pointer whitespace-nowrap rounded-[5px] border-0 bg-edge px-[3px] py-0 align-baseline text-[13.5px] leading-[inherit] text-ink shadow-[inset_0_0_0_1px_#3f3f46] transition-colors hover:bg-edge-strong', open && 'bg-edge-strong shadow-[inset_0_0_0_1px_#a1a1aa]')}>
+        className={cn('mx-px inline max-w-[calc(100%-2px)] cursor-pointer whitespace-normal rounded-[5px] text-left [overflow-wrap:anywhere] border-0 bg-edge px-[3px] py-0 align-baseline text-[13.5px] leading-[inherit] text-ink shadow-[inset_0_0_0_1px_#3f3f46] transition-colors hover:bg-edge-strong', open && 'bg-edge-strong shadow-[inset_0_0_0_1px_#a1a1aa]')}>
         {r.label}
       </button>
       {open && <RefCard r={r} film={film} place={{ anchor: open }} onEnter={onKeep} onLeave={onClose} />}
